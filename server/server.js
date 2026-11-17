@@ -16,7 +16,9 @@ const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH |
 const UPLOADS = path.join(DATA_DIR, 'uploads');
 const PROOFS = path.join(DATA_DIR, 'proofs');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.log');
-for (const d of [DATA_DIR, UPLOADS, PROOFS]) fs.mkdirSync(d, { recursive: true });
+const HISTORY = path.join(DATA_DIR, 'history');
+for (const d of [DATA_DIR, UPLOADS, PROOFS, HISTORY]) fs.mkdirSync(d, { recursive: true });
+const QRCode = require('qrcode');
 
 /* ---------- tiny JSON file store ---------- */
 class Store {
@@ -54,11 +56,18 @@ const freshDefaults = () => JSON.parse(JSON.stringify(defaults));
 
 const content = new Store('content.json', null);
 content.data = fillDefaults(content.data, freshDefaults());
+if (typeof content.data._rev !== 'number') content.data._rev = 1;
+// The website no longer says "Nepali calendar" (the calendar itself is still Nepali).
+if (/from the Nepali calendar/.test(content.data.booking.text || '')) {
+  content.data.booking.text = content.data.booking.text.replace('Choose a date from the Nepali calendar', 'Choose a date');
+  content.set(content.data);
+}
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 const reviews = new Store('reviews.json', []);
 const messages = new Store('messages.json', []);
 const auth = new Store('auth.json', {});
+const trash = new Store('trash.json', []);
 
 /* ---------- activity log ---------- */
 function audit(by, action, ref) {
@@ -72,6 +81,72 @@ function auditTail(max) {
       return { at, by, action, ref: ref || '' };
     });
   } catch { return []; }
+}
+
+/* ---------- website version history ---------- */
+const SECTION_NAMES = {
+  brand: 'Cafe details', theme: 'Colours and fonts', sections: 'Sections', hero: 'Top of page', highlights: 'Specialities',
+  events: 'Events', menu: 'Menu', cake: 'Cake pre-order', booking: 'Table booking', story: 'Our story', gallery: 'Gallery',
+  reviews: 'Reviews section', visit: 'Map and messages', social: 'Social links', payment: 'Payment', footer: 'Footer',
+  sizes: 'Sizes', crops: 'Photo positions', categories: '', items: '', prices: '', cards: '', images: '',
+};
+const isPhoto = (v) => typeof v === 'string' && /^(https?:\/\/|\/uploads\/)/.test(v);
+function shortValue(v) {
+  if (v === undefined || v === null || v === '') return '(empty)';
+  if (isPhoto(v)) return 'a photo';
+  if (typeof v === 'object') return JSON.stringify(v).slice(0, 40);
+  const t = String(v);
+  return t.length > 40 ? `"${t.slice(0, 40)}..."` : (typeof v === 'string' ? `"${t}"` : t);
+}
+// Describes what changed between two versions of the website, in plain words.
+function describeChanges(a, b) {
+  const out = [];
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  const label = (o) => (o && typeof o === 'object' ? (o.name || o.title || o.label || o.caption || o.type || o.id || '') : '');
+  function walk(x, y, trail) {
+    if (out.length >= 30 || same(x, y)) return;
+    const where = trail.filter(Boolean).join(' › ') || 'Website';
+    if (Array.isArray(x) && Array.isArray(y)) {
+      const key = (o, i) => (o && typeof o === 'object' && (o.id || o.name || o.title)) || `#${i}`;
+      const xm = new Map(x.map((o, i) => [key(o, i), o]));
+      const ym = new Map(y.map((o, i) => [key(o, i), o]));
+      for (const [k, o] of ym) if (!xm.has(k)) out.push(`${where}: added ${label(o) || shortValue(o)}`);
+      for (const [k, o] of xm) if (!ym.has(k)) out.push(`${where}: removed ${label(o) || shortValue(o)}`);
+      for (const [k, o] of ym) if (xm.has(k)) walk(xm.get(k), o, trail.concat(label(o)));
+      const kept = [...ym.keys()].filter((k) => xm.has(k));
+      const before = [...xm.keys()].filter((k) => ym.has(k));
+      if (kept.join('|') !== before.join('|')) out.push(`${where}: order changed`);
+      return;
+    }
+    if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x) && !Array.isArray(y)) {
+      if (trail.length === 1 && trail[0] === SECTION_NAMES.crops) { out.push('Photo positions changed'); return; }
+      if (trail.length === 1 && trail[0] === SECTION_NAMES.sizes) { out.push('Sizes changed'); return; }
+      for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
+        if (k === '_rev' || k === 'id') continue;
+        walk(x[k], y[k], trail.concat(k in SECTION_NAMES ? SECTION_NAMES[k] : k));
+      }
+      return;
+    }
+    if (trail[0] === SECTION_NAMES.sizes) { out.push('Sizes changed'); return; }
+    if (x === undefined && y && typeof y === 'object') { out.push(`${where}: added`); return; }
+    if (y === undefined && x && typeof x === 'object') { out.push(`${where}: removed`); return; }
+    out.push(isPhoto(x) || isPhoto(y) ? `${where}: photo changed` : `${where}: ${shortValue(x)} → ${shortValue(y)}`);
+  }
+  walk(a, b, []);
+  return out;
+}
+function listHistory() {
+  return fs.readdirSync(HISTORY).filter((f) => f.endsWith('.json')).sort().reverse();
+}
+async function addHistory(entry, data) {
+  const id = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  await fs.promises.writeFile(path.join(HISTORY, `${id}.json`), JSON.stringify({ id, ...entry, content: data }));
+  for (const old of listHistory().slice(150)) fs.unlink(path.join(HISTORY, old), () => {});
+  return id;
+}
+async function moveToBin(kind, item, by) {
+  if (!item) return;
+  await trash.set([{ key: `${kind}:${item.id}`, kind, at: new Date().toISOString(), by, item }, ...trash.get()].slice(0, 300));
 }
 
 /* ---------- passwords and sessions ---------- */
@@ -221,10 +296,12 @@ async function notify(subject, text) {
 }
 
 const TYPE_LABEL = { dinein: 'Dine-in', pickup: 'Pickup', delivery: 'Delivery' };
+const PAY_LABEL = { later: 'Pay later', esewa: 'eSewa', fonepay: 'Fonepay' };
+const person = (x) => [x.name || 'Guest', x.phone].filter(Boolean).join(', ');
 function orderText(o) {
   return [
     `Order ${o.id}`,
-    `${o.name}, ${o.phone}`,
+    person(o),
     `${TYPE_LABEL[o.type]}${o.address ? `: ${o.address}` : ''}${o.tableNo ? `, table ${o.tableNo}` : ''}`,
     o.schedule ? `For: ${o.schedule.bs || o.schedule.date} at ${o.schedule.time}` : 'For: as soon as possible',
     '',
@@ -234,13 +311,13 @@ function orderText(o) {
     o.cakeMessage ? `On the cake: ${o.cakeMessage}` : null,
     o.occasion ? `Occasion: ${o.occasion}` : null,
     o.notes ? `Notes: ${o.notes}` : null,
-    `Payment: ${o.payment.method}${o.payment.txn ? `, code ${o.payment.txn}` : ''}${o.payment.proof ? ', screenshot uploaded' : ''}`,
+    `Payment: ${PAY_LABEL[o.payment.method] || o.payment.method}${o.payment.txn ? `, code ${o.payment.txn}` : ''}${o.payment.proof ? ', screenshot uploaded' : ''}`,
   ].filter((x) => x !== null).join('\n');
 }
 function bookingText(b) {
   return [
     `Booking ${b.id}`,
-    `${b.name}, ${b.phone}`,
+    person(b),
     `${b.bs || b.date} at ${b.time}, ${b.people} people${b.seating ? `, ${b.seating}` : ''}`,
     b.food ? `Food ready on arrival: ${b.food}` : null,
     b.cakeName ? `Name on cake: ${b.cakeName}` : null,
@@ -265,17 +342,19 @@ const rawImage = express.raw({ type: () => true, limit: '8mb' });
 const json = express.json({ limit: '3mb' });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+// /admin is an easier address to type and share than /#admin. Both open the editor.
+app.get(['/admin', '/admin/'], (req, res) => res.sendFile(path.join(ROOT, 'public', 'index.html')));
 
 /* public: content and reviews */
 app.get('/api/content', (req, res) => res.json(content.get()));
 app.get('/api/reviews', (req, res) => {
   res.json(reviews.get().filter((r) => r.approved).map(({ id, name, rating, text, favorite, source, createdAt }) => ({ id, name, rating, text, favorite, source, createdAt })));
 });
-app.post('/api/reviews', limit('review', 5, 30 * 60e3), json, async (req, res) => {
-  const name = str(req.body.name, 60);
+app.post('/api/reviews', limit('review', 20, 30 * 60e3), json, async (req, res) => {
+  const name = str(req.body.name, 60) || 'Guest';
   const text = str(req.body.text, 800);
-  const rating = Math.round(Number(req.body.rating));
-  if (!name || text.length < 3) return bad(res, 'Please write your name and a few words.');
+  const rating = Math.round(Number(req.body.rating)) || 5;
+  if (text.length < 3) return bad(res, 'Please write a few words.');
   if (!(rating >= 1 && rating <= 5)) return bad(res, 'Please choose a star rating.');
   const r = { id: newCode('RV'), name, text, rating, favorite: str(req.body.favorite, 100), source: 'site', approved: false, createdAt: new Date().toISOString() };
   await reviews.set([r, ...reviews.get()]);
@@ -285,16 +364,16 @@ app.post('/api/reviews', limit('review', 5, 30 * 60e3), json, async (req, res) =
 });
 
 /* public: messages */
-app.post('/api/messages', limit('message', 8, 30 * 60e3), json, async (req, res) => {
+app.post('/api/messages', limit('message', 30, 30 * 60e3), json, async (req, res) => {
   const m = { id: newCode('MS'), createdAt: new Date().toISOString(), read: false, name: str(req.body.name, 80), phone: str(req.body.phone, 20), text: str(req.body.text, 1500) };
-  if (!m.name || !m.text) return bad(res, 'Please write your name and message.');
+  if (!m.text) return bad(res, 'Please write your message.');
   await messages.set([m, ...messages.get()]);
-  notify(`New message from ${m.name}`, `${m.phone}\n${m.text}`);
+  notify(`New message from ${m.name || 'a guest'}`, `${m.phone}\n${m.text}`);
   res.json({ ok: true });
 });
 
 /* public: payment screenshot or cake reference photo */
-app.post('/api/proof', limit('proof', 20, 30 * 60e3), rawImage, async (req, res) => {
+app.post('/api/proof', limit('proof', 80, 30 * 60e3), rawImage, async (req, res) => {
   const ext = sniffImage(req.body, false);
   if (!ext) return bad(res, 'Please upload a PNG or JPG picture.');
   const file = `${crypto.randomBytes(12).toString('hex')}.${ext}`;
@@ -326,16 +405,17 @@ function checkSchedule(date, time, minLeadHours) {
 }
 const PHONE = /^\+?\d[\d\s-]{6,17}$/;
 
-app.post('/api/orders', limit('order', 10, 15 * 60e3), json, async (req, res) => {
+// Many guests share the cafe Wi-Fi (one address), so the order limits are generous.
+app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) => {
   const b = req.body || {};
   const c = content.get();
+  const type = TYPE_LABEL[b.type] ? b.type : 'dinein';
   const name = str(b.name, 80);
   const phone = str(b.phone, 20);
-  if (!name) return bad(res, 'Please enter your name.');
-  if (!PHONE.test(phone)) return bad(res, 'Please enter a valid phone number.');
-  if (!TYPE_LABEL[b.type]) return bad(res, 'Please choose dine-in, pickup or delivery.');
-  const address = b.type === 'delivery' ? str(b.address, 300) : '';
-  if (b.type === 'delivery' && address.length < 5) return bad(res, 'Please enter your delivery address in Hetauda.');
+  // Guests ordering at their table need nothing but their order. Everyone else leaves a phone number.
+  if (type !== 'dinein' && !PHONE.test(phone)) return bad(res, 'Please enter your phone number so we can reach you.');
+  if (phone && !PHONE.test(phone)) return bad(res, 'That phone number does not look right. Please check it.');
+  const address = type === 'delivery' ? str(b.address, 300) : '';
 
   if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 60) return bad(res, 'Your cart is empty.');
   const lines = [];
@@ -361,23 +441,22 @@ app.post('/api/orders', limit('order', 10, 15 * 60e3), json, async (req, res) =>
     if (now < c.brand.open || now > c.brand.close) return bad(res, `We are closed right now (open ${c.brand.hoursText}). Choose "Later" to schedule your order.`);
   }
 
-  const method = str(b.method, 20);
-  const pay = c.payment[method];
-  if (!['esewa', 'fonepay'].includes(method) || !pay || pay.enabled === false) return bad(res, 'Please choose a payment method.');
-  const proof = proofExists(str(b.proof, 40)) ? str(b.proof, 40) : '';
-  const txn = str(b.txn, 60);
-  if (!proof && txn.length < 4) return bad(res, 'Please upload a screenshot of your payment, or type the transaction code.');
+  // Paying online is optional. Without it the order is "pay later" (at the counter or on delivery).
+  let method = str(b.method, 20);
+  if (!['esewa', 'fonepay'].includes(method) || !c.payment[method] || c.payment[method].enabled === false) method = 'later';
+  const proof = method !== 'later' && proofExists(str(b.proof, 40)) ? str(b.proof, 40) : '';
+  const txn = method !== 'later' ? str(b.txn, 60) : '';
   const refPhoto = hasWhole && proofExists(str(b.refPhoto, 40)) ? str(b.refPhoto, 40) : '';
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-  const deliveryFee = b.type === 'delivery' ? Number(c.payment.deliveryFee) || 0 : 0;
+  const deliveryFee = type === 'delivery' ? Number(c.payment.deliveryFee) || 0 : 0;
   const order = {
     id: newCode(hasWhole ? 'CAKE' : 'PM'),
     createdAt: new Date().toISOString(),
     status: 'new',
     paid: false,
-    name, phone, type: b.type, address,
-    tableNo: b.type === 'dinein' ? str(b.tableNo, 20) : '',
+    name, phone, type, address,
+    tableNo: type === 'dinein' ? str(b.tableNo, 20) : '',
     lines, subtotal, deliveryFee, total: subtotal + deliveryFee,
     schedule,
     hasWhole,
@@ -394,14 +473,13 @@ app.post('/api/orders', limit('order', 10, 15 * 60e3), json, async (req, res) =>
 });
 
 /* public: table bookings */
-app.post('/api/bookings', limit('booking', 6, 15 * 60e3), json, async (req, res) => {
+app.post('/api/bookings', limit('booking', 30, 15 * 60e3), json, async (req, res) => {
   const b = req.body || {};
   const c = content.get();
   const name = str(b.name, 80);
   const phone = str(b.phone, 20);
-  const people = Math.round(Number(b.people));
-  if (!name) return bad(res, 'Please enter your name.');
-  if (!PHONE.test(phone)) return bad(res, 'Please enter a valid phone number.');
+  const people = Math.round(Number(b.people)) || 2;
+  if (!PHONE.test(phone)) return bad(res, 'Please enter your phone number so we can confirm your table.');
   const max = Number(c.booking.maxPeople) || 30;
   if (!(people >= 1 && people <= max)) return bad(res, `Please enter the number of people (1 to ${max}).`);
   const date = str(b.date, 10);
@@ -472,9 +550,55 @@ app.put('/api/admin/content', admin, json, async (req, res) => {
   const ok = c && typeof c === 'object' && c.brand && c.theme && Array.isArray(c.sections)
     && c.menu && Array.isArray(c.menu.categories) && c.payment && c.cake && c.booking;
   if (!ok) return bad(res, 'That content is not complete, so it was not saved.');
-  await content.set(fillDefaults(c, freshDefaults()));
-  audit('owner', 'website-saved');
+  const current = content.get();
+  // Two devices editing at once: refuse to overwrite a newer save unless asked to.
+  if (c._rev !== current._rev && req.query.force !== '1') {
+    return res.status(409).json({ error: 'The website was saved from another device after you opened this editor.', rev: current._rev });
+  }
+  const next = fillDefaults(c, freshDefaults());
+  const changes = describeChanges(current, next);
+  if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by: 'owner', note: 'Website before your first save', changes: [] }, current);
+  next._rev = current._rev + 1;
+  await content.set(next);
+  const note = str(req.query.note, 80);
+  await addHistory({ at: new Date().toISOString(), by: 'owner', note, changes }, next);
+  audit('owner', note ? `website-saved (${note})` : 'website-saved');
+  res.json({ ok: true, rev: next._rev });
+});
+app.get('/api/admin/history', admin, (req, res) => {
+  res.json(listHistory().map((f) => {
+    try {
+      const { id, at, by, note, changes } = JSON.parse(fs.readFileSync(path.join(HISTORY, f), 'utf8'));
+      return { id, at, by, note, changes };
+    } catch { return null; }
+  }).filter(Boolean));
+});
+app.get('/api/admin/history/:id', admin, (req, res) => {
+  if (!/^\d+-[a-f0-9]{6}$/.test(req.params.id)) return res.sendStatus(404);
+  fs.readFile(path.join(HISTORY, `${req.params.id}.json`), 'utf8', (e, t) => {
+    if (e) return res.sendStatus(404);
+    res.json(JSON.parse(t).content);
+  });
+});
+app.get('/api/admin/bin', admin, (req, res) => res.json(trash.get()));
+app.post('/api/admin/bin/restore', admin, json, async (req, res) => {
+  const entry = trash.get().find((t) => t.key === req.body.key);
+  const stores = { orders, bookings, reviews, messages };
+  if (!entry || !stores[entry.kind]) return res.sendStatus(404);
+  const store = stores[entry.kind];
+  if (!store.get().some((x) => x.id === entry.item.id)) {
+    await store.set([entry.item, ...store.get()].sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt))));
+  }
+  await trash.set(trash.get().filter((t) => t.key !== entry.key));
+  audit('owner', `${entry.kind}-restored`, entry.item.id);
   res.json({ ok: true });
+});
+// QR codes for the tables. Each one opens the menu with the table number filled in.
+app.get('/api/admin/qr', admin, async (req, res) => {
+  const text = str(req.query.text, 300);
+  if (!/^https?:\/\//.test(text)) return res.sendStatus(400);
+  res.set('Content-Type', 'image/svg+xml');
+  res.send(await QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#2B2118', light: '#ffffff' } }));
 });
 app.post('/api/admin/upload', admin, rawImage, async (req, res) => {
   const ext = sniffImage(req.body, true);
@@ -577,6 +701,7 @@ function listRoutes(base, name, store, fields, guard) {
     res.json(row);
   });
   app.delete(`/api/admin/${name}/:id`, admin, async (req, res) => {
+    await moveToBin(name, store.get().find((x) => x.id === req.params.id), who(req));
     await store.set(store.get().filter((x) => x.id !== req.params.id));
     audit('owner', `${name}-deleted`, req.params.id);
     res.json({ ok: true });
@@ -589,10 +714,10 @@ listRoutes('desk', 'bookings', bookings, { status: oneOf('new', 'confirmed', 'se
 listRoutes('admin', 'reviews', reviews, { approved: isBool }, admin);
 listRoutes('admin', 'messages', messages, { read: isBool }, admin);
 app.post('/api/admin/reviews', admin, json, async (req, res) => {
-  const name = str(req.body.name, 60);
+  const name = str(req.body.name, 60) || 'Guest';
   const text = str(req.body.text, 800);
   const rating = Math.round(Number(req.body.rating));
-  if (!name || !text || !(rating >= 1 && rating <= 5)) return bad(res, 'Please fill in the name, stars and review.');
+  if (!text || !(rating >= 1 && rating <= 5)) return bad(res, 'Please fill in the stars and review.');
   const r = { id: newCode('RV'), name, text, rating, favorite: str(req.body.favorite, 100), source: req.body.source === 'google' ? 'google' : 'site', approved: true, createdAt: new Date().toISOString() };
   await reviews.set([r, ...reviews.get()]);
   res.json(r);

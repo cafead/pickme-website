@@ -3,7 +3,12 @@
   'use strict';
 
   const PREVIEW = /[?&]preview=1/.test(location.search);
-  const ADMIN = location.hash === '#admin' && !PREVIEW;
+  const ADMIN = (location.hash === '#admin' || /^\/admin\/?$/.test(location.pathname)) && !PREVIEW;
+  // Guests who scan the QR on their table arrive with ?table=5 and order without paying first.
+  const TABLE = (() => {
+    const t = (new URLSearchParams(location.search).get('table') || '').replace(/[^\w -]/g, '').slice(0, 20);
+    try { if (t) sessionStorage.setItem('pm_table', t); return t || sessionStorage.getItem('pm_table') || ''; } catch (e) { return t; }
+  })();
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -43,7 +48,25 @@
   };
   ICON.maps = ICON.pin;
 
-  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false };
+  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false, layout: false };
+
+  // Parts of the page whose size can be changed by dragging their edge in admin ("Edit layout").
+  const SIZES = {
+    logo: { sel: '.nav .logo-img', axes: 'x', label: 'Logo' },
+    heroPhoto: { sel: '.hero-media', axes: 'xy', label: 'Top photo' },
+    heroCard: { sel: '.hero-card', axes: 'x', label: 'Floating card' },
+    arch: { sel: '.arch-pic', axes: 'xy', label: 'Speciality photos' },
+    slides: { sel: '.slide-pic', axes: 'y', label: 'Slideshow' },
+    menuPhoto: { sel: '.mi-pic', axes: 'x', label: 'Menu list photos' },
+    menuCard: { sel: '.mc', axes: 'x', label: 'Menu cards' },
+    menuCardPhoto: { sel: '.mc-pic', axes: 'y', label: 'Menu card photos' },
+    cakePhoto: { sel: '#cake .fade-pic', axes: 'xy', label: 'Cake section photo' },
+    bookingPhoto: { sel: '#booking .fade-pic', axes: 'xy', label: 'Booking section photo' },
+    storyPhoto: { sel: '.story-pic', axes: 'xy', label: 'Our story photo' },
+    gallery: { sel: '.gal-item', axes: 'xy', label: 'Gallery photos' },
+    reviewCard: { sel: '.rev', axes: 'x', label: 'Review cards' },
+    map: { sel: '.map', axes: 'y', label: 'Map' },
+  };
 
   /* Make big phone photos small before upload. PNGs are kept as they are when keepPng is set (logos). */
   function shrink(file, max, keepPng) {
@@ -68,7 +91,7 @@
       im.src = url;
     });
   }
-  window.PM = { FONTS, ICON, esc, rs, shrink };
+  window.PM = { FONTS, ICON, esc, rs, shrink, SIZES };
 
   /* ---------- theme ---------- */
   function fontLink(id, name, spec) {
@@ -114,9 +137,30 @@
     document.documentElement.classList.toggle('anim', !calm);
     document.documentElement.classList.toggle('no-blend', t.blend === false);
   }
+  function applySizes(sizes) {
+    const st = document.documentElement.style;
+    for (const key of Object.keys(SIZES)) {
+      const v = (sizes || {})[key] || {};
+      for (const ax of ['w', 'h']) {
+        const n = Number(v[ax]);
+        if (n >= 16 && n <= 3000) st.setProperty(`--sz-${key}-${ax}`, Math.round(n) + 'px');
+        else st.removeProperty(`--sz-${key}-${ax}`);
+      }
+    }
+  }
 
   /* ---------- small builders ---------- */
-  const pic = (url, alt, cls) => `<div class="pic ${cls || ''}" data-alt="${esc(alt)}">${safeUrl(url) ? `<img src="${esc(safeUrl(url))}" alt="${esc(alt)}" loading="lazy">` : ''}</div>`;
+  const clampN = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+  // Photo position and zoom set in admin. Kept per photo address.
+  function cropAttrs(url) {
+    const k = S.c && S.c.crops && S.c.crops[url];
+    if (!k) return '';
+    return ` style="--ox:${clampN(k.x, 0, 100, 50)}%;--oy:${clampN(k.y, 0, 100, 50)}%;--z:${clampN(k.z, 1, 4, 1)}"${k.fit === 'contain' ? ' data-fit="contain"' : ''}`;
+  }
+  const pic = (url, alt, cls) => {
+    const u = safeUrl(url);
+    return `<div class="pic ${cls || ''}" data-alt="${esc(alt)}">${u ? `<img src="${esc(u)}" alt="${esc(alt)}" loading="lazy"${cropAttrs(u)}>` : ''}</div>`;
+  };
   const head = (o, path, extra) => `<header class="head rv">${o.script || PREVIEW ? `<p class="script"${ed(path + '.script')}>${esc(o.script)}</p>` : ''}${o.title || PREVIEW ? `<h2${ed(path + '.title')}>${esc(o.title)}</h2>` : ''}${extra || ''}</header>`;
   const btn = (label, href, cls, path) => `<a class="btn ${cls || ''}" href="${esc(safeUrl(href) || '#')}"><span${path ? ed(path) : ''}>${esc(label)}</span>${ICON.arrow}</a>`;
   const logo = (c) => (safeUrl(c.brand.logo) ? `<img class="logo-img" src="${esc(safeUrl(c.brand.logo))}" alt="">` : `<span class="logo-mono" aria-hidden="true">${esc((c.brand.shortName || c.brand.name || 'P').slice(0, 1))}</span>`);
@@ -132,6 +176,18 @@
       out += `<option value="${v}"${v === chosen ? ' selected' : ''}>${t12(v)}</option>`;
     }
     return out;
+  }
+  // The earliest time we can take something, at least `leadHours` from now and inside opening hours.
+  function nextSlot(c, leadHours) {
+    const [oh, om] = c.brand.open.split(':').map(Number);
+    const [ch, cm] = c.brand.close.split(':').map(Number);
+    let t = new Date(Date.now() + 345 * 60e3 + (Number(leadHours) || 0) * 3600e3);
+    t = new Date(Math.ceil(t.getTime() / 18e5) * 18e5);
+    const mins = t.getUTCHours() * 60 + t.getUTCMinutes();
+    if (mins < oh * 60 + om) t.setUTCHours(oh, om, 0, 0);
+    else if (mins > ch * 60 + cm) { t.setUTCDate(t.getUTCDate() + 1); t.setUTCHours(oh, om, 0, 0); }
+    const iso = t.toISOString();
+    return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
   }
   const waNumber = (c) => digits(c.brand.whatsapp).replace(/^(?=9\d{9}$)/, '977');
   const waLink = (c, text) => `https://wa.me/${waNumber(c)}?text=${encodeURIComponent(text)}`;
@@ -320,6 +376,7 @@
   }
   R.cake = (c) => {
     const k = c.cake;
+    const slot = nextSlot(c, k.noticeHours);
     return `<section id="cake" class="sec"><div class="wrap split">
       <div class="split-pic rv">${pic(k.image, 'Celebration cake', 'fade-pic')}</div>
       <div class="split-body rv">
@@ -330,10 +387,10 @@
             ${wholeCakes(c).map((w) => `<option value="${esc(w.id)}|${esc(w.label)}">${esc(w.name)}, ${esc(w.label)}: ${rs(w.price)}</option>`).join('')}
           </select></label>
           <label class="f"><span>How many</span><input name="qty" id="cake-qty" type="number" min="1" max="20" value="1" inputmode="numeric" required></label>
-          <label class="f"><span>Occasion</span><input name="occasion" id="cake-occasion" maxlength="80" placeholder="Birthday, anniversary"></label>
-          <label class="f f--wide"><span>Name or message on the cake</span><input name="cakeMessage" id="cake-msg" maxlength="120" placeholder="Happy Birthday Aarav"></label>
-          <div class="f"><span>Date (Nepali calendar)</span><div data-bsp="date"></div></div>
-          <label class="f"><span>Time</span><select name="time" id="cake-time" required>${timeOptions(c)}</select></label>
+          <label class="f"><span>Occasion (optional)</span><input name="occasion" id="cake-occasion" maxlength="80" placeholder="Birthday, anniversary"></label>
+          <label class="f f--wide"><span>Name or message on the cake (optional)</span><input name="cakeMessage" id="cake-msg" maxlength="120" placeholder="Happy Birthday Aarav"></label>
+          <div class="f"><span>Date</span><div data-bsp="date" data-value="${slot.date}"></div></div>
+          <label class="f"><span>Time</span><select name="time" id="cake-time" required>${timeOptions(c, slot.time)}</select></label>
           <p class="hint f--wide">We need at least ${esc(k.noticeHours)} hours to prepare a whole cake. You can add a photo of the design you want at the next step.</p>
           <p class="sum sum--big f--wide"><span>Total</span><b id="cake-total"></b></p>
           <p class="form-msg f--wide" role="alert"></p>
@@ -345,22 +402,23 @@
   R.booking = (c) => {
     const b = c.booking;
     const seats = String(b.seating || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const slot = nextSlot(c, 1);
     return `<section id="booking" class="sec sec--tint"><div class="wrap split split--flip">
       <div class="split-pic rv">${pic(b.image, 'A table at ' + c.brand.name, 'fade-pic')}</div>
       <div class="split-body rv">
         ${head(b, 'booking')}
         <p class="lede"${ed('booking.text')}>${esc(b.text)}</p>
         <form class="form" data-form="booking" novalidate>
-          <label class="f"><span>Your name</span><input name="name" id="bk-name" autocomplete="name" maxlength="80" required></label>
           <label class="f"><span>Phone</span><input name="phone" id="bk-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX" required></label>
-          <div class="f"><span>Date (Nepali calendar)</span><div data-bsp="date"></div></div>
-          <label class="f"><span>Time</span><select name="time" id="bk-time" required>${timeOptions(c)}</select></label>
+          <label class="f"><span>Your name (optional)</span><input name="name" id="bk-name" autocomplete="name" maxlength="80"></label>
+          <div class="f"><span>Date</span><div data-bsp="date" data-value="${slot.date}"></div></div>
+          <label class="f"><span>Time</span><select name="time" id="bk-time" required>${timeOptions(c, slot.time)}</select></label>
           <label class="f"><span>Number of people</span><input name="people" id="bk-people" type="number" min="1" max="${esc(b.maxPeople)}" value="2" inputmode="numeric" required></label>
           ${seats.length ? `<label class="f"><span>Where would you like to sit?</span><select name="seating" id="bk-seat">${seats.map((x) => `<option>${esc(x)}</option>`).join('')}</select></label>` : ''}
           <label class="f f--wide"><span>Food or drinks to have ready (optional)</span><input name="food" id="bk-food" maxlength="600" placeholder="2 Iced Latte, 1 Blueberry Cheese Cake"></label>
           <label class="f"><span>Name on the cake (optional)</span><input name="cakeName" id="bk-cake" maxlength="120" placeholder="Happy Anniversary"></label>
           <label class="f"><span>Decoration you want (optional)</span><input name="decoration" id="bk-deco" maxlength="600" placeholder="Candles, balloons"></label>
-          <label class="f f--wide"><span>Other remarks</span><textarea name="remarks" id="bk-rem" rows="2" maxlength="600"></textarea></label>
+          <label class="f f--wide"><span>Other remarks (optional)</span><textarea name="remarks" id="bk-rem" rows="2" maxlength="600"></textarea></label>
           <p class="form-msg f--wide" role="alert"></p>
           <button class="btn f--wide" type="submit"><span${ed('booking.button')}>${esc(b.button || 'Request booking')}</span>${ICON.arrow}</button>
         </form>
@@ -415,7 +473,7 @@
       <details class="review-box rv">
         <summary class="btn"><span${ed('reviews.formTitle')}>${esc(r.formTitle || 'Leave a review')}</span></summary>
         <form class="form" data-form="review" novalidate>
-          <label class="f"><span>Your name</span><input name="name" id="rv-name" maxlength="60" required></label>
+          <label class="f"><span>Your name (optional)</span><input name="name" id="rv-name" maxlength="60"></label>
           <fieldset class="f rate"><legend>Your rating</legend>
             ${[5, 4, 3, 2, 1].map((n) => `<input type="radio" name="rating" id="rv-s${n}" value="${n}"${n === 5 ? ' checked' : ''}><label for="rv-s${n}" aria-label="${n} stars">${ICON.star}</label>`).join('')}
           </fieldset>
@@ -448,8 +506,8 @@
           <form class="form form--solo" data-form="message" novalidate>
             <h3${ed('visit.messageTitle')}>${esc(v.messageTitle)}</h3>
             <p class="hint"${ed('visit.messageText')}>${esc(v.messageText)}</p>
-            <label class="f"><span>Your name</span><input name="name" id="msg-name" maxlength="80" required></label>
-            <label class="f"><span>Phone</span><input name="phone" id="msg-phone" type="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"></label>
+            <label class="f"><span>Your name (optional)</span><input name="name" id="msg-name" maxlength="80"></label>
+            <label class="f"><span>Phone (optional)</span><input name="phone" id="msg-phone" type="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"></label>
             <label class="f"><span>Message</span><textarea name="text" id="msg-text" rows="3" maxlength="800" required></textarea></label>
             <p class="form-msg" role="alert"></p>
             <button class="btn" type="submit">${ICON.whatsapp}<span>Send on WhatsApp</span></button>
@@ -466,7 +524,8 @@
       <div class="nav-right">
         <button type="button" class="cart-btn" data-act="cart" aria-label="Open cart">${ICON.bag}<span class="cart-count" hidden>0</span></button>
         <button type="button" class="nav-toggle" data-act="nav" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">${ICON.menu}</button>
-      </div></div></header>`;
+      </div></div>
+      ${TABLE && !PREVIEW ? `<p class="table-bar">${ICON.bag}<span>Table ${esc(TABLE)}: add what you like from the menu, then tap the bag to send your order. Pay at the counter when you are done.</span></p>` : ''}</header>`;
   }
   function footer(c) {
     const soc = (c.social || []).filter((s) => /^https?:\/\//i.test(s.url || '')).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener" aria-label="${esc(s.type)}">${ICON[s.type] || ICON.link}</a>`).join('');
@@ -491,12 +550,14 @@
   function render() {
     const c = S.c;
     applyTheme(c.theme);
+    applySizes(c.sizes);
+    document.documentElement.classList.toggle('at-table', Boolean(TABLE && !PREVIEW));
     const y = window.scrollY;
     $('#app').innerHTML = nav(c) + '<main>' + c.sections.filter((s) => s.show !== false && R[s.id]).map((s) => R[s.id](c)).join('') + '</main>' + footer(c);
-    $$('[data-bsp]', $('#app')).forEach((el) => BS.mount(el, { name: el.dataset.bsp }));
+    $$('[data-bsp]', $('#app')).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: el.dataset.value }));
     saveCart();
     cakeTotal();
-    if (PREVIEW) setInline();
+    if (PREVIEW) { setInline(); markLayout(); }
     if (observer) observer.disconnect();
     if (document.documentElement.classList.contains('anim') && 'IntersectionObserver' in window) {
       observer = new IntersectionObserver((entries) => entries.forEach((e) => {
@@ -538,7 +599,7 @@
             <b>${rs(l.price * l.qty)}</b></li>`).join('')}</ul>
           <footer><p class="sum"><span>Subtotal</span><b>${rs(total)}</b></p>
             <p class="hint">Delivery inside Hetauda adds ${rs(S.c.payment.deliveryFee)}.</p>
-            <button type="button" class="btn" data-act="checkout"><span>Order and pay</span>${ICON.arrow}</button>
+            <button type="button" class="btn" data-act="checkout"><span>Continue to order</span>${ICON.arrow}</button>
             <button type="button" class="btn btn--ghost" data-act="close"><span>Keep browsing</span></button></footer>`
         : `<p class="empty">Your cart is empty. Add something from the menu.</p>`}
       </aside>`;
@@ -561,46 +622,51 @@
     const lines = cartLines();
     const hasWhole = lines.some((l) => l.whole);
     const pre = S.preset || {};
+    const type = TABLE ? 'dinein' : (pre.type || 'pickup');
     const later = hasWhole || pre.when === 'later' || !isOpen(c);
+    const slot = pre.date ? { date: pre.date, time: pre.time } : nextSlot(c, hasWhole ? c.cake.noticeHours : 0.5);
     const methods = ['esewa', 'fonepay'].filter((m) => c.payment[m] && c.payment[m].enabled !== false);
+    const phoneNeeded = type !== 'dinein';
     return `<div class="shade" data-act="close"></div>
-      <div class="modal" role="dialog" aria-label="Checkout">
-        <header><h2>Order and pay</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close checkout">${ICON.x}</button></header>
+      <div class="modal" role="dialog" aria-label="Your order">
+        <header><h2>Your order</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>
         <form class="form" data-form="checkout" novalidate>
-          <div class="f--wide" id="co-sum">${sumHtml('pickup')}</div>
-          <label class="f"><span>Your name</span><input name="name" id="co-name" autocomplete="name" maxlength="80" required></label>
-          <label class="f"><span>Phone</span><input name="phone" id="co-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX" required></label>
+          <div class="f--wide" id="co-sum">${sumHtml(type)}</div>
           <fieldset class="f f--wide seg"><legend>How would you like it?</legend>
-            <input type="radio" name="type" id="co-pickup" value="pickup" checked><label for="co-pickup">Pickup</label>
-            <input type="radio" name="type" id="co-dinein" value="dinein"><label for="co-dinein">Dine-in</label>
-            <input type="radio" name="type" id="co-delivery" value="delivery"><label for="co-delivery">Delivery +${rs(c.payment.deliveryFee)}</label>
+            <input type="radio" name="type" id="co-dinein" value="dinein"${type === 'dinein' ? ' checked' : ''}><label for="co-dinein">At the cafe</label>
+            <input type="radio" name="type" id="co-pickup" value="pickup"${type === 'pickup' ? ' checked' : ''}><label for="co-pickup">Pickup</label>
+            <input type="radio" name="type" id="co-delivery" value="delivery"${type === 'delivery' ? ' checked' : ''}><label for="co-delivery">Delivery +${rs(c.payment.deliveryFee)}</label>
           </fieldset>
-          <label class="f f--wide" id="co-addr" hidden><span>Delivery address</span><textarea name="address" id="co-address" rows="2" maxlength="300" placeholder="Tole, landmark, ward"></textarea><small class="hint">${esc(c.payment.deliveryNote)}</small></label>
-          <label class="f f--wide" id="co-table" hidden><span>Table number, if you are already seated (optional)</span><input name="tableNo" id="co-tableno" maxlength="20"></label>
+          <label class="f" id="co-table"${type === 'dinein' ? '' : ' hidden'}><span>Table number (optional)</span><input name="tableNo" id="co-tableno" maxlength="20" value="${esc(TABLE)}" inputmode="numeric"></label>
+          <label class="f"><span id="co-phone-label">${phoneNeeded ? 'Phone' : 'Phone (optional)'}</span><input name="phone" id="co-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"${phoneNeeded ? ' required' : ''}></label>
+          <label class="f"><span>Your name (optional)</span><input name="name" id="co-name" autocomplete="name" maxlength="80"></label>
+          <label class="f f--wide" id="co-addr"${type === 'delivery' ? '' : ' hidden'}><span>Delivery address (optional, we will call if it is missing)</span><textarea name="address" id="co-address" rows="2" maxlength="300" placeholder="Tole, landmark, ward"></textarea><small class="hint">${esc(c.payment.deliveryNote)}</small></label>
           <fieldset class="f f--wide seg"><legend>When?</legend>
-            ${hasWhole ? '' : `<input type="radio" name="when" id="co-now" value="now"${later ? '' : ' checked'}><label for="co-now">As soon as possible</label>`}
+            ${hasWhole ? '' : `<input type="radio" name="when" id="co-now" value="now"${later ? '' : ' checked'}><label for="co-now">Now</label>`}
             <input type="radio" name="when" id="co-later" value="later"${later ? ' checked' : ''}><label for="co-later">Later</label>
           </fieldset>
           <div class="f--wide grid2" id="co-when"${later ? '' : ' hidden'}>
-            <div class="f"><span>Date (Nepali calendar)</span><div data-bsp="date"></div></div>
-            <label class="f"><span>Time</span><select name="time" id="co-time">${timeOptions(c, pre.time)}</select></label>
+            <div class="f"><span>Date</span><div data-bsp="date" data-value="${slot.date}"></div></div>
+            <label class="f"><span>Time</span><select name="time" id="co-time">${timeOptions(c, slot.time)}</select></label>
             ${hasWhole ? `<p class="hint f--wide">Whole cakes need at least ${esc(c.cake.noticeHours)} hours notice.</p>` : (!isOpen(c) ? `<p class="hint f--wide">We are closed right now, so please pick a time (${esc(c.brand.hoursText)}).</p>` : '')}
           </div>
-          ${hasWhole ? `<label class="f"><span>Name or message on the cake</span><input name="cakeMessage" id="co-cake" maxlength="120" value="${esc(pre.cakeMessage || '')}"></label>
-            <label class="f"><span>Occasion</span><input name="occasion" id="co-occasion" maxlength="80" value="${esc(pre.occasion || '')}"></label>
+          ${hasWhole ? `<label class="f"><span>Name or message on the cake (optional)</span><input name="cakeMessage" id="co-cake" maxlength="120" value="${esc(pre.cakeMessage || '')}"></label>
+            <label class="f"><span>Occasion (optional)</span><input name="occasion" id="co-occasion" maxlength="80" value="${esc(pre.occasion || '')}"></label>
             <label class="f f--wide"><span>Photo of the cake design you want (optional)</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
           <label class="f f--wide"><span>Notes for us (optional)</span><textarea name="notes" id="co-notes" rows="2" maxlength="500" placeholder="Less sugar, extra ice"></textarea></label>
-          <fieldset class="f f--wide seg"><legend>Pay with</legend>
-            ${methods.map((m, i) => `<input type="radio" name="method" id="co-${m}" value="${m}"${i === 0 ? ' checked' : ''}><label for="co-${m}">${esc(c.payment[m].name)}</label>`).join('')}
+          <fieldset class="f f--wide seg"><legend>Payment</legend>
+            <input type="radio" name="method" id="co-later-pay" value="later" checked><label for="co-later-pay">Pay later</label>
+            ${methods.map((m) => `<input type="radio" name="method" id="co-${m}" value="${m}"><label for="co-${m}">Pay now with ${esc(c.payment[m].name)}</label>`).join('')}
           </fieldset>
-          <div class="f--wide pay">
-            <div id="co-qr">${methods.length ? qrHtml(methods[0]) : ''}</div>
+          <p class="hint f--wide" id="co-later-note">Pay at the counter, or when your order arrives.</p>
+          <div class="f--wide pay" id="co-pay" hidden>
+            <div id="co-qr"></div>
             <div><p>${esc(c.payment.instructions)}</p>
-              <label class="f"><span>Payment screenshot</span><input type="file" name="proof" id="co-proof" accept="image/png,image/jpeg,image/webp"></label>
-              <label class="f"><span>Or the transaction code</span><input name="txn" id="co-txn" maxlength="60" placeholder="e.g. 000ABC9"></label></div>
+              <label class="f"><span>Payment screenshot (optional)</span><input type="file" name="proof" id="co-proof" accept="image/png,image/jpeg,image/webp"></label>
+              <label class="f"><span>Or the transaction code (optional)</span><input name="txn" id="co-txn" maxlength="60" placeholder="e.g. 000ABC9"></label></div>
           </div>
           <p class="form-msg f--wide" role="alert"></p>
-          <button class="btn f--wide" type="submit"><span>Place order</span>${ICON.arrow}</button>
+          <button class="btn f--wide" type="submit"><span>Send order</span>${ICON.arrow}</button>
         </form>
       </div>`;
   }
@@ -608,14 +674,14 @@
     if (!cartLines().length) return toast('Your cart is empty.');
     openLayer(checkoutHtml());
     const pre = S.preset || {};
-    $$('[data-bsp]', layer()).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: pre.date }));
+    $$('[data-bsp]', layer()).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: pre.date || el.dataset.value }));
   }
   function doneHtml(title, lines, text) {
     return `<div class="shade" data-act="close"></div>
       <div class="modal modal--done" role="dialog" aria-label="${esc(title)}">
         <p class="script">Thank you</p><h2>${esc(title)}</h2>
         ${lines.map((l) => `<p>${esc(l)}</p>`).join('')}
-        <a class="btn" href="${esc(waLink(S.c, text))}" target="_blank" rel="noopener">${ICON.whatsapp}<span>Send it to us on WhatsApp</span></a>
+        ${text ? `<a class="btn" href="${esc(waLink(S.c, text))}" target="_blank" rel="noopener">${ICON.whatsapp}<span>Also send it to us on WhatsApp</span></a>` : ''}
         <button type="button" class="btn btn--ghost" data-act="close"><span>Close</span></button>
       </div>`;
   }
@@ -639,13 +705,14 @@
       if (!d.date || !d.time) throw new Error('Please choose a date and time.');
       const [itemId, label] = d.cake.split('|');
       addToCart(itemId, label, Math.max(1, Math.min(20, Number(d.qty) || 1)), true);
-      S.preset = { when: 'later', date: d.date, time: d.time, cakeMessage: d.cakeMessage, occasion: d.occasion };
+      S.preset = { when: 'later', type: 'pickup', date: d.date, time: d.time, cakeMessage: d.cakeMessage, occasion: d.occasion };
       openCheckout();
     },
     async booking(d, form) {
       if (!d.date || !d.time) throw new Error('Please choose a date and time.');
       const res = await post('/api/bookings', { name: d.name, phone: d.phone, people: d.people, date: d.date, dateBs: d.dateBs, time: d.time, seating: d.seating, food: d.food, cakeName: d.cakeName, decoration: d.decoration, remarks: d.remarks });
       form.reset();
+      render();
       openLayer(doneHtml('Booking request sent', [`Your booking number is ${res.id}.`, 'We will call or message you to confirm your table.'], res.text));
     },
     async review(d, form) {
@@ -654,29 +721,34 @@
       return S.c.reviews.thanks;
     },
     message(d, form) {
-      if (!d.name || !d.text) throw new Error('Please write your name and message.');
+      if (!d.text) throw new Error('Please write your message.');
       // WhatsApp opens straight away so the browser does not block it; a copy is saved for the cafe too.
-      window.open(waLink(S.c, `Hello ${S.c.brand.name}, this is ${d.name}${d.phone ? ` (${d.phone})` : ''}.\n${d.text}`), '_blank', 'noopener');
+      const from = d.name ? `, this is ${d.name}${d.phone ? ` (${d.phone})` : ''}` : (d.phone ? ` (${d.phone})` : '');
+      window.open(waLink(S.c, `Hello ${S.c.brand.name}${from}.\n${d.text}`), '_blank', 'noopener');
       post('/api/messages', { name: d.name, phone: d.phone, text: d.text }).catch(() => {});
       form.reset();
       return 'WhatsApp is opening with your message. Press send there.';
     },
     async checkout(d, form) {
-      const file = form.elements.proof.files[0];
-      if (!d.name || !d.phone) throw new Error('Please enter your name and phone number.');
+      const payNow = d.method && d.method !== 'later';
+      const file = payNow ? form.elements.proof.files[0] : null;
+      if (d.type !== 'dinein' && !String(d.phone || '').trim()) throw new Error('Please enter your phone number so we can reach you.');
       if (d.when === 'later' && (!d.date || !d.time)) throw new Error('Please choose a date and time.');
-      if (!file && String(d.txn || '').trim().length < 4) throw new Error('Please upload a screenshot of your payment, or type the transaction code.');
       const proof = await sendPicture(file);
       const refPhoto = form.elements.ref ? await sendPicture(form.elements.ref.files[0]) : '';
       const res = await post('/api/orders', {
         name: d.name, phone: d.phone, type: d.type, address: d.address, tableNo: d.tableNo, when: d.when, date: d.date, dateBs: d.dateBs, time: d.time,
-        cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto, notes: d.notes, method: d.method, proof, txn: d.txn,
+        cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto, notes: d.notes, method: d.method, proof, txn: payNow ? d.txn : '',
         lines: cartLines().map((l) => ({ itemId: l.itemId, label: l.label, qty: l.qty })),
       });
       S.cart = [];
       S.preset = null;
       saveCart();
-      openLayer(doneHtml('Order received', [`Your order number is ${res.id}. Total ${rs(res.total)}.`, 'We will check your payment and start preparing it.'], res.text));
+      const atCafe = d.type === 'dinein';
+      openLayer(doneHtml(atCafe ? 'Your order is in' : 'Order received', [
+        `Your order number is ${res.id}. Total ${rs(res.total)}.`,
+        atCafe ? 'We are preparing it and will bring it to you.' : (payNow ? 'We will check your payment and call you if anything is unclear.' : 'We will call you if anything is unclear. You can pay later.'),
+      ], atCafe ? '' : res.text));
     },
   };
   document.addEventListener('submit', async (e) => {
@@ -705,12 +777,20 @@
     const form = e.target.closest('form[data-form=checkout]');
     if (!form) return;
     if (e.target.name === 'type') {
-      $('#co-sum').innerHTML = sumHtml(e.target.value);
-      $('#co-addr').hidden = e.target.value !== 'delivery';
-      $('#co-table').hidden = e.target.value !== 'dinein';
+      const t = e.target.value;
+      $('#co-sum').innerHTML = sumHtml(t);
+      $('#co-addr').hidden = t !== 'delivery';
+      $('#co-table').hidden = t !== 'dinein';
+      $('#co-phone').required = t !== 'dinein';
+      $('#co-phone-label').textContent = t === 'dinein' ? 'Phone (optional)' : 'Phone';
     }
     if (e.target.name === 'when') $('#co-when').hidden = e.target.value !== 'later';
-    if (e.target.name === 'method') $('#co-qr').innerHTML = qrHtml(e.target.value);
+    if (e.target.name === 'method') {
+      const now = e.target.value !== 'later';
+      $('#co-pay').hidden = !now;
+      $('#co-later-note').hidden = now;
+      if (now) $('#co-qr').innerHTML = qrHtml(e.target.value);
+    }
   });
   document.addEventListener('input', (e) => {
     if (e.target.id === 'cake-qty') cakeTotal();
@@ -769,6 +849,7 @@
   };
   document.addEventListener('click', (e) => {
     if (S.inline && e.target.closest('[data-edit]')) { e.preventDefault(); return; }
+    if (S.layout) { if (!e.target.closest('#crop-tools')) e.preventDefault(); return; }
     const el = e.target.closest('[data-act]');
     if (el && ACT[el.dataset.act]) {
       if (el.tagName === 'BUTTON' || el.classList.contains('shade')) e.preventDefault();
@@ -791,8 +872,155 @@
     const n = $('.nav');
     if (n) n.classList.toggle('is-stuck', y > 30);
     const media = $('.hero-media img');
-    if (media && y < 900 && document.documentElement.classList.contains('anim')) media.style.transform = `translate3d(0, ${y * 0.12}px, 0) scale(1.06)`;
+    if (media && y < 900 && document.documentElement.classList.contains('anim')) media.style.transform = `translate3d(0, ${y * 0.12}px, 0) scale(calc(1.06 * var(--z, 1)))`;
   }, { passive: true });
+
+  /* ---------- admin preview: drag edges to resize, drag photos to move them ---------- */
+  const EDGE = 10;
+  let drag = null;
+  let tools = null;
+  let toolsUrl = '';
+  function markLayout() {
+    document.documentElement.classList.toggle('layout-mode', S.layout);
+    $$('[data-size]').forEach((el) => { delete el.dataset.size; });
+    if (!S.layout) { hideTools(); return; }
+    for (const [key, d] of Object.entries(SIZES)) $$(d.sel).forEach((el) => { el.dataset.size = key; el.dataset.axes = d.axes; });
+  }
+  function edgeOf(el, x, y) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const ax = el.dataset.axes || '';
+    const inY = y >= r.top - EDGE && y <= r.bottom + EDGE;
+    const inX = x >= r.left - EDGE && x <= r.right + EDGE;
+    const right = ax.includes('x') && inY && Math.abs(x - r.right) <= EDGE;
+    const left = ax.includes('x') && !right && inY && Math.abs(x - r.left) <= EDGE;
+    const bottom = ax.includes('y') && inX && Math.abs(y - r.bottom) <= EDGE;
+    if (!right && !left && !bottom) return null;
+    return { x: right ? 1 : left ? -1 : 0, y: bottom ? 1 : 0, r };
+  }
+  function findEdge(x, y) {
+    let best = null;
+    for (const el of $$('[data-size]')) {
+      const e = edgeOf(el, x, y);
+      if (e && (!best || e.r.width * e.r.height < best.e.r.width * best.e.r.height)) best = { el, e };
+    }
+    return best;
+  }
+  function sizeTip(text, x, y) {
+    let tip = $('#size-tip');
+    if (!tip) { tip = document.createElement('div'); tip.id = 'size-tip'; document.body.appendChild(tip); }
+    tip.textContent = text;
+    tip.style.left = x + 14 + 'px';
+    tip.style.top = y + 14 + 'px';
+    tip.hidden = !text;
+  }
+  const cropOf = (url) => Object.assign({ x: 50, y: 50, z: 1, fit: 'cover' }, (S.c.crops || {})[url] || {});
+  function paintCrop(url, k) {
+    $$('img').filter((im) => im.getAttribute('src') === url).forEach((im) => {
+      im.style.setProperty('--ox', k.x + '%');
+      im.style.setProperty('--oy', k.y + '%');
+      im.style.setProperty('--z', k.z);
+      if (k.fit === 'contain') im.dataset.fit = 'contain'; else delete im.dataset.fit;
+    });
+  }
+  function sendCrop(url, k) {
+    S.c.crops = S.c.crops || {};
+    S.c.crops[url] = k;
+    window.parent.postMessage({ pm: 'crop', url, crop: k }, location.origin);
+  }
+  function hideTools() { if (tools) tools.hidden = true; toolsUrl = ''; }
+  function showTools(box) {
+    const img = $('img', box);
+    if (!img) return hideTools();
+    if (!tools) {
+      tools = document.createElement('div');
+      tools.id = 'crop-tools';
+      tools.innerHTML = '<button type="button" data-crop="out" aria-label="Zoom out">−</button><button type="button" data-crop="in" aria-label="Zoom in">+</button><button type="button" data-crop="fit">Whole photo</button><button type="button" data-crop="reset">Reset</button>';
+      tools.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-crop]');
+        if (!b || !toolsUrl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const k = cropOf(toolsUrl);
+        if (b.dataset.crop === 'in') k.z = Math.min(4, Math.round((k.z + 0.1) * 10) / 10);
+        if (b.dataset.crop === 'out') k.z = Math.max(1, Math.round((k.z - 0.1) * 10) / 10);
+        if (b.dataset.crop === 'fit') k.fit = k.fit === 'contain' ? 'cover' : 'contain';
+        if (b.dataset.crop === 'reset') Object.assign(k, { x: 50, y: 50, z: 1, fit: 'cover' });
+        paintCrop(toolsUrl, k);
+        sendCrop(toolsUrl, k);
+        $('[data-crop=fit]', tools).textContent = k.fit === 'contain' ? 'Fill the frame' : 'Whole photo';
+      });
+      document.body.appendChild(tools);
+    }
+    toolsUrl = img.getAttribute('src');
+    $('[data-crop=fit]', tools).textContent = cropOf(toolsUrl).fit === 'contain' ? 'Fill the frame' : 'Whole photo';
+    const r = box.getBoundingClientRect();
+    tools.style.left = Math.max(4, r.left + 6) + 'px';
+    tools.style.top = Math.max(4, r.top + 6) + 'px';
+    tools.hidden = false;
+  }
+  document.addEventListener('pointermove', (e) => {
+    if (!S.layout) return;
+    if (drag && drag.kind === 'size') {
+      const w = Math.max(24, drag.w + (e.clientX - drag.sx) * drag.e.x);
+      const h = Math.max(24, drag.h + (e.clientY - drag.sy) * drag.e.y);
+      const st = document.documentElement.style;
+      if (drag.e.x) st.setProperty(`--sz-${drag.key}-w`, Math.round(w) + 'px');
+      if (drag.e.y) st.setProperty(`--sz-${drag.key}-h`, Math.round(h) + 'px');
+      drag.out = { w: drag.e.x ? Math.round(w) : undefined, h: drag.e.y ? Math.round(h) : undefined };
+      sizeTip(`${SIZES[drag.key].label}: ${drag.e.x ? Math.round(w) + ' wide' : ''}${drag.e.x && drag.e.y ? ', ' : ''}${drag.e.y ? Math.round(h) + ' tall' : ''}`, e.clientX, e.clientY);
+      return;
+    }
+    if (drag && drag.kind === 'pan') {
+      const k = drag.k;
+      k.x = Math.round(Math.min(100, Math.max(0, drag.x0 - ((e.clientX - drag.sx) / drag.w) * 100 / k.z)));
+      k.y = Math.round(Math.min(100, Math.max(0, drag.y0 - ((e.clientY - drag.sy) / drag.h) * 100 / k.z)));
+      paintCrop(drag.url, k);
+      return;
+    }
+    const hit = findEdge(e.clientX, e.clientY);
+    $$('.sz-hover').forEach((el) => { if (!hit || el !== hit.el) el.classList.remove('sz-hover'); });
+    if (hit) {
+      hit.el.classList.add('sz-hover');
+      document.documentElement.style.cursor = hit.e.x && hit.e.y ? 'nwse-resize' : hit.e.x ? 'ew-resize' : 'ns-resize';
+      sizeTip(`Drag to resize: ${SIZES[hit.el.dataset.size].label}`, e.clientX, e.clientY);
+      return;
+    }
+    sizeTip('', 0, 0);
+    const box = e.target.closest && e.target.closest('.pic');
+    document.documentElement.style.cursor = box && $('img', box) ? 'grab' : '';
+    if (box && $('img', box)) showTools(box);
+    else if (!(e.target.closest && e.target.closest('#crop-tools'))) hideTools();
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!S.layout || e.button !== 0 || e.target.closest('#crop-tools')) return;
+    const hit = findEdge(e.clientX, e.clientY);
+    if (hit) {
+      e.preventDefault();
+      drag = { kind: 'size', key: hit.el.dataset.size, e: hit.e, sx: e.clientX, sy: e.clientY, w: hit.e.r.width, h: hit.e.r.height };
+      return;
+    }
+    const box = e.target.closest('.pic');
+    const img = box && $('img', box);
+    if (img) {
+      e.preventDefault();
+      const r = box.getBoundingClientRect();
+      const url = img.getAttribute('src');
+      const k = cropOf(url);
+      drag = { kind: 'pan', url, k, sx: e.clientX, sy: e.clientY, w: r.width, h: r.height, x0: k.x, y0: k.y };
+      document.documentElement.style.cursor = 'grabbing';
+    }
+  });
+  document.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    sizeTip('', 0, 0);
+    document.documentElement.style.cursor = '';
+    if (d.kind === 'size' && d.out) window.parent.postMessage({ pm: 'size', key: d.key, size: d.out }, location.origin);
+    if (d.kind === 'pan' && (d.k.x !== d.x0 || d.k.y !== d.y0)) sendCrop(d.url, d.k);
+  });
+  document.addEventListener('dragstart', (e) => { if (S.layout) e.preventDefault(); });
 
   /* ---------- start ---------- */
   async function start() {
@@ -814,6 +1042,7 @@
       S.reviews = Array.isArray(r) ? r : [];
       render();
       if (location.hash && location.hash.length > 1 && !PREVIEW) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
+      else if (TABLE && !PREVIEW && $('#menu')) $('#menu').scrollIntoView();
     } catch (err) {
       $('#app').innerHTML = '<p class="boot">The website could not load. Please refresh the page.</p>';
     }
@@ -822,11 +1051,12 @@
         if (e.origin !== location.origin || !e.data) return;
         if (e.data.pm === 'content') { S.c = e.data.content; render(); }
         if (e.data.pm === 'inline') { S.inline = Boolean(e.data.on); setInline(); }
+        if (e.data.pm === 'layout') { S.layout = Boolean(e.data.on); markLayout(); }
         if (e.data.pm === 'scroll') { const t = document.getElementById(e.data.id); if (t) t.scrollIntoView({ behavior: 'smooth' }); }
       });
       window.parent.postMessage({ pm: 'ready' }, location.origin);
     }
   }
-  window.addEventListener('hashchange', () => { if ((location.hash === '#admin') !== ADMIN && !PREVIEW) location.reload(); });
+  window.addEventListener('hashchange', () => { if (!PREVIEW && !/^\/admin/.test(location.pathname) && (location.hash === '#admin') !== ADMIN) location.reload(); });
   start();
 })();

@@ -92,8 +92,7 @@
             + '<strong>' + MONTHS[view.m - 1] + ' ' + view.y + '</strong>'
             + '<button type="button" class="bsp-nav" data-nav="1" aria-label="Next month"' + (canNext ? '' : ' disabled') + '>›</button></div>'
             + '<div class="bsp-grid bsp-week">' + WEEK.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div>'
-            + '<div class="bsp-grid">' + cells + '</div>'
-            + '<p class="bsp-note">Nepali date, with the English date below it.</p></div>'
+            + '<div class="bsp-grid">' + cells + '</div></div>'
           : '');
     }
     el.addEventListener('click', function (e) {

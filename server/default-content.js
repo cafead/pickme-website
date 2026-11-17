@@ -254,12 +254,12 @@ module.exports = {
     text: 'Birthday, anniversary or a surprise. Pick the cake, tell us the name to write on it, and choose when you want it.',
     image: photo('1464349095431-e9a21285b5f3', 1200),
     noticeHours: 8,
-    button: 'Continue to payment',
+    button: 'Continue',
   },
   booking: {
     script: 'Save your seat',
     title: 'Book a table',
-    text: 'Choose a date from the Nepali calendar and tell us how many people are coming. We will confirm on your phone.',
+    text: 'Choose a date and tell us how many people are coming. We will call or message you to confirm.',
     image: photo('1559925393-8be0ec4767c8', 1200),
     maxPeople: 30,
     seating: 'Main lounge, Quiet corner table, Celebration group table',
@@ -309,10 +309,13 @@ module.exports = {
     deliveryNote: 'Delivery inside Hetauda only.',
     esewa: { enabled: true, name: 'eSewa', qr: '', account: '' },
     fonepay: { enabled: true, name: 'Fonepay', qr: '', account: '' },
-    instructions: 'Scan the QR, pay the total, then upload a screenshot of the payment.',
+    instructions: 'Scan the QR, pay the total, then upload a screenshot of the payment. You can also pay later at the counter or on delivery.',
   },
   footer: {
     line: 'Coffee. Cakes. Icecream.',
     note: '',
   },
+  // Sizes set by dragging in admin ("Edit layout"), and photo positions and zoom.
+  sizes: {},
+  crops: {},
 };

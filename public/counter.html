@@ -158,19 +158,20 @@
   }
 
   const line = (label, v) => (v ? `<p><b>${label}:</b> ${esc(v)}</p>` : '');
-  const contact = (x) => `${esc(x.name)} · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>`;
+  const contact = (x) => `${esc(x.name || 'Guest')}${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}`;
   const steps = (list, cur) => list.map((s) => `<option value="${s}"${s === cur ? ' selected' : ''}>${s}</option>`).join('');
   const picture = (file, label) => (file ? `<button type="button" data-pic="${esc(file)}">${label}</button>` : '');
-  const waBtn = (x, text) => `<a class="btn" href="https://wa.me/${esc(wa(x.phone))}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp customer</a>`;
+  const waBtn = (x, text) => !x.phone ? '' : `<a class="btn" href="https://wa.me/${esc(wa(x.phone))}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp customer</a>`;
 
   function orderCard(o) {
     return `<article class="card ${esc(o.status)}">
-      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
+      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
       <p>${contact(o)}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}${line('Table', o.tableNo)}
       <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
-      ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}${line(o.payment.method + ' code', o.payment.txn)}
+      ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
+      <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}${o.paid ? ' · checked' : ''}</p>
       <footer>
         <select data-patch="orders" data-id="${esc(o.id)}" data-key="status" aria-label="Status">${steps(ORDER_STEPS, o.status)}</select>
         <label><input type="checkbox" data-patch="orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}> Payment checked</label>
@@ -178,7 +179,7 @@
       <footer>
         ${picture(o.payment.proof, 'Payment screenshot')}${picture(o.refPhoto, 'Cake design photo')}
         <button type="button" data-print="${esc(o.id)}">Print slip</button>
-        ${waBtn(o, `Hello ${o.name}, your ${S.cafe} order ${o.id} is now ${o.status.toUpperCase()}.`)}
+        ${waBtn(o, `Hello ${o.name || ''}, your ${S.cafe} order ${o.id} is now ${o.status.toUpperCase()}.`)}
       </footer></article>`;
   }
   function tableCard(b) {
@@ -189,7 +190,7 @@
       ${line('Food ready on arrival', b.food)}${line('Name on cake', b.cakeName)}${line('Decoration', b.decoration)}${line('Remarks', b.remarks)}
       <footer>
         <select data-patch="bookings" data-id="${esc(b.id)}" data-key="status" aria-label="Status">${steps(TABLE_STEPS, b.status)}</select>
-        ${waBtn(b, `Hello ${b.name}, your table at ${S.cafe} for ${b.bs || b.date} at ${b.time} (${b.people} people) is ${b.status.toUpperCase()}.`)}
+        ${waBtn(b, `Hello ${b.name || ''}, your table at ${S.cafe} for ${b.bs || b.date} at ${b.time} (${b.people} people) is ${b.status.toUpperCase()}.`)}
       </footer></article>`;
   }
 
@@ -244,11 +245,11 @@
     const o = S.orders.find((x) => x.id === id);
     if (!o) return;
     $('slip').innerHTML = `<p style="text-align:center"><b>${esc(S.cafe.toUpperCase())}</b><br>${esc(o.id)} · ${TYPE[o.type].toUpperCase()}<br>${when(o.createdAt)}</p><hr>
-      <p>${esc(o.name)}, ${esc(o.phone)}${o.address ? `<br>Address: ${esc(o.address)}` : ''}${o.tableNo ? `<br>Table: ${esc(o.tableNo)}` : ''}
+      <p>${esc(o.name || 'Guest')}${o.phone ? `, ${esc(o.phone)}` : ''}${o.address ? `<br>Address: ${esc(o.address)}` : ''}${o.tableNo ? `<br>Table: ${esc(o.tableNo)}` : ''}
       <br>For: ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p><hr>
       ${o.lines.map((l) => `<p>${l.qty} x ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''} = ${rs(l.qty * l.price)}</p>`).join('')}
       ${o.deliveryFee ? `<p>Delivery = ${rs(o.deliveryFee)}</p>` : ''}<hr>
-      <p><b>TOTAL ${rs(o.total)}</b> · ${o.paid ? 'payment checked' : 'payment not checked'}</p>
+      <p><b>TOTAL ${rs(o.total)}</b> · ${o.payment.method === 'later' ? 'pay later' : o.payment.method}${o.paid ? ', payment checked' : ''}</p>
       ${o.cakeMessage ? `<p>On the cake: <b>${esc(o.cakeMessage)}</b></p>` : ''}${o.occasion ? `<p>Occasion: ${esc(o.occasion)}</p>` : ''}${o.notes ? `<p>Notes: ${esc(o.notes)}</p>` : ''}`;
     window.print();
   }

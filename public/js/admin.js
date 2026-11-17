@@ -1,9 +1,9 @@
 /* Pick Me Cafe admin (#admin): edit the website with a live preview, and manage orders, bookings, reviews, messages and security. */
 (function () {
   'use strict';
-  const { FONTS, esc, rs, shrink } = window.PM;
+  const { FONTS, esc, rs, shrink, SIZES } = window.PM;
   const root = document.getElementById('admin');
-  const A = { view: 'edit', content: null, saved: '', me: {}, orders: [], bookings: [], reviews: [], messages: [], staff: [], log: [], open: new WeakSet(), timer: null, poll: null, inline: false };
+  const A = { view: 'edit', content: null, saved: '', me: {}, orders: [], bookings: [], reviews: [], messages: [], staff: [], log: [], history: [], bin: [], tables: 10, open: new WeakSet(), timer: null, poll: null, inline: false, layout: false, mobile: 'edit' };
 
   /* ---------- helpers ---------- */
   function h(tag, attrs, ...kids) {
@@ -147,6 +147,7 @@
         f('type', 'Which one', 'select', { options: () => ['instagram', 'facebook', 'tiktok', 'youtube', 'maps', 'link'].map((x) => [x, x]) }), f('url', 'Link (https://...)'),
       ] }),
     ] },
+    { title: 'Sizes and photo positions', scroll: 'hero', custom: sizesPanel, note: 'To change a size, press "Edit layout" above the preview, then drag the edge of a photo or box. To move a photo inside its frame, drag the photo; the small bar on it zooms in and out. Sizes you set here are for computers; phones keep their own layout.' },
     { title: 'Payment QR codes and delivery', scroll: 'menu', note: 'Upload your eSewa and Fonepay QR pictures here. Customers see them at checkout.', fields: [
       f('payment.deliveryFee', 'Delivery charge in NPR', 'number'), f('payment.deliveryNote', 'Delivery note'), f('payment.instructions', 'Payment instructions', 'area'),
       f('payment.esewa.enabled', 'Accept eSewa', 'toggle'), f('payment.esewa.qr', 'eSewa QR picture', 'image'), f('payment.esewa.account', 'eSewa name or number shown under the QR'),
@@ -192,7 +193,52 @@
     show();
     return h('div', { class: 'ad-image' }, thumb, h('div', { class: 'ad-image-tools' }, url,
       h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn', onclick: () => file.click() }, 'Upload photo'),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => apply('') }, 'Remove')), file));
+        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => apply('') }, 'Remove')), file,
+      cropControls(() => get(obj, field.k))));
+  }
+  // Move the photo inside its frame, zoom in, or show the whole photo.
+  function cropControls(currentUrl) {
+    const box = h('div', { class: 'ad-crop' });
+    const d = h('details', { class: 'ad-crop-wrap' }, h('summary', {}, 'Adjust position and zoom'), box);
+    const draw = () => {
+      const u = currentUrl();
+      box.replaceChildren();
+      if (!u) { box.append(h('p', { class: 'ad-note' }, 'Add a photo first.')); return; }
+      A.content.crops = A.content.crops || {};
+      const k = Object.assign({ x: 50, y: 50, z: 1, fit: 'cover' }, A.content.crops[u] || {});
+      const commit = () => { A.content.crops[u] = Object.assign({}, k); changed(); };
+      const slider = (label, key, min, max, step, fmt) => {
+        const out = h('span', { class: 'ad-crop-val' }, fmt(k[key]));
+        const id = `adf-${++fieldSeq}`;
+        const input = h('input', { type: 'range', id, min, max, step, value: k[key], oninput: (e) => { k[key] = Number(e.target.value); out.textContent = fmt(k[key]); commit(); } });
+        return h('div', { class: 'ad-crop-row' }, h('label', { for: id }, label), input, out);
+      };
+      box.append(
+        slider('Left / right', 'x', 0, 100, 1, (v) => `${v}%`),
+        slider('Up / down', 'y', 0, 100, 1, (v) => `${v}%`),
+        slider('Zoom', 'z', 1, 4, 0.05, (v) => `${Math.round(v * 100)}%`),
+        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: k.fit === 'contain', onchange: (e) => { k.fit = e.target.checked ? 'contain' : 'cover'; commit(); } }), h('span', {}, 'Show the whole photo (no cropping)')),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { delete A.content.crops[u]; changed(); draw(); } }, 'Reset position'));
+    };
+    d.addEventListener('toggle', () => { if (d.open) draw(); });
+    return d;
+  }
+  function sizesPanel(body) {
+    const draw = () => {
+      body.replaceChildren();
+      const sizes = A.content.sizes || {};
+      const used = Object.keys(sizes).filter((k) => SIZES[k] && (sizes[k].w || sizes[k].h));
+      body.append(h('div', { class: 'ad-row' },
+        h('button', { type: 'button', class: 'ad-btn', onclick: () => setLayout(true) }, 'Start editing layout'),
+        used.length && h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { if (!window.confirm('Put every size back to normal?')) return; A.content.sizes = {}; changed(); draw(); } }, 'Reset all sizes'),
+        Object.keys(A.content.crops || {}).length && h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { if (!window.confirm('Put every photo back in the middle of its frame?')) return; A.content.crops = {}; changed(); draw(); } }, 'Reset all photo positions')));
+      if (!used.length) { body.append(h('p', { class: 'ad-note' }, 'Every size is normal at the moment.')); return; }
+      body.append(h('ul', { class: 'ad-sizes' }, used.map((k) => h('li', {},
+        h('span', {}, `${SIZES[k].label}: ${[sizes[k].w && `${sizes[k].w} wide`, sizes[k].h && `${sizes[k].h} tall`].filter(Boolean).join(', ')}`),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { delete A.content.sizes[k]; changed(); draw(); } }, 'Reset')))));
+    };
+    A.drawSizes = draw;
+    draw();
   }
 
   function listField(field, obj) {
@@ -207,11 +253,12 @@
         const tools = h('span', { class: 'ad-item-tools' },
           h('button', { type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, onclick: move(i - 1) }, '↑'),
           h('button', { type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === arr.length - 1, onclick: move(i + 1) }, '↓'),
-          !field.fixed && h('button', { type: 'button', title: 'Delete', 'aria-label': 'Delete', class: 'is-del', onclick: (e) => {
+          !field.fixed && h('button', { type: 'button', title: 'Delete', class: 'is-del', onclick: (e) => {
             e.preventDefault();
-            if (!window.confirm(`Delete "${field.title(item)}"?`)) return;
+            const inside = Array.isArray(item.items) && item.items.length ? ` and the ${item.items.length} items in it` : '';
+            if (!window.confirm(`Delete "${field.title(item)}"${inside}? You can bring it back from History if you change your mind after saving.`)) return;
             arr.splice(i, 1); changed(); draw();
-          } }, '✕'));
+          } }, 'Delete'));
         const body = h('div', { class: 'ad-item-body' });
         let built = false;
         const build = () => { if (!built) { body.append(buildFields(field.fields, item, () => { title.textContent = field.title(item) || '(empty)'; })); built = true; } };
@@ -272,13 +319,14 @@
 
   /* ---------- edit view ---------- */
   function buildPanel() {
-    const panel = h('aside', { class: 'ad-panel' }, h('p', { class: 'ad-intro' }, 'Open a part of the website, change it, and watch the preview. Or switch on "Edit text on the page" and type straight into the preview. Nothing goes live until you press Save.'));
+    const panel = h('aside', { class: 'ad-panel' }, h('p', { class: 'ad-intro' }, 'Open a part of the website, change it, and watch the preview. Above the preview, "Edit text" lets you type straight onto the page, and "Edit layout" lets you drag edges to resize photos and boxes, or drag a photo to move it in its frame. Nothing goes live until you press Save, and every save can be undone from History.'));
     PANELS.forEach((p) => {
       const body = h('div', { class: 'ad-group-body' });
       let built = false;
       const d = h('details', { class: 'ad-group' }, h('summary', {}, p.title), body);
       d.addEventListener('toggle', () => {
         if (!d.open) return;
+        if (p.custom) { body.replaceChildren(); if (p.note) body.append(h('p', { class: 'ad-note' }, p.note)); const inner = h('div', { class: 'ad-group-body' }); body.append(inner); p.custom(inner); return; }
         if (!built) { if (p.note) body.append(h('p', { class: 'ad-note' }, p.note)); body.append(buildFields(p.fields, A.content)); built = true; }
         tell({ pm: 'scroll', id: p.scroll });
       });
@@ -286,21 +334,49 @@
     });
     return panel;
   }
+  function setInline(on) {
+    A.inline = on;
+    if (on && A.layout) setLayout(false);
+    const b = document.getElementById('ad-inline');
+    if (b) { b.textContent = on ? 'Editing text: on' : 'Edit text'; b.classList.toggle('ad-btn--main', on); b.setAttribute('aria-pressed', on); }
+    tell({ pm: 'inline', on });
+    if (on) { flash('Click any dashed text in the preview and type.'); showMobile('prev'); } else refreshPanel();
+  }
+  function setLayout(on) {
+    A.layout = on;
+    if (on && A.inline) setInline(false);
+    const b = document.getElementById('ad-layout');
+    if (b) { b.textContent = on ? 'Editing layout: on' : 'Edit layout'; b.classList.toggle('ad-btn--main', on); b.setAttribute('aria-pressed', on); }
+    tell({ pm: 'layout', on });
+    if (on) { flash('Drag the edge of a photo or box to resize it. Drag a photo to move it in its frame.'); showMobile('prev'); } else if (A.drawSizes) A.drawSizes();
+  }
+  function refreshPanel() {
+    const old = document.querySelector('.ad-panel');
+    if (old) old.replaceWith(buildPanel());
+    pushPreview();
+  }
+  function showMobile(which) {
+    A.mobile = which;
+    const split = document.querySelector('.ad-split');
+    if (split) split.dataset.show = which;
+    document.querySelectorAll('[data-mobile]').forEach((b) => b.classList.toggle('is-on', b.dataset.mobile === which));
+  }
   function editView() {
     const wrap = h('div', { class: 'ad-frame-wrap' }, h('iframe', { id: 'ad-frame', src: '/?preview=1', title: 'Live preview of the website' }));
-    const size = (cls, label) => h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { wrap.className = 'ad-frame-wrap ' + cls; } }, label);
-    const inlineBtn = h('button', { type: 'button', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => {
-      A.inline = !A.inline;
-      inlineBtn.textContent = A.inline ? 'Editing text on the page: on' : 'Edit text on the page';
-      inlineBtn.classList.toggle('ad-btn--main', A.inline);
-      inlineBtn.setAttribute('aria-pressed', A.inline);
-      tell({ pm: 'inline', on: A.inline });
-      if (A.inline) flash('Click any dashed text in the preview and type.');
-      else { document.querySelector('.ad-panel').replaceWith(buildPanel()); pushPreview(); }
-    } }, 'Edit text on the page');
+    const size = (cls, label) => h('button', { type: 'button', class: 'ad-btn ad-btn--quiet ad-wide-only', onclick: () => { wrap.className = 'ad-frame-wrap ' + cls; } }, label);
     A.inline = false;
-    return h('div', { class: 'ad-split' }, buildPanel(), h('section', { class: 'ad-preview' },
-      h('div', { class: 'ad-prev-bar' }, h('strong', {}, 'Live preview'), h('span', { class: 'ad-row' }, inlineBtn, size('', 'Computer'), size('is-phone', 'Phone'))), wrap));
+    A.layout = false;
+    const split = h('div', { class: 'ad-split', 'data-show': A.mobile },
+      h('div', { class: 'ad-switch' },
+        h('button', { type: 'button', 'data-mobile': 'edit', class: A.mobile === 'edit' ? 'is-on' : '', onclick: () => showMobile('edit') }, 'Editor'),
+        h('button', { type: 'button', 'data-mobile': 'prev', class: A.mobile === 'prev' ? 'is-on' : '', onclick: () => showMobile('prev') }, 'Preview')),
+      buildPanel(),
+      h('section', { class: 'ad-preview' },
+        h('div', { class: 'ad-prev-bar' }, h('strong', { class: 'ad-wide-only' }, 'Live preview'), h('span', { class: 'ad-row' },
+          h('button', { type: 'button', id: 'ad-inline', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => setInline(!A.inline) }, 'Edit text'),
+          h('button', { type: 'button', id: 'ad-layout', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => setLayout(!A.layout) }, 'Edit layout'),
+          size('', 'Computer'), size('is-phone', 'Phone'))), wrap));
+    return split;
   }
 
   /* ---------- list views ---------- */
@@ -314,11 +390,12 @@
   function orderCard(o) {
     return `<article class="ad-card${o.status === 'new' ? ' is-new' : ''}">
       <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}</span><b>${rs(o.total)}</b></header>
-      <p>${esc(o.name)} · ${contact(o)}</p>
+      <p>${esc(o.name || 'Guest')}${o.phone ? ` · ${contact(o)}` : ''}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}${line('Table', o.tableNo)}
       <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''} <span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li>Delivery <span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
-      ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}${line(`${o.payment.method} transaction code`, o.payment.txn)}
+      <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}</p>
+      ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <footer>
         <label>Status <select data-patch="desk/orders" data-id="${esc(o.id)}" data-key="status">${options(['new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'], o.status)}</select></label>
         <label class="ad-check"><input type="checkbox" data-patch="desk/orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}><span>Payment checked</span></label>
@@ -336,7 +413,7 @@
         <article class="ad-card${b.status === 'new' ? ' is-new' : ''}">
           <header><strong>${esc(b.id)}</strong><span>asked ${when(b.createdAt)}</span><b>${esc(b.people)} people</b></header>
           <p><b>${esc(b.bs || b.date)} at ${esc(b.time)}</b>${b.seating ? ` · ${esc(b.seating)}` : ''}</p>
-          <p>${esc(b.name)} · ${contact(b)}</p>
+          <p>${esc(b.name || 'Guest')} · ${contact(b)}</p>
           ${line('Food ready on arrival', b.food)}${line('Name on cake', b.cakeName)}${line('Decoration', b.decoration)}${line('Remarks', b.remarks)}
           <footer>
             <label>Status <select data-patch="desk/bookings" data-id="${esc(b.id)}" data-key="status">${options(['new', 'confirmed', 'seated', 'declined', 'done'], b.status)}</select></label>
@@ -370,7 +447,7 @@
       box.innerHTML = `<h2>Messages</h2><p class="ad-note">Messages sent from the "Send us a message" box. The customer also sends the same text to your WhatsApp.</p>`
         + (A.messages.length ? A.messages.map((m) => `
         <article class="ad-card${m.read ? '' : ' is-new'}">
-          <header><strong>${esc(m.name)}</strong><span>${when(m.createdAt)}</span></header>
+          <header><strong>${esc(m.name || 'Guest')}</strong><span>${when(m.createdAt)}</span></header>
           <p>${esc(m.text)}</p>
           ${m.phone ? `<p>${contact(m)}</p>` : ''}
           <footer>
@@ -378,6 +455,40 @@
             <button type="button" class="ad-btn ad-btn--quiet" data-del="messages" data-id="${esc(m.id)}">Delete</button>
           </footer>
         </article>`).join('') : '<p class="ad-empty">No messages yet.</p>');
+    } else if (kind === 'history') {
+      box.innerHTML = `<h2>History</h2>
+        <p class="ad-note">Every time you press Save, the website is kept here. Open an older version to look at it in the editor; press Save if you want to use it again. Nothing changes until you save.</p>
+        <div class="ad-card"><header><strong>Website versions</strong></header>
+          ${A.history.length ? A.history.map((v, n) => `<div class="ad-version">
+            <div><b>${when(v.at)}</b>${n === 0 ? ' <span class="ad-tag">live now</span>' : ''}${v.note ? ` · ${esc(v.note)}` : ''}
+              ${v.changes && v.changes.length ? `<ul>${v.changes.slice(0, 8).map((c) => `<li>${esc(c)}</li>`).join('')}${v.changes.length > 8 ? `<li>and ${v.changes.length - 8} more changes</li>` : ''}</ul>` : `<p class="ad-note">${v.note ? '' : 'No changes listed.'}</p>`}</div>
+            ${n === 0 ? '' : `<button type="button" class="ad-btn" data-version="${esc(v.id)}">Open this version</button>`}
+          </div>`).join('') : '<p class="ad-empty">No saved versions yet. They appear after your first save.</p>'}
+        </div>
+        <div class="ad-card"><header><strong>Deleted orders, bookings, reviews and messages</strong></header>
+          ${A.bin.length ? A.bin.map((t) => `<div class="ad-version"><div><b>${esc(t.item.id)}</b> · ${esc(t.kind)} · ${esc(t.item.name || 'Guest')} · deleted ${when(t.at)}</div>
+            <button type="button" class="ad-btn" data-unbin="${esc(t.key)}">Bring back</button></div>`).join('') : '<p class="ad-empty">Nothing deleted.</p>'}
+        </div>
+        <div class="ad-card">
+          <header><strong>Recent activity</strong></header>
+          ${A.log.length ? `<div class="ad-log"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Number</th></tr></thead><tbody>${A.log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.ref)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">Nothing yet.</p>'}
+        </div>`;
+    } else if (kind === 'tables') {
+      const base = location.origin;
+      const n = Math.max(1, Math.min(60, Number(A.tables) || 10));
+      box.innerHTML = `<h2>Table QR codes</h2>
+        <p class="ad-note">Put one on each table. Guests scan it, see the menu, and order without paying first. The order arrives in Orders and on the counter screen with the table number.</p>
+        <form class="ad-card ad-form ad-noprint" id="ad-tables-form">
+          <div class="ad-grid ad-grid--2">
+            <label>How many tables<input type="number" name="n" min="1" max="60" value="${n}"></label>
+            <label>Website address<input name="base" value="${esc(A.tableBase || base)}"></label>
+          </div>
+          <footer><button class="ad-btn" type="submit">Make QR codes</button><button class="ad-btn ad-btn--main" type="button" data-do="print">Print</button></footer>
+        </form>
+        <div class="ad-qr-sheet">${Array.from({ length: n }, (x, i) => {
+          const link = `${(A.tableBase || base).replace(/\/+$/, '')}/?table=${i + 1}`;
+          return `<figure class="ad-qr"><img src="/api/admin/qr?text=${encodeURIComponent(link)}" alt="QR code for table ${i + 1}"><figcaption><b>Table ${i + 1}</b><span>Scan to see the menu and order</span></figcaption></figure>`;
+        }).join('')}</div>`;
     } else {
       box.innerHTML = `<h2>Security and staff</h2>
         <form class="ad-card ad-form" id="ad-pass-form">
@@ -410,10 +521,7 @@
           <p class="ad-note">Downloads the website content, orders, bookings, reviews and messages as one file. Uploaded photos are not included.</p>
           <footer><a class="ad-btn" href="/api/admin/export">Download backup</a></footer>
         </div>
-        <div class="ad-card">
-          <header><strong>Recent activity</strong></header>
-          ${A.log.length ? `<div class="ad-log"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Number</th></tr></thead><tbody>${A.log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.ref)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">Nothing yet.</p>'}
-        </div>`;
+        <p class="ad-note">The activity log is under History.</p>`;
     }
     return box;
   }
@@ -428,7 +536,10 @@
     }
   }
   async function loadSecurity() {
-    [A.staff, A.log] = await Promise.all([api('GET', '/api/admin/staff'), api('GET', '/api/admin/audit')]);
+    A.staff = await api('GET', '/api/admin/staff');
+  }
+  async function loadHistory() {
+    [A.history, A.bin, A.log] = await Promise.all([api('GET', '/api/admin/history'), api('GET', '/api/admin/bin'), api('GET', '/api/admin/audit')]);
   }
   function show(view, force) {
     A.view = view;
@@ -439,7 +550,9 @@
     if (!busy || !body.querySelector('.ad-page')) body.replaceChildren(listView(view));
   }
   async function reload(view) {
-    if (view === 'security') await loadSecurity(); else await loadLists();
+    if (view === 'security') await loadSecurity();
+    else if (view === 'history') await loadHistory();
+    else if (view !== 'tables') await loadLists();
     show(view, true);
   }
 
@@ -448,11 +561,11 @@
       if (view !== 'edit' && A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) return;
       if (view === 'edit') return show('edit', true);
       try { await reload(view); } catch (e) { flash(e.message, true); }
-    } }, label, !/edit|security/.test(view) && h('span', { class: 'ad-count', 'data-count': view, hidden: true }, '0'));
+    } }, label, !/edit|security|history|tables/.test(view) && h('span', { class: 'ad-count', 'data-count': view, hidden: true }, '0'));
     root.replaceChildren(
       h('header', { class: 'ad-top' },
         h('strong', { class: 'ad-name' }, 'Pick Me Cafe admin'),
-        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('security', 'Security')),
+        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('tables', 'Table QR'), tab('history', 'History'), tab('security', 'Security')),
         h('span', { class: 'ad-right' },
           h('span', { id: 'ad-status', class: 'ad-status' }, 'All changes saved'),
           h('button', { type: 'button', id: 'ad-save', class: 'ad-btn ad-btn--main', disabled: true, onclick: save }, 'Save'),
@@ -462,17 +575,33 @@
       h('div', { id: 'ad-body', class: 'ad-body' }),
       h('div', { id: 'ad-flash', class: 'ad-flash', role: 'status' }));
   }
-  async function save() {
-    try {
-      await api('PUT', '/api/admin/content', A.content);
+  async function save(force) {
+    const r = await fetch('/api/admin/content' + (force === true ? '?force=1' : '') + (A.note ? `${force === true ? '&' : '?'}note=${encodeURIComponent(A.note)}` : ''), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(A.content),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401) return login();
+    if (r.status === 409) {
+      const mine = window.confirm('The website was saved from another device after you opened this editor.\n\nPress OK to save your version anyway (the other version stays in History).\nPress Cancel to load the newest version instead (your unsaved changes here are lost).');
+      if (mine) return save(true);
+      A.content = await fetch('/api/content').then((x) => x.json());
       A.saved = JSON.stringify(A.content);
+      document.getElementById('ad-body').replaceChildren();
+      show('edit', true);
       status();
-      flash('Saved. The website is updated.');
-    } catch (e) { flash(e.message, true); }
+      return flash('Loaded the newest version.');
+    }
+    if (!r.ok) return flash(data.error || 'Could not save. Please try again.', true);
+    A.content._rev = data.rev;
+    A.saved = JSON.stringify(A.content);
+    A.note = '';
+    status();
+    flash('Saved. The website is updated. Older versions are in History.');
   }
   function discard() {
     if (status() && !window.confirm('Undo every change since your last save?')) return;
     A.content = JSON.parse(A.saved);
+    A.note = '';
     document.getElementById('ad-body').replaceChildren();
     show('edit', true);
     status();
@@ -492,7 +621,30 @@
     const del = e.target.closest('[data-del]');
     const staff = e.target.closest('[data-staff]');
     const doIt = e.target.closest('[data-do]');
+    const version = e.target.closest('[data-version]');
+    const unbin = e.target.closest('[data-unbin]');
     try {
+      if (version) {
+        if (status() && !window.confirm('You have unsaved changes. Open this older version anyway? Your unsaved changes are lost.')) return;
+        const old = await api('GET', `/api/admin/history/${version.dataset.version}`);
+        const v = A.history.find((x) => x.id === version.dataset.version);
+        old._rev = JSON.parse(A.saved)._rev;
+        A.content = old;
+        A.note = v ? `restored the version from ${when(v.at)}` : 'restored an older version';
+        document.getElementById('ad-body').replaceChildren();
+        show('edit', true);
+        status();
+        flash('This is the older version. Look at the preview, then press Save to make it live, or Undo changes to go back.');
+        return;
+      }
+      if (unbin) {
+        await api('POST', '/api/admin/bin/restore', { key: unbin.dataset.unbin });
+        flash('Brought back.');
+        await reload('history');
+        loadLists().catch(() => {});
+        return;
+      }
+      if (doIt && doIt.dataset.do === 'print') { window.print(); return; }
       if (del && window.confirm('Delete this for good?')) {
         await api('DELETE', `/api/admin/${del.dataset.del}/${del.dataset.id}`);
         await reload(A.view);
@@ -516,9 +668,10 @@
   });
   root.addEventListener('submit', async (e) => {
     const id = e.target.id;
-    if (!/^ad-(newrev|pass-form|staff-form)$/.test(id)) return;
+    if (!/^ad-(newrev|pass-form|staff-form|tables-form)$/.test(id)) return;
     e.preventDefault();
     try {
+      if (id === 'ad-tables-form') { const d = formData(e.target); A.tables = d.n; A.tableBase = String(d.base || '').trim() || location.origin; show('tables', true); return; }
       if (id === 'ad-newrev') { await api('POST', '/api/admin/reviews', formData(e.target)); await reload('reviews'); flash('Review added.'); }
       if (id === 'ad-pass-form') { await api('POST', '/api/admin/password', formData(e.target)); await reload('security'); flash('Password changed. Other devices are signed out.'); }
       if (id === 'ad-staff-form') { await api('POST', '/api/admin/staff', formData(e.target)); await reload('security'); flash('Staff login added.'); }
@@ -526,7 +679,21 @@
   });
   window.addEventListener('message', (e) => {
     if (e.origin !== location.origin || !e.data || !A.content) return;
-    if (e.data.pm === 'ready') { pushPreview(); if (A.inline) tell({ pm: 'inline', on: true }); }
+    if (e.data.pm === 'ready') { pushPreview(); if (A.inline) tell({ pm: 'inline', on: true }); if (A.layout) tell({ pm: 'layout', on: true }); }
+    if (e.data.pm === 'size' && SIZES[e.data.key] && e.data.size) {
+      A.content.sizes = A.content.sizes || {};
+      const cur = Object.assign({}, A.content.sizes[e.data.key]);
+      for (const ax of ['w', 'h']) { const n = Number(e.data.size[ax]); if (n >= 16 && n <= 3000) cur[ax] = Math.round(n); }
+      A.content.sizes[e.data.key] = cur;
+      status();
+      if (A.drawSizes) A.drawSizes();
+    }
+    if (e.data.pm === 'crop' && typeof e.data.url === 'string' && e.data.crop) {
+      const k = e.data.crop;
+      A.content.crops = A.content.crops || {};
+      A.content.crops[e.data.url] = { x: Number(k.x) || 0, y: Number(k.y) || 0, z: Number(k.z) || 1, fit: k.fit === 'contain' ? 'contain' : 'cover' };
+      status();
+    }
     if (e.data.pm === 'edit' && typeof e.data.path === 'string' && /^[\w.]+$/.test(e.data.path) && !/__proto__|constructor|prototype/.test(e.data.path)) { set(A.content, e.data.path, String(e.data.value)); status(); }
   });
   window.addEventListener('beforeunload', (e) => { if (A.content && JSON.stringify(A.content) !== A.saved) { e.preventDefault(); e.returnValue = ''; } });
@@ -557,7 +724,7 @@
     loadLists().catch(() => {});
     clearInterval(A.poll);
     A.poll = setInterval(async () => {
-      try { await loadLists(); if (!/edit|security/.test(A.view)) show(A.view); } catch (e) { /* shown at next action */ }
+      try { await loadLists(); if (!/edit|security|history|tables/.test(A.view)) show(A.view); } catch (e) { /* shown at next action */ }
     }, 30000);
   }
   boot();
