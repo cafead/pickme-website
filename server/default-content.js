@@ -5,19 +5,49 @@
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const photo = (id, w = 1400) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
 
+// Stock photos to start with. Replace each one with your own photo in admin.
+const ITEM_PHOTOS = {
+  'Blueberry Cheese Cake': '1533134242443-d4fd215305ad', 'Strawberry Cheese Cake': '1565958011703-44f9829ba187',
+  'Chocolate Cheese Cake': '1578985545062-69928b1d9587', 'Coconut Snow White Cheese Cake': '1535141192574-5d4897c12636',
+  'Original Cheese Cake': '1524351199678-941a58a3df50', 'Coconut Cream Cake': '1588195538326-c5b1e9f80a1b',
+  'Dark Chocolate Truffle Cake': '1606890737304-57a1ca8a5b62', 'Black Forest Cake': '1606313564200-e75d5e30476c',
+  'White Forest Cake': '1542826438-bd32f43d626f', 'Red Velvet Cake': '1586788680434-30d324b2d46f',
+  'Butterscotch Cake': '1571115177098-24ec42ed204d', 'Muffin (Cup Cake)': '1558961363-fa8fdf82db35', Cookie: '1499636136210-6f4ee915583e',
+  Espresso: '1510591509098-f4fdc6d0ff04', Cappuccino: '1534778101976-62847782c213', Americano: '1551030173-122aabc4489c',
+  'Cafe Latte': '1570968915860-54d5c301fa9f', Doppio: '1514432324607-a09d9b4aefdd', 'Long Black': '1497935586351-b67a49e012bf',
+  'Iced Americano': '1517701550927-30cf4ba1dba5', 'Iced Latte': '1461023058943-07fcbe16d735', 'Iced Cappuccino': '1572490122747-3968b75cc699',
+  'Iced Mocha': '1578314675249-a6910f80cc4e', 'Pick Me Double Shot on Ice': '1509042239860-f550ce710b93',
+  'Virgin Mojito': '1513558161293-cdaf765ed2fd', 'Shirley Temple': '1551024709-8f23befc6f87', 'Virgin Pina Colada': '1546171753-97d7676e4602',
+  'Virgin Daiquiri': '1560512823-829485b8bf24', Cinderella: '1536935338788-846bb9981813', 'Virgin Bellini': '1563223771-5fe4038fbfc9',
+  'Virgin Margarita': '1514362545857-3bc16c4c7d1b', 'Blue Lagoon': '1560512823-829485b8bf24',
+  'Chocolate Milkshake': '1572490122747-3968b75cc699', 'Strawberry Milkshake': '1579954115545-a95591f28bfc', 'Blueberry Milkshake': '1553177595-4de2bb0842b9',
+  'Matcha Latte': '1536256263959-770b48d82b0a', 'Strawberry Matcha Latte': '1515823064-d6e0c04616a7', 'Blueberry Matcha Latte': '1536256263959-770b48d82b0a',
+  'Iced Cherry Chai Latte': '1576092768241-dec231879fc3', 'Hot Chocolate': '1542990253-0d0f5be5f0ed', 'Hot Milk': '1550583724-b2692b85b150',
+  'Jasmine Tea': '1576092768241-dec231879fc3', 'Green Tea': '1627435601361-ec25f5b1d0e5', 'Black Tea': '1594631252845-29fc4cc8cde9', Water: '1548839140-29a749e1cf4d',
+  'Hot Dog (Chicken)': '1619740455993-9e612b1af08a', 'Hot Dog (Veg)': '1619740455993-9e612b1af08a',
+  'Sandwich (Chicken)': '1528735602780-2552fd46c7af', 'Sandwich (Veg)': '1528735602780-2552fd46c7af',
+  Brownie: '1606313564200-e75d5e30476c', 'Brownie with Icecream': '1563805042-7684c019e1cb', Vanilla: '1570197788417-0e82375c9371',
+  Chocolate: '1563805042-7684c019e1cb',
+};
+const GROUP_PHOTOS = { tea: '1561336313-0bd5e0b27ec8', ramen: '1569718212165-3a8278d5f624', 'ice-cream': '1497034825429-c343d7c6a68f' };
+
 function cat(name, note, rows) {
   const id = slug(name);
   return {
     id, name, note,
-    items: rows.map(([itemName, prices, extra]) => ({
-      id: `${id}-${slug(itemName)}`,
-      name: itemName,
-      desc: '',
-      image: '',
-      available: true,
-      prices,
-      ...(extra || {}),
-    })),
+    items: rows.map(([itemName, prices, extra]) => {
+      const pid = ITEM_PHOTOS[itemName] || GROUP_PHOTOS[id];
+      return {
+        id: `${id}-${slug(itemName)}`,
+        name: itemName,
+        desc: '',
+        badge: '',
+        image: pid ? photo(pid, 600) : '',
+        available: true,
+        prices,
+        ...(extra || {}),
+      };
+    }),
   };
 }
 const one = (p) => [{ label: '', price: p }];
@@ -51,7 +81,13 @@ module.exports = {
     fontDisplay: 'Marcellus',
     fontScript: 'Allura',
     fontBody: 'Jost',
+    button: '#8C6A2E',
     radius: 18,
+    headingScale: 1,
+    bodySize: 16,
+    width: 1180,
+    heroHeight: 760,
+    blend: true,
     animations: true,
   },
   sections: [
@@ -73,6 +109,8 @@ module.exports = {
     tagline: 'Little moments, beautiful memories.',
     button: 'Explore Our Menu',
     button2: 'Book a Table',
+    button3: 'Order a Cake',
+    card: { show: true, image: photo('1533134242443-d4fd215305ad', 300), label: 'House speciality', title: 'Cheesecake', text: 'By the slice, or pre-order a whole one' },
     image: photo('1554118811-1e0d58224f24', 1800),
     layout: 'right',
     marquee: 'Fresh espresso • Baked cheesecake • Handmade mocktails • Ice cream • Celebration cakes',
@@ -92,15 +130,19 @@ module.exports = {
     seconds: 5,
     items: [
       {
-        id: 'christmas-week',
-        enabled: true,
-        title: 'Christmas Week',
-        text: 'Christmas theme cakes and drinks, all week. Come in from 19 to 25 December.',
-        image: photo('1512389142860-9c449e58a543', 1600),
-        button: 'Pre-order a Christmas cake',
-        link: '#cake',
-        start: '2026-11-17',
-        days: 39,
+        id: 'christmas-cakes', enabled: true, tag: 'Christmas Week', title: 'Christmas theme cakes',
+        text: 'Our Christmas cakes arrive for Christmas Week, 19 to 25 December. Pre-order yours now.',
+        image: photo('1512389142860-9c449e58a543', 1600), button: 'Pre-order a cake', link: '#cake', start: '2026-11-17', days: 39,
+      },
+      {
+        id: 'christmas-drinks', enabled: true, tag: 'Christmas Week', title: 'Christmas drinks',
+        text: 'Special Christmas drinks join the menu for one week only.',
+        image: photo('1514432324607-a09d9b4aefdd', 1600), button: 'See the menu', link: '#menu', start: '2026-11-17', days: 39,
+      },
+      {
+        id: 'christmas-tables', enabled: true, tag: 'Christmas Week', title: 'Celebrate with friends',
+        text: 'Book a table for your group, and tell us the cake and decoration you want ready when you arrive.',
+        image: photo('1513558161293-cdaf765ed2fd', 1600), button: 'Book a table', link: '#booking', start: '2026-11-17', days: 39,
       },
     ],
   },
@@ -108,6 +150,7 @@ module.exports = {
     script: 'Our Menu',
     title: 'Pick what you love',
     note: 'All prices in NPR. Delivery inside Hetauda costs Rs. 150 extra.',
+    layout: 'list',
     categories: [
       cat('Hot Coffee', '', [
         ['Espresso', two(140, 200, 'Single', 'Double')],
@@ -122,7 +165,7 @@ module.exports = {
         ['Iced Latte', two(260, 300)],
         ['Iced Cappuccino', two(260, 300)],
         ['Iced Mocha', two(240, 290)],
-        ['Pick Me Double Shot on Ice', two(230, 270)],
+        ['Pick Me Double Shot on Ice', two(230, 270), { badge: 'House special' }],
       ]),
       cat('Cheesecake', 'Whole cheesecakes need 8 hours notice.', [
         ['Blueberry Cheese Cake', cake(270, 2600)],
@@ -219,6 +262,7 @@ module.exports = {
     text: 'Choose a date from the Nepali calendar and tell us how many people are coming. We will confirm on your phone.',
     image: photo('1559925393-8be0ec4767c8', 1200),
     maxPeople: 30,
+    seating: 'Main lounge, Quiet corner table, Celebration group table',
     button: 'Request booking',
   },
   story: {
@@ -232,17 +276,19 @@ module.exports = {
     script: 'Our Gallery',
     title: '',
     images: [
-      { image: photo('1495474472287-4d71bcdd2085', 900), caption: 'Morning coffee' },
-      { image: photo('1578985545062-69928b1d9587', 900), caption: 'Celebration cakes' },
-      { image: photo('1563805042-7684c019e1cb', 900), caption: 'Ice cream' },
-      { image: photo('1517248135467-4c7edcad34c4', 900), caption: 'Our space' },
-      { image: photo('1536935338788-846bb9981813', 900), caption: 'Mocktails' },
+      { image: photo('1495474472287-4d71bcdd2085', 900), caption: 'Morning coffee', tag: 'Coffee bar' },
+      { image: photo('1578985545062-69928b1d9587', 900), caption: 'Celebration cakes', tag: 'Cakes' },
+      { image: photo('1563805042-7684c019e1cb', 900), caption: 'Ice cream', tag: 'Ice cream' },
+      { image: photo('1517248135467-4c7edcad34c4', 900), caption: 'Our space', tag: 'Sigreni' },
+      { image: photo('1536935338788-846bb9981813', 900), caption: 'Mocktails', tag: 'Cold bar' },
     ],
   },
   reviews: {
     script: 'Kind words',
     title: 'What our guests say',
     formTitle: 'Leave a review',
+    rating: '',
+    count: '',
     thanks: 'Thank you. Your review will appear here after we read it.',
   },
   visit: {
