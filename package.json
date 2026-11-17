@@ -1,0 +1,15 @@
+{
+  "name": "pick-me-cafe",
+  "version": "1.0.0",
+  "description": "Pick Me Cafe website: menu, ordering, table booking, cake pre-orders and an admin editor",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
