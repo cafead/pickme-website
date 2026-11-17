@@ -74,7 +74,16 @@
 .ad-card footer select { width: auto !important; }
 .ad-card a { color: #5E4417; }
 .ad-grid { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 10px; }
-.ad-newrev label { display: grid; gap: 4px; font-size: .85rem; color: #5F5243; }
+.ad-form { display: grid; gap: 10px; }
+.ad-form label { display: grid; gap: 4px; font-size: .85rem; color: #5F5243; }
+.ad-grid--2 { grid-template-columns: 1fr 1fr; }
+.ad-staff { display: grid; gap: 6px; border: 0 !important; padding: 0 !important; }
+.ad-staff li { align-items: center; flex-wrap: wrap; padding: 8px 10px; border: 1px solid #E0D6C7; border-radius: 9px; background: #FDFBF8; }
+.ad-log { max-height: 320px; overflow: auto; border: 1px solid #E0D6C7; border-radius: 9px; }
+.ad-log table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.ad-log th, .ad-log td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #EFE8DC; white-space: nowrap; }
+.ad-log th { position: sticky; top: 0; background: #F4F0EA; }
+.ad-login .ad-check { font-size: .9rem; }
 .ad-empty { padding: 30px; text-align: center; color: #5F5243; background: #fff; border: 1px dashed #C9BBA3; border-radius: 12px; }
 
 .ad-flash { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 30px); opacity: 0; padding: 11px 20px; border-radius: 10px; background: #24693F; color: #fff; pointer-events: none; transition: transform .3s, opacity .3s; z-index: 90; }

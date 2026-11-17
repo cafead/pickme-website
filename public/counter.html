@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Counter | Pick Me Cafe</title>
+<link rel="icon" href="/img/logo.png">
+<style>
+  :root { --ink: #2B2118; --soft: #5F5243; --line: #D8CDBD; --bg: #F4F0EA; --card: #fff; --main: #7A5A22; --new: #B3371F; --go: #1D5FA8; --ok: #24693F; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  h1, h2, p, ul { margin: 0; padding: 0; }
+  ul { list-style: none; }
+  a { color: #5E4417; }
+  button, input, select { font: inherit; color: inherit; }
+  button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--line); background: #fff; cursor: pointer; text-decoration: none; font-weight: 500; white-space: nowrap; }
+  button:hover, .btn:hover { background: #F3EADB; }
+  .main { background: var(--main); border-color: var(--main); color: #fff; }
+  .main:hover { background: #654A1A; }
+  input, select { min-height: 42px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+  input[type=checkbox] { min-height: 0; width: 20px; height: 20px; accent-color: var(--main); }
+  :focus-visible { outline: 2px solid var(--main); outline-offset: 2px; }
+
+  .bar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; background: var(--ink); color: #fff; }
+  .bar h1 { font-size: 1.05rem; font-weight: 600; }
+  .bar small { opacity: .8; }
+  .bar .right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bar button, .bar .btn { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .25); color: #fff; }
+  .bar button:hover, .bar .btn:hover { background: rgba(255, 255, 255, .24); }
+  .wrap { width: min(1400px, 100% - 28px); margin: 16px auto 60px; }
+  .tools { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .count { min-width: 22px; padding: 0 6px; border-radius: 11px; background: var(--new); color: #fff; font-size: .78rem; line-height: 22px; text-align: center; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; align-items: start; }
+  .card { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-left: 5px solid var(--line); border-radius: 12px; background: var(--card); }
+  .card.new { border-left-color: var(--new); }
+  .card.accepted, .card.preparing, .card.confirmed, .card.seated { border-left-color: var(--go); }
+  .card.ready { border-left-color: var(--ok); }
+  .card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .card header strong { font: 700 1rem ui-monospace, Menlo, Consolas, monospace; }
+  .card header small { color: var(--soft); }
+  .card header b { margin-left: auto; font-size: 1.05rem; }
+  .tag { padding: 1px 10px; border-radius: 999px; background: #F3EADB; font-size: .82rem; }
+  .card ul { display: grid; gap: 3px; padding: 8px 0; border-block: 1px dashed var(--line); }
+  .card li { display: flex; justify-content: space-between; gap: 12px; }
+  .card footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .card footer label { display: flex; align-items: center; gap: 6px; }
+  .empty { grid-column: 1 / -1; padding: 46px 20px; text-align: center; color: var(--soft); border: 1px dashed var(--line); border-radius: 12px; background: #fff; }
+
+  #gate { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: var(--bg); }
+  #gate form { display: grid; gap: 12px; width: min(380px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+  #gate h2 { font-size: 1.3rem; }
+  #gate label { display: grid; gap: 4px; font-size: .88rem; color: var(--soft); }
+  #gate label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+  #gate-msg { min-height: 1.4em; color: var(--new); }
+  #viewer { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: rgba(30, 20, 10, .82); }
+  #viewer div { display: grid; gap: 10px; justify-items: center; max-width: 94vw; padding: 14px; border-radius: 12px; background: #fff; }
+  #viewer img { max-width: 100%; max-height: 76vh; object-fit: contain; }
+  #toast { position: fixed; left: 50%; bottom: 22px; z-index: 50; transform: translate(-50%, 40px); opacity: 0; padding: 11px 20px; border-radius: 10px; background: var(--ink); color: #fff; transition: transform .3s, opacity .3s; pointer-events: none; }
+  #toast.on { transform: translate(-50%, 0); opacity: 1; }
+  #slip { display: none; }
+  @media print {
+    body { background: #fff; }
+    .bar, .wrap, #gate, #viewer, #toast { display: none !important; }
+    #slip { display: block; max-width: 80mm; margin: 0 auto; padding: 5mm; font: 11pt/1.4 ui-monospace, Menlo, Consolas, monospace; color: #000; }
+    #slip hr { border: 0; border-top: 1px dashed #000; }
+  }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="gate" hidden>
+  <form id="gate-form">
+    <h2>Pick Me Cafe counter</h2>
+    <p style="color:var(--soft)">Orders, cake pre-orders and table bookings.</p>
+    <label>Staff login ID (leave empty if you are the owner)<input id="lg-user" autocomplete="username" autocapitalize="none"></label>
+    <label>Password<input type="password" id="lg-pass" autocomplete="current-password" required></label>
+    <label class="check"><input type="checkbox" id="lg-keep" checked> Keep me signed in on this device</label>
+    <p id="gate-msg" role="alert"></p>
+    <button class="main" type="submit">Log in</button>
+    <a href="/">Back to the website</a>
+  </form>
+</div>
+
+<header class="bar">
+  <h1>Pick Me Cafe counter <small id="who"></small></h1>
+  <div class="right">
+    <small id="sync">Connecting</small>
+    <button type="button" id="refresh">Refresh now</button>
+    <a class="btn" href="/" target="_blank" rel="noopener">Website</a>
+    <a class="btn" href="/#admin" id="to-admin" hidden>Admin</a>
+    <button type="button" id="logout">Log out</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="tools">
+    <div class="tabs" role="tablist">
+      <button type="button" data-tab="orders" class="on">Orders <span class="count" id="n-orders">0</span></button>
+      <button type="button" data-tab="cakes">Cake pre-orders <span class="count" id="n-cakes">0</span></button>
+      <button type="button" data-tab="tables">Table bookings <span class="count" id="n-tables">0</span></button>
+    </div>
+    <div class="filters">
+      <input type="search" id="search" placeholder="Search number, name or phone" aria-label="Search">
+      <select id="filter" aria-label="Show">
+        <option value="active">Active only</option>
+        <option value="new">New only</option>
+        <option value="all">Everything</option>
+        <option value="closed">Finished or cancelled</option>
+      </select>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div id="viewer" hidden><div><img id="viewer-img" alt="Picture sent by the customer"><button type="button" id="viewer-close">Close</button></div></div>
+<div id="toast" role="status"></div>
+<div id="slip"></div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const rs = (n) => 'Rs. ' + Number(n || 0).toLocaleString('en-IN');
+  const when = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kathmandu', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+  const wa = (p) => String(p || '').replace(/\D/g, '').replace(/^(?=9\d{9}$)/, '977');
+  const TYPE = { dinein: 'Dine-in', pickup: 'Pickup', delivery: 'Delivery' };
+  const ORDER_STEPS = ['new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'];
+  const TABLE_STEPS = ['new', 'confirmed', 'seated', 'declined', 'done'];
+  const CLOSED = ['completed', 'cancelled', 'declined', 'done'];
+  const S = { tab: 'orders', orders: [], bookings: [], known: null, timer: null, cafe: 'Pick Me Cafe' };
+
+  function toast(msg, ms) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => t.classList.remove('on'), ms || 3500);
+  }
+  async function api(method, url, body) {
+    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401 && !/auth\/login/.test(url)) { gate('Please log in.'); throw new Error('login'); }
+    if (!r.ok) throw new Error(data.error || 'Something went wrong.');
+    return data;
+  }
+  function gate(msg) {
+    clearInterval(S.timer);
+    $('gate').hidden = false;
+    $('gate-msg').textContent = msg || '';
+    $('lg-pass').focus();
+  }
+
+  const line = (label, v) => (v ? `<p><b>${label}:</b> ${esc(v)}</p>` : '');
+  const contact = (x) => `${esc(x.name)} · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>`;
+  const steps = (list, cur) => list.map((s) => `<option value="${s}"${s === cur ? ' selected' : ''}>${s}</option>`).join('');
+  const picture = (file, label) => (file ? `<button type="button" data-pic="${esc(file)}">${label}</button>` : '');
+  const waBtn = (x, text) => `<a class="btn" href="https://wa.me/${esc(wa(x.phone))}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp customer</a>`;
+
+  function orderCard(o) {
+    return `<article class="card ${esc(o.status)}">
+      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
+      <p>${contact(o)}</p>
+      <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
+      ${line('Address', o.address)}${line('Table', o.tableNo)}
+      <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
+      ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}${line(o.payment.method + ' code', o.payment.txn)}
+      <footer>
+        <select data-patch="orders" data-id="${esc(o.id)}" data-key="status" aria-label="Status">${steps(ORDER_STEPS, o.status)}</select>
+        <label><input type="checkbox" data-patch="orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}> Payment checked</label>
+      </footer>
+      <footer>
+        ${picture(o.payment.proof, 'Payment screenshot')}${picture(o.refPhoto, 'Cake design photo')}
+        <button type="button" data-print="${esc(o.id)}">Print slip</button>
+        ${waBtn(o, `Hello ${o.name}, your ${S.cafe} order ${o.id} is now ${o.status.toUpperCase()}.`)}
+      </footer></article>`;
+  }
+  function tableCard(b) {
+    return `<article class="card ${esc(b.status)}">
+      <header><strong>${esc(b.id)}</strong><span class="tag">${esc(b.people)} people</span><small>asked ${when(b.createdAt)}</small></header>
+      <p><b>${esc(b.bs || b.date)} at ${esc(b.time)}</b>${b.seating ? ` · ${esc(b.seating)}` : ''}</p>
+      <p>${contact(b)}</p>
+      ${line('Food ready on arrival', b.food)}${line('Name on cake', b.cakeName)}${line('Decoration', b.decoration)}${line('Remarks', b.remarks)}
+      <footer>
+        <select data-patch="bookings" data-id="${esc(b.id)}" data-key="status" aria-label="Status">${steps(TABLE_STEPS, b.status)}</select>
+        ${waBtn(b, `Hello ${b.name}, your table at ${S.cafe} for ${b.bs || b.date} at ${b.time} (${b.people} people) is ${b.status.toUpperCase()}.`)}
+      </footer></article>`;
+  }
+
+  const lists = () => ({ orders: S.orders.filter((o) => !o.hasWhole), cakes: S.orders.filter((o) => o.hasWhole), tables: S.bookings });
+  function draw() {
+    const all = lists();
+    let open = 0;
+    for (const k of Object.keys(all)) {
+      const n = all[k].filter((x) => !CLOSED.includes(x.status)).length;
+      $('n-' + k).textContent = n;
+      open += n;
+    }
+    document.title = (open ? `(${open}) ` : '') + 'Counter | Pick Me Cafe';
+    const q = $('search').value.trim().toLowerCase();
+    const f = $('filter').value;
+    const rows = all[S.tab].filter((x) => {
+      const closed = CLOSED.includes(x.status);
+      if ((f === 'active' && closed) || (f === 'closed' && !closed) || (f === 'new' && x.status !== 'new')) return false;
+      return !q || [x.id, x.name, x.phone, x.address, x.cakeMessage, x.bs].some((v) => String(v || '').toLowerCase().includes(q));
+    });
+    const busy = $('grid').contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
+    if (busy) return;
+    $('grid').innerHTML = rows.length ? rows.map(S.tab === 'tables' ? tableCard : orderCard).join('') : '<p class="empty">Nothing here right now. New orders and bookings appear on their own.</p>';
+  }
+  async function load(quiet) {
+    try {
+      const [o, b] = await Promise.all([api('GET', '/api/desk/orders'), api('GET', '/api/desk/bookings')]);
+      S.orders = o; S.bookings = b;
+      const ids = new Set([...o, ...b].map((x) => x.id));
+      if (S.known) {
+        const fresh = [...o, ...b].filter((x) => !S.known.has(x.id));
+        if (fresh.length) toast(`New: ${fresh.map((x) => x.id).join(', ')}`, 8000);
+      }
+      S.known = ids;
+      $('sync').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      draw();
+    } catch (e) { if (!quiet && e.message !== 'login') toast(e.message); }
+  }
+  async function start() {
+    const me = await fetch('/api/auth/me').then((r) => r.json()).catch(() => ({}));
+    if (!me.role) return gate('');
+    $('gate').hidden = true;
+    S.cafe = me.cafe || S.cafe;
+    $('who').textContent = '· ' + me.name;
+    $('to-admin').hidden = me.role !== 'admin';
+    load(false);
+    clearInterval(S.timer);
+    S.timer = setInterval(() => { if (!document.hidden) load(true); }, 12000);
+  }
+
+  function printSlip(id) {
+    const o = S.orders.find((x) => x.id === id);
+    if (!o) return;
+    $('slip').innerHTML = `<p style="text-align:center"><b>${esc(S.cafe.toUpperCase())}</b><br>${esc(o.id)} · ${TYPE[o.type].toUpperCase()}<br>${when(o.createdAt)}</p><hr>
+      <p>${esc(o.name)}, ${esc(o.phone)}${o.address ? `<br>Address: ${esc(o.address)}` : ''}${o.tableNo ? `<br>Table: ${esc(o.tableNo)}` : ''}
+      <br>For: ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p><hr>
+      ${o.lines.map((l) => `<p>${l.qty} x ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''} = ${rs(l.qty * l.price)}</p>`).join('')}
+      ${o.deliveryFee ? `<p>Delivery = ${rs(o.deliveryFee)}</p>` : ''}<hr>
+      <p><b>TOTAL ${rs(o.total)}</b> · ${o.paid ? 'payment checked' : 'payment not checked'}</p>
+      ${o.cakeMessage ? `<p>On the cake: <b>${esc(o.cakeMessage)}</b></p>` : ''}${o.occasion ? `<p>Occasion: ${esc(o.occasion)}</p>` : ''}${o.notes ? `<p>Notes: ${esc(o.notes)}</p>` : ''}`;
+    window.print();
+  }
+
+  $('gate-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('POST', '/api/auth/login', { username: $('lg-user').value.trim(), password: $('lg-pass').value, remember: $('lg-keep').checked });
+      $('lg-pass').value = '';
+      start();
+    } catch (err) { $('gate-msg').textContent = err.message; }
+  });
+  $('logout').addEventListener('click', async () => { await api('POST', '/api/auth/logout').catch(() => {}); S.known = null; gate(''); });
+  $('refresh').addEventListener('click', () => load(false));
+  $('search').addEventListener('input', draw);
+  $('filter').addEventListener('change', draw);
+  $('viewer-close').addEventListener('click', () => { $('viewer').hidden = true; });
+  $('viewer').addEventListener('click', (e) => { if (e.target.id === 'viewer') $('viewer').hidden = true; });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.known) load(true); });
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-tab]');
+    if (tab) {
+      S.tab = tab.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b === tab));
+      return draw();
+    }
+    const pic = e.target.closest('[data-pic]');
+    if (pic) { $('viewer-img').src = '/api/desk/proof/' + pic.dataset.pic; $('viewer').hidden = false; }
+    const print = e.target.closest('[data-print]');
+    if (print) printSlip(print.dataset.print);
+  });
+  document.addEventListener('change', async (e) => {
+    const t = e.target;
+    if (!t.dataset.patch) return;
+    try {
+      await api('PATCH', `/api/desk/${t.dataset.patch}/${t.dataset.id}`, { [t.dataset.key]: t.type === 'checkbox' ? t.checked : t.value });
+      toast('Updated.');
+      t.blur();
+      load(true);
+    } catch (err) { if (err.message !== 'login') toast(err.message); }
+  });
+  start();
+})();
+</script>
+</body>
+</html>

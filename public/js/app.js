@@ -10,34 +10,65 @@
   const safeUrl = (u) => (/^(https?:\/\/|\/(?!\/)|#)/i.test(u || '') ? u : '');
   const rs = (n) => 'Rs. ' + Number(n || 0).toLocaleString('en-IN');
   const digits = (s) => String(s || '').replace(/\D/g, '');
+  // In the admin preview, text carries its content path so it can be edited in place.
+  const ed = (p) => (PREVIEW ? ` data-edit="${p}"` : '');
 
   const FONTS = {
     display: { Marcellus: '', 'Cormorant Garamond': ':wght@500;600', 'Playfair Display': ':wght@500;600', Cinzel: ':wght@500;600', 'DM Serif Display': '', Italiana: '', Fraunces: ':wght@400;500' },
     script: { Allura: '', 'Great Vibes': '', 'Pinyon Script': '', Parisienne: '', Sacramento: '', 'Dancing Script': '' },
-    body: { Jost: ':wght@300;400;500;600', Lora: ':wght@400;500;600', Mulish: ':wght@400;500;600', 'DM Sans': ':wght@400;500;600', 'Nunito Sans': ':wght@400;500;600', Karla: ':wght@400;500;600' },
+    body: { Jost: ':wght@300;400;500;600', Lora: ':wght@400;500;600', Mulish: ':wght@400;500;600', 'DM Sans': ':wght@400;500;600', 'Nunito Sans': ':wght@400;500;600', Karla: ':wght@400;500;600', 'Plus Jakarta Sans': ':wght@400;500;600' },
   };
 
-  const svg = (d, extra) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra || ''}>${d}</svg>`;
+  const svg = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const ICON = {
     clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
-    pin: svg('<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.500C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.500" r="2.500"/>'),
+    pin: svg('<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>'),
     phone: svg('<path d="M5 4h4l2 5-2.500 1.500a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>'),
     bag: svg('<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/>'),
     arrow: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    left: svg('<path d="M15 6l-6 6 6 6"/>'),
+    right: svg('<path d="M9 6l6 6-6 6"/>'),
+    pause: svg('<path d="M9 6v12M15 6v12"/>'),
+    play: svg('<path d="M8 6l10 6-10 6z"/>'),
     x: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
     menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
     heart: svg('<path d="M12 20s-7-4.400-7-9.500A4 4 0 0 1 12 8a4 4 0 0 1 7 2.500c0 5.100-7 9.500-7 9.500z"/>'),
     star: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 3l2.700 5.700 6.300.8-4.600 4.300 1.200 6.200L12 17l-5.600 3 1.200-6.200L3 9.500l6.300-.8z"/></svg>',
-    instagram: svg('<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.300" cy="6.700" r=".7" fill="currentColor"/>'),
+    instagram: svg('<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r=".7" fill="currentColor"/>'),
     facebook: svg('<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>'),
     tiktok: svg('<path d="M14 3v11.500a3.500 3.500 0 1 1-3.500-3.500"/><path d="M14 3c.3 2.600 2 4.400 4.500 4.600"/>'),
     youtube: svg('<rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z"/>'),
-    whatsapp: svg('<path d="M3.500 20.500l1.200-4.300A8.500 8.500 0 1 1 8 19.400z"/><path d="M9 8.500c-.3 1 .5 2.900 2 4.400s3.400 2.300 4.400 2l.9-1.200-2-1.200-.8.700c-.8-.3-2-1.500-2.300-2.300l.7-.8-1.200-2z"/>'),
+    whatsapp: svg('<path d="M3.500 20.500l1.200-4.300A8.500 8.500 0 1 1 8 19.400z"/><path d="M9 8.500c-.3 1 .5 2.900 2 4.400s3.400 2.300 4.400 2l.9-1.200-2-1.200-.8.700c-.8-.3-2-1.500-2.300-2.300l.700-.8-1.200-2z"/>'),
     link: svg('<path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1"/><path d="M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1"/>'),
   };
+  ICON.maps = ICON.pin;
 
-  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, timer: null, preset: null };
-  window.PM = { FONTS, ICON, esc, rs };
+  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false };
+
+  /* Make big phone photos small before upload. PNGs are kept as they are when keepPng is set (logos). */
+  function shrink(file, max, keepPng) {
+    return new Promise((resolve) => {
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type) || (keepPng && file.type !== 'image/jpeg')) return resolve(file);
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, max / Math.max(im.width, im.height));
+        if (scale === 1 && file.size < 1.2e6) return resolve(file);
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(im.width * scale));
+        cv.height = Math.max(1, Math.round(im.height * scale));
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(im, 0, 0, cv.width, cv.height);
+        cv.toBlob((b) => resolve(b || file), 'image/jpeg', 0.85);
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      im.src = url;
+    });
+  }
+  window.PM = { FONTS, ICON, esc, rs, shrink };
 
   /* ---------- theme ---------- */
   function fontLink(id, name, spec) {
@@ -56,13 +87,19 @@
     const set = (k, v) => st.setProperty(k, v);
     const color = (v, d) => (/^#[0-9a-f]{3,8}$/i.test(v || '') ? v : d);
     const font = (v, d) => String(v || d).replace(/[^\w\s-]/g, '');
+    const within = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
     set('--bg', color(t.bg, '#FBF6EE'));
     set('--surface', color(t.surface, '#FFFDF9'));
     set('--ink', color(t.ink, '#3B2A1A'));
     set('--muted', color(t.muted, '#6F5B48'));
     set('--accent', color(t.accent, '#8C6A2E'));
     set('--gold', color(t.gold, '#C4A265'));
-    set('--radius', (Number(t.radius) || 0) + 'px');
+    set('--btn', color(t.button, color(t.accent, '#8C6A2E')));
+    set('--radius', within(t.radius, 0, 40, 18) + 'px');
+    set('--h-scale', within(t.headingScale, 0.7, 1.5, 1));
+    set('--body', within(t.bodySize, 13, 22, 16) + 'px');
+    set('--wrap', within(t.width, 900, 1600, 1180) + 'px');
+    set('--hero-h', within(t.heroHeight, 420, 1100, 760) + 'px');
     const fd = font(t.fontDisplay, 'Marcellus');
     const fs = font(t.fontScript, 'Allura');
     const fb = font(t.fontBody, 'Jost');
@@ -75,12 +112,13 @@
     fontLink('font-ital', 'Cormorant Garamond', ':ital,wght@1,500');
     const calm = PREVIEW || t.animations === false || matchMedia('(prefers-reduced-motion: reduce)').matches;
     document.documentElement.classList.toggle('anim', !calm);
+    document.documentElement.classList.toggle('no-blend', t.blend === false);
   }
 
   /* ---------- small builders ---------- */
   const pic = (url, alt, cls) => `<div class="pic ${cls || ''}" data-alt="${esc(alt)}">${safeUrl(url) ? `<img src="${esc(safeUrl(url))}" alt="${esc(alt)}" loading="lazy">` : ''}</div>`;
-  const head = (o, extra) => `<header class="head rv">${o.script ? `<p class="script">${esc(o.script)}</p>` : ''}${o.title ? `<h2>${esc(o.title)}</h2>` : ''}${extra || ''}</header>`;
-  const btn = (label, href, cls) => `<a class="btn ${cls || ''}" href="${esc(safeUrl(href) || '#')}"><span>${esc(label)}</span>${ICON.arrow}</a>`;
+  const head = (o, path, extra) => `<header class="head rv">${o.script || PREVIEW ? `<p class="script"${ed(path + '.script')}>${esc(o.script)}</p>` : ''}${o.title || PREVIEW ? `<h2${ed(path + '.title')}>${esc(o.title)}</h2>` : ''}${extra || ''}</header>`;
+  const btn = (label, href, cls, path) => `<a class="btn ${cls || ''}" href="${esc(safeUrl(href) || '#')}"><span${path ? ed(path) : ''}>${esc(label)}</span>${ICON.arrow}</a>`;
   const logo = (c) => (safeUrl(c.brand.logo) ? `<img class="logo-img" src="${esc(safeUrl(c.brand.logo))}" alt="">` : `<span class="logo-mono" aria-hidden="true">${esc((c.brand.shortName || c.brand.name || 'P').slice(0, 1))}</span>`);
   const nepalTime = () => new Date(Date.now() + 345 * 60e3).toISOString().slice(11, 16);
   const isOpen = (c) => { const t = nepalTime(); return t >= c.brand.open && t <= c.brand.close; };
@@ -95,7 +133,8 @@
     }
     return out;
   }
-  const waLink = (c, text) => `https://wa.me/${digits(c.brand.whatsapp)}?text=${encodeURIComponent(text)}`;
+  const waNumber = (c) => digits(c.brand.whatsapp).replace(/^(?=9\d{9}$)/, '977');
+  const waLink = (c, text) => `https://wa.me/${waNumber(c)}?text=${encodeURIComponent(text)}`;
   const visible = (c, id) => c.sections.some((s) => s.id === id && s.show !== false);
 
   /* ---------- menu lookups and cart ---------- */
@@ -151,90 +190,112 @@
     const open = isOpen(c);
     const words = String(h.marquee || '').split('•').map((w) => w.trim()).filter(Boolean);
     const strip = words.map((w) => `<span>${esc(w)}</span>`).join('<i aria-hidden="true">✦</i>') + '<i aria-hidden="true">✦</i>';
+    const k = h.card || {};
     return `<section id="hero" class="hero hero--${esc(h.layout || 'right')}">
       ${pic(h.image, 'Inside ' + c.brand.name, 'hero-media')}
       <div class="hero-text">
-        ${h.script ? `<p class="script hero-in">${esc(h.script)}</p>` : ''}
-        <h1 class="hero-in">${esc(h.title)}</h1>
-        ${h.line ? `<p class="hero-line hero-in">${esc(h.line)}</p>` : ''}
-        ${h.tagline ? `<p class="ital hero-in">${esc(h.tagline)}</p>` : ''}
+        ${h.script || PREVIEW ? `<p class="script hero-in"${ed('hero.script')}>${esc(h.script)}</p>` : ''}
+        <h1 class="hero-in"${ed('hero.title')}>${esc(h.title)}</h1>
+        ${h.line || PREVIEW ? `<p class="hero-line hero-in"${ed('hero.line')}>${esc(h.line)}</p>` : ''}
+        ${h.tagline || PREVIEW ? `<p class="ital hero-in"${ed('hero.tagline')}>${esc(h.tagline)}</p>` : ''}
         <div class="pill hero-in">
-          <span>${ICON.clock}<span><small class="${open ? 'dot dot--on' : 'dot'}">${open ? 'Open now' : 'Closed now'}</small>${esc(c.brand.hoursText)}</span></span>
+          <span>${ICON.clock}<span><small class="${open ? 'dot dot--on' : 'dot'}">${open ? 'Open now' : 'Closed now'}</small><span${ed('brand.hoursText')}>${esc(c.brand.hoursText)}</span></span></span>
           <a href="${esc(safeUrl(c.visit.mapLink) || '#visit')}"${safeUrl(c.visit.mapLink) ? ' target="_blank" rel="noopener"' : ''}>${ICON.pin}<span><small>Find us</small>${esc(c.brand.address.split(',').slice(0, 2).join(','))}</span></a>
+          <a href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener">${ICON.whatsapp}<span><small>Call or WhatsApp</small>${esc(c.brand.phone)}</span></a>
         </div>
         <div class="row hero-in">
-          ${h.button && visible(c, 'menu') ? btn(h.button, '#menu') : ''}
-          ${h.button2 && visible(c, 'booking') ? btn(h.button2, '#booking', 'btn--ghost') : ''}
+          ${h.button && visible(c, 'menu') ? btn(h.button, '#menu', '', 'hero.button') : ''}
+          ${h.button2 && visible(c, 'booking') ? btn(h.button2, '#booking', 'btn--ghost', 'hero.button2') : ''}
+          ${h.button3 && visible(c, 'cake') ? btn(h.button3, '#cake', 'btn--ghost', 'hero.button3') : ''}
         </div>
       </div>
+      ${k.show !== false && k.title && visible(c, 'cake') ? `<a class="hero-card" href="#cake">${pic(k.image, k.title, 'hero-card-pic')}<span><small${ed('hero.card.label')}>${esc(k.label)}</small><strong${ed('hero.card.title')}>${esc(k.title)}</strong><em${ed('hero.card.text')}>${esc(k.text)}</em></span></a>` : ''}
     </section>
     ${words.length ? `<div class="marquee" aria-hidden="true"><div>${strip}${strip}</div></div>` : ''}`;
   };
 
+  function fromPrice(c, catId) {
+    const cat = (c.menu.categories || []).find((x) => x.id === catId);
+    const all = cat ? (cat.items || []).filter((i) => i.available !== false).flatMap((i) => (i.prices || []).map((p) => Number(p.price))).filter((n) => n > 0) : [];
+    return all.length ? `From ${rs(Math.min(...all))}` : '';
+  }
   R.highlights = (c) => {
     const h = c.highlights;
     return `<section id="highlights" class="sec"><div class="wrap">
-      ${head(h)}
+      ${head(h, 'highlights')}
       <div class="trio">${(h.cards || []).map((k, i) => `
         <a class="arch rv" style="--d:${i * 90}ms" href="#menu" data-act="cat" data-id="${esc(k.category)}">
           ${pic(k.image, k.title, 'arch-pic')}
-          <h3>${esc(k.title)}</h3>
-          <p>${esc(k.text)}</p>
+          <h3${ed(`highlights.cards.${i}.title`)}>${esc(k.title)}</h3>
+          <p${ed(`highlights.cards.${i}.text`)}>${esc(k.text)}</p>
+          ${fromPrice(c, k.category) ? `<span class="from">${fromPrice(c, k.category)}</span>` : ''}
         </a>`).join('')}
       </div></div></section>`;
   };
 
   function activeEvents(c) {
     const today = BS.todayAD();
-    return (c.events.items || []).filter((e) => {
-      if (e.enabled === false || !/^\d{4}-\d{2}-\d{2}$/.test(e.start || '')) return false;
-      const end = new Date(Date.parse(e.start) + (Number(e.days) || 1) * 864e5).toISOString().slice(0, 10);
-      return today >= e.start && today < end;
-    });
+    return (c.events.items || []).map((e, i) => {
+      if (e.enabled === false || !/^\d{4}-\d{2}-\d{2}$/.test(e.start || '')) return null;
+      const end = Date.parse(e.start) + (Number(e.days) || 1) * 864e5;
+      const now = Date.parse(today);
+      return now >= Date.parse(e.start) && now < end ? { e, i, left: Math.round((end - now) / 864e5) } : null;
+    }).filter(Boolean);
   }
   R.events = (c) => {
     const list = activeEvents(c);
     if (!list.length) return '';
     if (S.slide >= list.length) S.slide = 0;
+    const many = list.length > 1;
     return `<section id="events" class="sec"><div class="wrap">
-      ${head(c.events)}
-      <div class="slides rv" data-n="${list.length}">
-        ${list.map((e, i) => `<article class="slide${i === S.slide ? ' is-on' : ''}" aria-hidden="${i !== S.slide}">
+      ${head(c.events, 'events')}
+      <div class="slides rv" data-n="${list.length}" style="--secs:${Math.max(2, Number(c.events.seconds) || 5)}s">
+        ${list.map(({ e, i, left }, n) => `<article class="slide${n === S.slide ? ' is-on' : ''}" aria-hidden="${n !== S.slide}">
           ${pic(e.image, e.title, 'slide-pic')}
           <div class="slide-text">
-            <h3>${esc(e.title)}</h3>
-            <p>${esc(e.text)}</p>
-            ${e.button ? btn(e.button, e.link || '#menu') : ''}
+            <p class="slide-tags">${e.tag ? `<span class="tag"${ed(`events.items.${i}.tag`)}>${esc(e.tag)}</span>` : ''}<span class="tag tag--soft">${left} day${left === 1 ? '' : 's'} left</span></p>
+            <h3${ed(`events.items.${i}.title`)}>${esc(e.title)}</h3>
+            <p${ed(`events.items.${i}.text`)}>${esc(e.text)}</p>
+            ${e.button ? btn(e.button, e.link || '#menu', '', `events.items.${i}.button`) : ''}
           </div></article>`).join('')}
-        ${list.length > 1 ? `<div class="dots">${list.map((e, i) => `<button type="button" data-act="slide" data-i="${i}" class="${i === S.slide ? 'is-on' : ''}" aria-label="Show ${esc(e.title)}"></button>`).join('')}</div>` : ''}
+        ${many ? `<div class="slide-bar"><i></i></div>
+          <div class="slide-ctl">
+            <div class="dots">${list.map(({ e }, n) => `<button type="button" data-act="slide" data-i="${n}" class="${n === S.slide ? 'is-on' : ''}" aria-label="Show ${esc(e.title)}"></button>`).join('')}</div>
+            <div class="row"><button type="button" class="icon-btn" data-act="slide-step" data-d="-1" aria-label="Previous slide">${ICON.left}</button>
+              <button type="button" class="icon-btn" data-act="slide-pause" aria-label="Pause or play the slideshow">${ICON.pause}</button>
+              <button type="button" class="icon-btn" data-act="slide-step" data-d="1" aria-label="Next slide">${ICON.right}</button></div>
+          </div>` : ''}
       </div></div></section>`;
   };
 
   function menuBody(c) {
     const cats = c.menu.categories || [];
-    const cat = cats.find((x) => x.id === S.tab) || cats[0];
+    const ci = Math.max(0, cats.findIndex((x) => x.id === S.tab));
+    const cat = cats[ci];
     if (!cat) return '<p class="muted">The menu is being updated.</p>';
     S.tab = cat.id;
+    const cards = c.menu.layout === 'cards';
     const tabs = cats.map((x) => `<button type="button" role="tab" aria-selected="${x.id === cat.id}" class="tab${x.id === cat.id ? ' is-on' : ''}" data-act="tab" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('');
-    const items = (cat.items || []).map((it) => {
+    const items = (cat.items || []).map((it, ii) => {
       const off = it.available === false;
+      const base = `menu.categories.${ci}.items.${ii}`;
       const prices = off ? '<span class="mi-off">Not available today</span>' : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => `
         <button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
           aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
           ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">${p.whole ? 'Pre-order' : '+'}</i>
         </button>`).join('');
-      return `<article class="mi${off ? ' mi--off' : ''}">
-        ${safeUrl(it.image) ? pic(it.image, it.name, 'mi-pic') : ''}
-        <div class="mi-body"><h4>${esc(it.name)}</h4>${it.desc ? `<p>${esc(it.desc)}</p>` : ''}</div>
-        <div class="mi-prices">${prices}</div>
-      </article>`;
+      const badge = it.badge ? `<span class="badge"${ed(base + '.badge')}>${esc(it.badge)}</span>` : '';
+      const text = `<h4><span${ed(base + '.name')}>${esc(it.name)}</span>${cards ? '' : badge}</h4>${it.desc || PREVIEW ? `<p${ed(base + '.desc')}>${esc(it.desc)}</p>` : ''}`;
+      return cards
+        ? `<article class="mc${off ? ' mi--off' : ''}"><div class="mc-top">${pic(it.image, it.name, 'mc-pic')}${badge}</div><div class="mc-body">${text}<div class="mi-prices">${prices}</div></div></article>`
+        : `<article class="mi${off ? ' mi--off' : ''}">${safeUrl(it.image) ? pic(it.image, it.name, 'mi-pic') : ''}<div class="mi-body">${text}</div><div class="mi-prices">${prices}</div></article>`;
     }).join('');
     return `<div class="tabs" role="tablist" aria-label="Menu groups">${tabs}</div>
-      ${cat.note ? `<p class="menu-note">${esc(cat.note)}</p>` : ''}
-      <div class="menu-list" role="tabpanel">${items}</div>`;
+      ${cat.note ? `<p class="menu-note"${ed(`menu.categories.${ci}.note`)}>${esc(cat.note)}</p>` : ''}
+      <div class="${cards ? 'menu-cards' : 'menu-list'}" role="tabpanel">${items}</div>`;
   }
   R.menu = (c) => `<section id="menu" class="sec sec--tint"><div class="wrap">
-      ${head(c.menu, c.menu.note ? `<p class="lede">${esc(c.menu.note)}</p>` : '')}
+      ${head(c.menu, 'menu', c.menu.note ? `<p class="lede"${ed('menu.note')}>${esc(c.menu.note)}</p>` : '')}
       <div id="menu-body" class="rv">${menuBody(c)}</div>
     </div></section>`;
 
@@ -248,45 +309,60 @@
     }
     return out;
   }
+  function cakeTotal() {
+    const sel = $('#cake-select');
+    const out = $('#cake-total');
+    if (!sel || !out || !sel.value) return;
+    const [id, label] = sel.value.split('|');
+    const f = findPrice(id, label);
+    const qty = Math.max(1, Math.min(20, Number($('#cake-qty').value) || 1));
+    out.textContent = f ? rs(Number(f.price.price) * qty) : '';
+  }
   R.cake = (c) => {
     const k = c.cake;
     return `<section id="cake" class="sec"><div class="wrap split">
       <div class="split-pic rv">${pic(k.image, 'Celebration cake', 'fade-pic')}</div>
       <div class="split-body rv">
-        ${head(k)}
-        <p class="lede">${esc(k.text)}</p>
+        ${head(k, 'cake')}
+        <p class="lede"${ed('cake.text')}>${esc(k.text)}</p>
         <form class="form" data-form="cake" novalidate>
           <label class="f f--wide"><span>Cake</span><select name="cake" id="cake-select" required>
             ${wholeCakes(c).map((w) => `<option value="${esc(w.id)}|${esc(w.label)}">${esc(w.name)}, ${esc(w.label)}: ${rs(w.price)}</option>`).join('')}
           </select></label>
           <label class="f"><span>How many</span><input name="qty" id="cake-qty" type="number" min="1" max="20" value="1" inputmode="numeric" required></label>
-          <label class="f"><span>Name or message on the cake</span><input name="cakeMessage" id="cake-msg" maxlength="120" placeholder="Happy Birthday Aarav"></label>
+          <label class="f"><span>Occasion</span><input name="occasion" id="cake-occasion" maxlength="80" placeholder="Birthday, anniversary"></label>
+          <label class="f f--wide"><span>Name or message on the cake</span><input name="cakeMessage" id="cake-msg" maxlength="120" placeholder="Happy Birthday Aarav"></label>
           <div class="f"><span>Date (Nepali calendar)</span><div data-bsp="date"></div></div>
           <label class="f"><span>Time</span><select name="time" id="cake-time" required>${timeOptions(c)}</select></label>
-          <p class="hint f--wide">We need at least ${esc(k.noticeHours)} hours to prepare a whole cake.</p>
+          <p class="hint f--wide">We need at least ${esc(k.noticeHours)} hours to prepare a whole cake. You can add a photo of the design you want at the next step.</p>
+          <p class="sum sum--big f--wide"><span>Total</span><b id="cake-total"></b></p>
           <p class="form-msg f--wide" role="alert"></p>
-          <button class="btn f--wide" type="submit"><span>${esc(k.button || 'Continue to payment')}</span>${ICON.arrow}</button>
+          <button class="btn f--wide" type="submit"><span${ed('cake.button')}>${esc(k.button || 'Continue to payment')}</span>${ICON.arrow}</button>
         </form>
       </div></div></section>`;
   };
 
   R.booking = (c) => {
     const b = c.booking;
+    const seats = String(b.seating || '').split(',').map((x) => x.trim()).filter(Boolean);
     return `<section id="booking" class="sec sec--tint"><div class="wrap split split--flip">
       <div class="split-pic rv">${pic(b.image, 'A table at ' + c.brand.name, 'fade-pic')}</div>
       <div class="split-body rv">
-        ${head(b)}
-        <p class="lede">${esc(b.text)}</p>
+        ${head(b, 'booking')}
+        <p class="lede"${ed('booking.text')}>${esc(b.text)}</p>
         <form class="form" data-form="booking" novalidate>
           <label class="f"><span>Your name</span><input name="name" id="bk-name" autocomplete="name" maxlength="80" required></label>
           <label class="f"><span>Phone</span><input name="phone" id="bk-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX" required></label>
           <div class="f"><span>Date (Nepali calendar)</span><div data-bsp="date"></div></div>
           <label class="f"><span>Time</span><select name="time" id="bk-time" required>${timeOptions(c)}</select></label>
           <label class="f"><span>Number of people</span><input name="people" id="bk-people" type="number" min="1" max="${esc(b.maxPeople)}" value="2" inputmode="numeric" required></label>
-          <label class="f f--wide"><span>Food, decoration or cake name you want</span><textarea name="requests" id="bk-req" rows="2" maxlength="600" placeholder="Birthday decoration, a blueberry cheesecake with the name Sita"></textarea></label>
+          ${seats.length ? `<label class="f"><span>Where would you like to sit?</span><select name="seating" id="bk-seat">${seats.map((x) => `<option>${esc(x)}</option>`).join('')}</select></label>` : ''}
+          <label class="f f--wide"><span>Food or drinks to have ready (optional)</span><input name="food" id="bk-food" maxlength="600" placeholder="2 Iced Latte, 1 Blueberry Cheese Cake"></label>
+          <label class="f"><span>Name on the cake (optional)</span><input name="cakeName" id="bk-cake" maxlength="120" placeholder="Happy Anniversary"></label>
+          <label class="f"><span>Decoration you want (optional)</span><input name="decoration" id="bk-deco" maxlength="600" placeholder="Candles, balloons"></label>
           <label class="f f--wide"><span>Other remarks</span><textarea name="remarks" id="bk-rem" rows="2" maxlength="600"></textarea></label>
           <p class="form-msg f--wide" role="alert"></p>
-          <button class="btn f--wide" type="submit"><span>${esc(b.button || 'Request booking')}</span>${ICON.arrow}</button>
+          <button class="btn f--wide" type="submit"><span${ed('booking.button')}>${esc(b.button || 'Request booking')}</span>${ICON.arrow}</button>
         </form>
       </div></div></section>`;
   };
@@ -296,10 +372,10 @@
     return `<section id="story" class="story">
       ${pic(s.image, 'Inside ' + c.brand.name, 'story-pic')}
       <div class="story-body rv">
-        ${s.script ? `<p class="script">${esc(s.script)}</p>` : ''}
-        <h2>${esc(s.title)}</h2>
-        <p>${esc(s.text)}</p>
-        ${s.side ? `<p class="script story-side">${esc(s.side)} ${ICON.heart}</p>` : ''}
+        ${s.script || PREVIEW ? `<p class="script"${ed('story.script')}>${esc(s.script)}</p>` : ''}
+        <h2${ed('story.title')}>${esc(s.title)}</h2>
+        <p${ed('story.text')}>${esc(s.text)}</p>
+        ${s.side ? `<p class="script story-side"><span${ed('story.side')}>${esc(s.side)}</span> ${ICON.heart}</p>` : ''}
       </div></section>`;
   };
 
@@ -307,36 +383,43 @@
     const g = c.gallery;
     if (!(g.images || []).length) return '';
     return `<section id="gallery" class="sec"><div class="wrap">
-      ${head(g)}
+      ${head(g, 'gallery')}
       <div class="gal">${g.images.map((im, i) => `
         <button type="button" class="gal-item rv" style="--d:${i * 70}ms" data-act="zoom" data-src="${esc(safeUrl(im.image))}" data-cap="${esc(im.caption)}" aria-label="Open photo: ${esc(im.caption || 'gallery photo')}">
           ${pic(im.image, im.caption || 'Gallery photo')}
-          ${im.caption ? `<span>${esc(im.caption)}</span>` : ''}
+          ${im.caption || im.tag ? `<span>${im.tag ? `<small>${esc(im.tag)}</small>` : ''}${esc(im.caption)}</span>` : ''}
         </button>`).join('')}
       </div></div></section>`;
   };
 
   const stars = (n) => `<span class="stars" role="img" aria-label="${n} out of 5 stars">${ICON.star.repeat(n)}</span>`;
+  const monthYear = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); };
   function reviewList() {
     if (!S.reviews.length) return '<p class="muted center">Be the first to leave a review.</p>';
     return `<div class="revs">${S.reviews.map((r) => `<figure class="rev">
-      ${stars(r.rating)}
+      <div class="rev-top">${stars(r.rating)}<small>${r.source === 'google' ? 'Google review' : 'Cafe guest'}</small></div>
       <blockquote>${esc(r.text)}</blockquote>
-      <figcaption>${esc(r.name)}${r.source === 'google' ? '<small>Google review</small>' : ''}</figcaption>
+      ${r.favorite ? `<p class="rev-fav">Tried: ${esc(r.favorite)}</p>` : ''}
+      <figcaption>${esc(r.name)}<small>${monthYear(r.createdAt)}</small></figcaption>
     </figure>`).join('')}</div>`;
   }
   R.reviews = (c) => {
     const r = c.reviews;
+    const sum = r.rating ? `<span class="rev-sum"><strong>${esc(r.rating)}</strong>${stars(5)}${r.count ? `<small>${esc(r.count)} Google reviews</small>` : ''}</span>` : '';
     return `<section id="reviews" class="sec sec--tint"><div class="wrap">
-      ${head(r)}
+      ${head(r, 'reviews', sum)}
       <div id="review-list" class="rv">${reviewList()}</div>
+      <div class="row row--center rv">
+        ${safeUrl(c.visit.mapLink) ? `<a class="btn btn--ghost" href="${esc(safeUrl(c.visit.mapLink))}" target="_blank" rel="noopener"><span>See us on Google Maps</span>${ICON.arrow}</a>` : ''}
+      </div>
       <details class="review-box rv">
-        <summary class="btn btn--ghost"><span>${esc(r.formTitle || 'Leave a review')}</span></summary>
+        <summary class="btn"><span${ed('reviews.formTitle')}>${esc(r.formTitle || 'Leave a review')}</span></summary>
         <form class="form" data-form="review" novalidate>
           <label class="f"><span>Your name</span><input name="name" id="rv-name" maxlength="60" required></label>
           <fieldset class="f rate"><legend>Your rating</legend>
             ${[5, 4, 3, 2, 1].map((n) => `<input type="radio" name="rating" id="rv-s${n}" value="${n}"${n === 5 ? ' checked' : ''}><label for="rv-s${n}" aria-label="${n} stars">${ICON.star}</label>`).join('')}
           </fieldset>
+          <label class="f f--wide"><span>What did you try? (optional)</span><input name="favorite" id="rv-fav" maxlength="100" placeholder="Blueberry Cheese Cake and Iced Latte"></label>
           <label class="f f--wide"><span>Your review</span><textarea name="text" id="rv-text" rows="3" maxlength="800" required></textarea></label>
           <p class="form-msg f--wide" role="alert"></p>
           <button class="btn f--wide" type="submit"><span>Send review</span>${ICON.arrow}</button>
@@ -349,20 +432,24 @@
     const v = c.visit;
     const embed = /^https:\/\/(www\.)?google\.com\/maps/.test(v.mapEmbed || '') ? v.mapEmbed : '';
     return `<section id="visit" class="sec"><div class="wrap">
-      ${head(v)}
+      ${head(v, 'visit')}
       <div class="visit">
         <div class="map rv">${embed ? `<iframe src="${esc(embed)}" title="Map showing ${esc(c.brand.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>` : '<div class="pic pic--empty" data-alt="Add a Google Maps embed link in admin"></div>'}</div>
         <div class="visit-info rv">
           <ul class="facts">
-            <li>${ICON.pin}<span>${esc(c.brand.address)}</span></li>
-            <li>${ICON.clock}<span>${esc(c.brand.hoursText)}</span></li>
+            <li>${ICON.pin}<span${ed('brand.address')}>${esc(c.brand.address)}</span></li>
+            <li>${ICON.clock}<span${ed('brand.hoursText')}>${esc(c.brand.hoursText)}</span></li>
             <li>${ICON.phone}<a href="tel:${esc(digits(c.brand.phone))}">${esc(c.brand.phone)}</a></li>
           </ul>
-          ${safeUrl(v.mapLink) ? `<a class="btn btn--ghost" href="${esc(safeUrl(v.mapLink))}" target="_blank" rel="noopener"><span>Open in Google Maps</span>${ICON.arrow}</a>` : ''}
+          <div class="row">
+            <a class="btn" href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener">${ICON.whatsapp}<span>Chat on WhatsApp</span></a>
+            ${safeUrl(v.mapLink) ? `<a class="btn btn--ghost" href="${esc(safeUrl(v.mapLink))}" target="_blank" rel="noopener"><span>Open in Google Maps</span>${ICON.arrow}</a>` : ''}
+          </div>
           <form class="form form--solo" data-form="message" novalidate>
-            <h3>${esc(v.messageTitle)}</h3>
-            <p class="hint">${esc(v.messageText)}</p>
+            <h3${ed('visit.messageTitle')}>${esc(v.messageTitle)}</h3>
+            <p class="hint"${ed('visit.messageText')}>${esc(v.messageText)}</p>
             <label class="f"><span>Your name</span><input name="name" id="msg-name" maxlength="80" required></label>
+            <label class="f"><span>Phone</span><input name="phone" id="msg-phone" type="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"></label>
             <label class="f"><span>Message</span><textarea name="text" id="msg-text" rows="3" maxlength="800" required></textarea></label>
             <p class="form-msg" role="alert"></p>
             <button class="btn" type="submit">${ICON.whatsapp}<span>Send on WhatsApp</span></button>
@@ -374,7 +461,7 @@
   function nav(c) {
     const links = c.sections.filter((s) => s.show !== false && s.nav !== false && R[s.id] && s.id !== 'hero').map((s) => `<a href="#${esc(s.id)}">${esc(s.label)}</a>`).join('');
     return `<header class="nav" id="top"><div class="nav-in">
-      <a class="brand" href="#hero" aria-label="${esc(c.brand.name)}, home">${logo(c)}<span>${esc(c.brand.name)}</span></a>
+      <a class="brand" href="#hero" aria-label="${esc(c.brand.name)}, home">${logo(c)}<span${ed('brand.name')}>${esc(c.brand.name)}</span></a>
       <nav class="nav-links" id="nav-links" aria-label="Sections">${links}</nav>
       <div class="nav-right">
         <button type="button" class="cart-btn" data-act="cart" aria-label="Open cart">${ICON.bag}<span class="cart-count" hidden>0</span></button>
@@ -382,21 +469,25 @@
       </div></div></header>`;
   }
   function footer(c) {
-    const soc = (c.social || []).filter((s) => safeUrl(s.url) && /^https?:/i.test(s.url)).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener" aria-label="${esc(s.type)}">${ICON[s.type] || ICON.link}</a>`).join('');
+    const soc = (c.social || []).filter((s) => /^https?:\/\//i.test(s.url || '')).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener" aria-label="${esc(s.type)}">${ICON[s.type] || ICON.link}</a>`).join('');
     return `<footer class="foot"><div class="wrap foot-in">
       <a class="brand brand--foot" href="#hero">${logo(c)}<span>${esc(c.brand.name)}</span></a>
       <p>${ICON.pin}<span>${esc(c.brand.address)}</span></p>
       <p>${ICON.clock}<span>${esc(c.brand.hoursText)}</span></p>
       <div class="soc">${soc}<a href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener" aria-label="WhatsApp">${ICON.whatsapp}</a></div>
       </div>
-      <p class="foot-line">${ICON.heart}<span>${esc(c.footer.line)}</span></p>
-      ${c.footer.note ? `<p class="foot-note">${esc(c.footer.note)}</p>` : ''}
+      <p class="foot-line">${ICON.heart}<span${ed('footer.line')}>${esc(c.footer.line)}</span></p>
+      ${c.footer.note ? `<p class="foot-note"${ed('footer.note')}>${esc(c.footer.note)}</p>` : ''}
     </footer>
     <a class="wa-float" href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp">${ICON.whatsapp}</a>`;
   }
 
   /* ---------- render ---------- */
   let observer = null;
+  function setInline() {
+    document.documentElement.classList.toggle('inline', S.inline);
+    $$('[data-edit]').forEach((el) => { if (S.inline) el.setAttribute('contenteditable', 'plaintext-only'); else el.removeAttribute('contenteditable'); });
+  }
   function render() {
     const c = S.c;
     applyTheme(c.theme);
@@ -404,7 +495,8 @@
     $('#app').innerHTML = nav(c) + '<main>' + c.sections.filter((s) => s.show !== false && R[s.id]).map((s) => R[s.id](c)).join('') + '</main>' + footer(c);
     $$('[data-bsp]', $('#app')).forEach((el) => BS.mount(el, { name: el.dataset.bsp }));
     saveCart();
-    startSlides();
+    cakeTotal();
+    if (PREVIEW) setInline();
     if (observer) observer.disconnect();
     if (document.documentElement.classList.contains('anim') && 'IntersectionObserver' in window) {
       observer = new IntersectionObserver((entries) => entries.forEach((e) => {
@@ -414,19 +506,16 @@
     }
     if (PREVIEW) window.scrollTo(0, y);
   }
-  function startSlides() {
-    clearInterval(S.timer);
-    const box = $('.slides');
-    if (!box || Number(box.dataset.n) < 2) return;
-    S.timer = setInterval(() => { if (!box.matches(':hover')) showSlide(S.slide + 1); }, Math.max(2, Number(S.c.events.seconds) || 5) * 1000);
-  }
   function showSlide(i) {
     const slides = $$('.slide');
     if (!slides.length) return;
     S.slide = (i + slides.length) % slides.length;
     slides.forEach((s, n) => { s.classList.toggle('is-on', n === S.slide); s.setAttribute('aria-hidden', n !== S.slide); });
     $$('.dots button').forEach((d, n) => d.classList.toggle('is-on', n === S.slide));
+    const bar = $('.slide-bar i');
+    if (bar) { bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
   }
+  document.addEventListener('animationend', (e) => { if (e.target.matches && e.target.matches('.slide-bar i')) showSlide(S.slide + 1); });
 
   /* ---------- cart drawer and checkout ---------- */
   const layer = () => $('#layer');
@@ -449,7 +538,8 @@
             <b>${rs(l.price * l.qty)}</b></li>`).join('')}</ul>
           <footer><p class="sum"><span>Subtotal</span><b>${rs(total)}</b></p>
             <p class="hint">Delivery inside Hetauda adds ${rs(S.c.payment.deliveryFee)}.</p>
-            <button type="button" class="btn" data-act="checkout"><span>Order and pay</span>${ICON.arrow}</button></footer>`
+            <button type="button" class="btn" data-act="checkout"><span>Order and pay</span>${ICON.arrow}</button>
+            <button type="button" class="btn btn--ghost" data-act="close"><span>Keep browsing</span></button></footer>`
         : `<p class="empty">Your cart is empty. Add something from the menu.</p>`}
       </aside>`;
   }
@@ -486,6 +576,7 @@
             <input type="radio" name="type" id="co-delivery" value="delivery"><label for="co-delivery">Delivery +${rs(c.payment.deliveryFee)}</label>
           </fieldset>
           <label class="f f--wide" id="co-addr" hidden><span>Delivery address</span><textarea name="address" id="co-address" rows="2" maxlength="300" placeholder="Tole, landmark, ward"></textarea><small class="hint">${esc(c.payment.deliveryNote)}</small></label>
+          <label class="f f--wide" id="co-table" hidden><span>Table number, if you are already seated (optional)</span><input name="tableNo" id="co-tableno" maxlength="20"></label>
           <fieldset class="f f--wide seg"><legend>When?</legend>
             ${hasWhole ? '' : `<input type="radio" name="when" id="co-now" value="now"${later ? '' : ' checked'}><label for="co-now">As soon as possible</label>`}
             <input type="radio" name="when" id="co-later" value="later"${later ? ' checked' : ''}><label for="co-later">Later</label>
@@ -495,15 +586,18 @@
             <label class="f"><span>Time</span><select name="time" id="co-time">${timeOptions(c, pre.time)}</select></label>
             ${hasWhole ? `<p class="hint f--wide">Whole cakes need at least ${esc(c.cake.noticeHours)} hours notice.</p>` : (!isOpen(c) ? `<p class="hint f--wide">We are closed right now, so please pick a time (${esc(c.brand.hoursText)}).</p>` : '')}
           </div>
-          ${hasWhole ? `<label class="f f--wide"><span>Name or message on the cake</span><input name="cakeMessage" id="co-cake" maxlength="120" value="${esc(pre.cakeMessage || '')}"></label>` : ''}
-          <label class="f f--wide"><span>Notes for us (optional)</span><textarea name="notes" id="co-notes" rows="2" maxlength="500"></textarea></label>
+          ${hasWhole ? `<label class="f"><span>Name or message on the cake</span><input name="cakeMessage" id="co-cake" maxlength="120" value="${esc(pre.cakeMessage || '')}"></label>
+            <label class="f"><span>Occasion</span><input name="occasion" id="co-occasion" maxlength="80" value="${esc(pre.occasion || '')}"></label>
+            <label class="f f--wide"><span>Photo of the cake design you want (optional)</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
+          <label class="f f--wide"><span>Notes for us (optional)</span><textarea name="notes" id="co-notes" rows="2" maxlength="500" placeholder="Less sugar, extra ice"></textarea></label>
           <fieldset class="f f--wide seg"><legend>Pay with</legend>
             ${methods.map((m, i) => `<input type="radio" name="method" id="co-${m}" value="${m}"${i === 0 ? ' checked' : ''}><label for="co-${m}">${esc(c.payment[m].name)}</label>`).join('')}
           </fieldset>
           <div class="f--wide pay">
             <div id="co-qr">${methods.length ? qrHtml(methods[0]) : ''}</div>
             <div><p>${esc(c.payment.instructions)}</p>
-              <label class="f"><span>Payment screenshot</span><input type="file" name="proof" id="co-proof" accept="image/png,image/jpeg,image/webp" required></label></div>
+              <label class="f"><span>Payment screenshot</span><input type="file" name="proof" id="co-proof" accept="image/png,image/jpeg,image/webp"></label>
+              <label class="f"><span>Or the transaction code</span><input name="txn" id="co-txn" maxlength="60" placeholder="e.g. 000ABC9"></label></div>
           </div>
           <p class="form-msg f--wide" role="alert"></p>
           <button class="btn f--wide" type="submit"><span>Place order</span>${ICON.arrow}</button>
@@ -533,29 +627,37 @@
     if (!r.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
     return data;
   }
+  async function sendPicture(file) {
+    if (!file) return '';
+    const small = await shrink(file, 1400);
+    if (small.size > 8 * 1024 * 1024) throw new Error('That picture is too large. Please use one under 8 MB.');
+    return (await post('/api/proof', small, small.type || 'image/jpeg')).file;
+  }
   const FORMS = {
     cake(d) {
       if (!d.cake) throw new Error('Please choose a cake.');
       if (!d.date || !d.time) throw new Error('Please choose a date and time.');
       const [itemId, label] = d.cake.split('|');
       addToCart(itemId, label, Math.max(1, Math.min(20, Number(d.qty) || 1)), true);
-      S.preset = { when: 'later', date: d.date, time: d.time, cakeMessage: d.cakeMessage };
+      S.preset = { when: 'later', date: d.date, time: d.time, cakeMessage: d.cakeMessage, occasion: d.occasion };
       openCheckout();
     },
     async booking(d, form) {
       if (!d.date || !d.time) throw new Error('Please choose a date and time.');
-      const res = await post('/api/bookings', { name: d.name, phone: d.phone, people: d.people, date: d.date, dateBs: d.dateBs, time: d.time, requests: d.requests, remarks: d.remarks });
+      const res = await post('/api/bookings', { name: d.name, phone: d.phone, people: d.people, date: d.date, dateBs: d.dateBs, time: d.time, seating: d.seating, food: d.food, cakeName: d.cakeName, decoration: d.decoration, remarks: d.remarks });
       form.reset();
       openLayer(doneHtml('Booking request sent', [`Your booking number is ${res.id}.`, 'We will call or message you to confirm your table.'], res.text));
     },
     async review(d, form) {
-      await post('/api/reviews', { name: d.name, rating: d.rating, text: d.text });
+      await post('/api/reviews', { name: d.name, rating: d.rating, favorite: d.favorite, text: d.text });
       form.reset();
       return S.c.reviews.thanks;
     },
     message(d, form) {
       if (!d.name || !d.text) throw new Error('Please write your name and message.');
-      window.open(waLink(S.c, `Hello ${S.c.brand.name}, this is ${d.name}.\n${d.text}`), '_blank', 'noopener');
+      // WhatsApp opens straight away so the browser does not block it; a copy is saved for the cafe too.
+      window.open(waLink(S.c, `Hello ${S.c.brand.name}, this is ${d.name}${d.phone ? ` (${d.phone})` : ''}.\n${d.text}`), '_blank', 'noopener');
+      post('/api/messages', { name: d.name, phone: d.phone, text: d.text }).catch(() => {});
       form.reset();
       return 'WhatsApp is opening with your message. Press send there.';
     },
@@ -563,12 +665,12 @@
       const file = form.elements.proof.files[0];
       if (!d.name || !d.phone) throw new Error('Please enter your name and phone number.');
       if (d.when === 'later' && (!d.date || !d.time)) throw new Error('Please choose a date and time.');
-      if (!file) throw new Error('Please upload a screenshot of your payment.');
-      if (file.size > 8 * 1024 * 1024) throw new Error('That screenshot is too large. Please use one under 8 MB.');
-      const up = await post('/api/proof', file, file.type || 'image/jpeg');
+      if (!file && String(d.txn || '').trim().length < 4) throw new Error('Please upload a screenshot of your payment, or type the transaction code.');
+      const proof = await sendPicture(file);
+      const refPhoto = form.elements.ref ? await sendPicture(form.elements.ref.files[0]) : '';
       const res = await post('/api/orders', {
-        name: d.name, phone: d.phone, type: d.type, address: d.address, when: d.when, date: d.date, dateBs: d.dateBs, time: d.time,
-        cakeMessage: d.cakeMessage, notes: d.notes, method: d.method, proof: up.file,
+        name: d.name, phone: d.phone, type: d.type, address: d.address, tableNo: d.tableNo, when: d.when, date: d.date, dateBs: d.dateBs, time: d.time,
+        cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto, notes: d.notes, method: d.method, proof, txn: d.txn,
         lines: cartLines().map((l) => ({ itemId: l.itemId, label: l.label, qty: l.qty })),
       });
       S.cart = [];
@@ -585,7 +687,7 @@
     const say = (text, ok) => { if (msg) { msg.textContent = text || ''; msg.classList.toggle('is-ok', Boolean(ok)); } };
     if (PREVIEW) return say('This is the preview. Forms work on the real website.');
     if (!form.checkValidity()) { form.reportValidity(); return; }
-    const d = Object.fromEntries(new FormData(form).entries());
+    const d = Object.fromEntries(Array.from(new FormData(form).entries()).filter(([, v]) => typeof v === 'string'));
     const button = $('button[type=submit]', form);
     button.disabled = true;
     say('');
@@ -599,14 +701,21 @@
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.closest('form[data-form=cake]')) cakeTotal();
     const form = e.target.closest('form[data-form=checkout]');
     if (!form) return;
     if (e.target.name === 'type') {
       $('#co-sum').innerHTML = sumHtml(e.target.value);
       $('#co-addr').hidden = e.target.value !== 'delivery';
+      $('#co-table').hidden = e.target.value !== 'dinein';
     }
     if (e.target.name === 'when') $('#co-when').hidden = e.target.value !== 'later';
     if (e.target.name === 'method') $('#co-qr').innerHTML = qrHtml(e.target.value);
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'cake-qty') cakeTotal();
+    const el = S.inline && e.target.closest && e.target.closest('[data-edit]');
+    if (el) window.parent.postMessage({ pm: 'edit', path: el.dataset.edit, value: el.textContent.replace(/\s*\n\s*/g, ' ').trim() }, location.origin);
   });
 
   /* ---------- clicks ---------- */
@@ -614,7 +723,7 @@
     tab(el) {
       S.tab = el.dataset.id;
       const box = $('#menu-body');
-      const swap = () => { box.innerHTML = menuBody(S.c); };
+      const swap = () => { box.innerHTML = menuBody(S.c); if (PREVIEW) setInline(); };
       if (document.startViewTransition && document.documentElement.classList.contains('anim')) document.startViewTransition(swap);
       else swap();
     },
@@ -631,6 +740,7 @@
       const sel = $('#cake-select');
       if (!sel) { addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout(); }
       sel.value = `${el.dataset.item}|${el.dataset.label}`;
+      cakeTotal();
       $('#cake').scrollIntoView({ behavior: 'smooth' });
     },
     cart() { openLayer(cartHtml()); },
@@ -641,7 +751,12 @@
     },
     checkout() { openCheckout(); },
     close() { closeLayer(); },
-    slide(el) { showSlide(Number(el.dataset.i)); startSlides(); },
+    slide(el) { showSlide(Number(el.dataset.i)); },
+    'slide-step'(el) { showSlide(S.slide + Number(el.dataset.d)); },
+    'slide-pause'(el) {
+      const paused = $('.slides').classList.toggle('is-paused');
+      el.innerHTML = paused ? ICON.play : ICON.pause;
+    },
     nav(el) {
       const open = !$('#nav-links').classList.contains('is-open');
       $('#nav-links').classList.toggle('is-open', open);
@@ -653,6 +768,7 @@
     },
   };
   document.addEventListener('click', (e) => {
+    if (S.inline && e.target.closest('[data-edit]')) { e.preventDefault(); return; }
     const el = e.target.closest('[data-act]');
     if (el && ACT[el.dataset.act]) {
       if (el.tagName === 'BUTTON' || el.classList.contains('shade')) e.preventDefault();
@@ -660,7 +776,11 @@
     }
     if (e.target.closest('.nav-links a')) $('#nav-links').classList.remove('is-open');
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && layer().innerHTML) closeLayer(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && layer().innerHTML) closeLayer();
+    if (e.key === 'Enter' && S.inline && e.target.closest && e.target.closest('[data-edit]')) { e.preventDefault(); e.target.blur(); }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd' && !PREVIEW) { e.preventDefault(); location.hash = '#admin'; }
+  });
   document.addEventListener('error', (e) => {
     if (e.target.tagName !== 'IMG') return;
     const box = e.target.closest('.pic');
@@ -701,6 +821,7 @@
       window.addEventListener('message', (e) => {
         if (e.origin !== location.origin || !e.data) return;
         if (e.data.pm === 'content') { S.c = e.data.content; render(); }
+        if (e.data.pm === 'inline') { S.inline = Boolean(e.data.on); setInline(); }
         if (e.data.pm === 'scroll') { const t = document.getElementById(e.data.id); if (t) t.scrollIntoView({ behavior: 'smooth' }); }
       });
       window.parent.postMessage({ pm: 'ready' }, location.origin);
