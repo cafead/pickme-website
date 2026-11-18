@@ -53,6 +53,7 @@
   const f = (k, l, type, extra) => Object.assign({ k, l, type: type || 'text' }, extra || {});
   const fontOptions = (kind) => Object.keys(FONTS[kind]).map((n) => [n, n]);
   const catOptions = () => A.content.menu.categories.map((c) => [c.id, c.name]);
+  const catName = (id) => ((A.content.menu.categories || []).find((c) => c.id === id) || {}).name || 'choose a group';
   const BORDERS = [
     ['none', 'Plain, no border'], ['gold', 'Gold line (everyday)'],
     ['snow', 'Christmas: snow'], ['holly', 'Christmas: holly'], ['lights', 'Christmas: fairy lights'], ['candy', 'Christmas: candy canes'],
@@ -63,16 +64,19 @@
     ['balloons', "Birthdays, Children's Day: balloons"], ['sprinkles', 'Celebrations: sprinkles'], ['bunting', "Teachers' Day, parties: bunting"],
   ];
   const borderOptions = () => BORDERS;
+  const MARK_OPTIONS = [['veg', 'Veg'], ['nonveg', 'Non-veg'], ['eggless', 'Eggless'], ['sugarfree', 'Sugar-free'], ['nuts', 'Contains nuts'], ['spicy', 'Spicy']];
   const itemFields = () => [
     f('name', 'Name'), f('desc', 'Short description (optional)'), f('badge', 'Small badge, for example Bestseller (optional)'),
     f('available', 'Available (untick to show "Not available today")', 'toggle'), f('hidden', 'Hide from the website', 'toggle', { def: false }),
-    f('image', 'Photo (optional)', 'image'),
+    f('tags', 'Food marks', 'checks', { options: () => MARK_OPTIONS }),
+    f('timeFrom', 'Served from (optional, for example a morning combo)', 'time'), f('timeTo', 'Served until (optional)', 'time'),
+    f('image', 'Photo (optional)', 'image', { max: 900 }),
     f('prices', 'Prices', 'list', { title: (p) => `${p.label || 'Price'}: Rs. ${p.price}${p.whole ? ' (whole cake)' : ''}`, add: 'Add size or price', blank: () => ({ label: '', price: 0 }), fields: [
       f('label', 'Size name (leave empty if there is one price)'), f('price', 'Price in NPR', 'number'), f('whole', 'Whole cake: pre-order only', 'toggle', { def: false }),
     ] }),
   ];
   const itemTitle = (i) => `${i.name}${i.hidden ? ' (hidden)' : i.available === false ? ' (not available)' : ''}: ${priceLine(i)}`;
-  const newItem = () => ({ id: uid('item'), name: 'New item', desc: '', badge: '', image: '', available: true, hidden: false, prices: [{ label: '', price: 0 }] });
+  const newItem = () => ({ id: uid('item'), name: 'New item', desc: '', badge: '', image: '', available: true, hidden: false, tags: [], prices: [{ label: '', price: 0 }] });
   const priceLine = (it) => (it.prices || []).map((p) => `${p.label ? p.label + ' ' : ''}${p.price}`).join(' / ');
   function eventState(e) {
     if (e.enabled === false) return 'off';
@@ -139,12 +143,32 @@
     { title: 'Menu, prices and food photos', scroll: 'menu', note: 'Each group is a tab on the site. Open a group to edit its items.', fields: [
       f('menu.script', 'Handwritten line'), f('menu.title', 'Title'), f('menu.note', 'Note under the title'),
       f('menu.layout', 'How items are shown', 'select', { options: () => [['list', 'Simple list with small photos'], ['cards', 'Cards with large photos']] }),
+      f('menu.search', 'Show the search box above the menu', 'toggle'),
+      f('menu.marks.show', 'Show food marks (veg, non-veg, eggless...) on items', 'toggle'),
+      f('menu.marks.filter', 'Show the "Veg only" and "Eggless" filter buttons', 'toggle'),
       f('menu.categories', 'Groups', 'list', { title: (c) => `${c.name} (${(c.items || []).length})${c.hidden ? ' (hidden)' : ''}`, add: 'Add group', blank: () => ({ id: uid('group'), name: 'New group', note: '', hidden: false, items: [] }), fields: [
         f('name', 'Group name'), f('note', 'Note shown above the items'), f('hidden', 'Hide this whole group', 'toggle', { def: false }),
+        f('timeFrom', 'Whole group served from (optional, for example breakfast)', 'time'), f('timeTo', 'Whole group served until (optional)', 'time'),
         f('items', 'Items', 'list', { title: itemTitle, add: 'Add item', blank: newItem, fields: itemFields() }),
       ] }),
     ] },
     { title: "Today's availability", scroll: 'menu', custom: availabilityPanel, note: 'A quick list of everything on the menu. Untick "Available" to show "Not available today" on an item, or untick "Show" to hide it. Remember to press Save.' },
+    { title: 'Drink extras (less sugar, extra shot...)', scroll: 'menu', note: 'When a customer adds an item from a group listed in a set, they can tick these extras. Extras with a price add to the item price. Untick "Show" to hide one. Check the prices before you switch priced extras on.', fields: [
+      f('extras.show', 'Offer extras', 'toggle'), f('extras.title', 'Heading above the extras'),
+      f('extras.groups', 'Sets of extras', 'list', { title: (g) => `${g.name}${g.show === false ? ' (off)' : ''}: ${(g.options || []).filter((o) => o.show !== false).map((o) => o.name).join(', ') || 'none shown'}`, add: 'Add a set', blank: () => ({ id: uid('set'), name: 'New set', categories: [], show: true, options: [] }), fields: [
+        f('name', 'Name of this set (only you see it)'), f('show', 'Switched on', 'toggle'),
+        f('categories', 'Menu groups that get these extras', 'checks', { options: catOptions }),
+        f('options', 'Extras', 'list', { title: (o) => `${o.name}: ${Number(o.price) ? 'Rs. ' + o.price : 'free'}${o.show === false ? ' (hidden)' : ''}`, add: 'Add extra', blank: () => ({ id: uid('x'), name: 'New extra', price: 0, show: true }), fields: [
+          f('name', 'Name'), f('price', 'Extra price in NPR (0 for free)', 'number'), f('show', 'Show', 'toggle'),
+        ] }),
+      ] }),
+    ] },
+    { title: 'Goes well with (suggestions in the cart)', scroll: 'menu', note: 'When the cart has something from the first group, the cart suggests up to three items from the second group. Items with a badge are suggested first.', fields: [
+      f('upsell.show', 'Show suggestions in the cart', 'toggle'), f('upsell.title', 'Heading'),
+      f('upsell.pairs', 'Pairs', 'list', { title: (p) => `${catName(p.from)} → ${catName(p.to)}`, add: 'Add pair', blank: () => ({ from: '', to: '' }), fields: [
+        f('from', 'When the cart has something from', 'select', { options: catOptions }), f('to', 'Suggest items from', 'select', { options: catOptions }),
+      ] }),
+    ] },
     { title: 'Closed notice', scroll: 'hero', note: 'For a holiday or an emergency. While it is on, a bar shows at the top of every page and visitors see the message once. Orders and bookings for the closed days are refused.', fields: [
       f('closure.on', 'Show the closed notice', 'toggle', { def: false }), f('closure.title', 'Heading'), f('closure.text', 'Message', 'area'), f('closure.image', 'Photo (optional)', 'image'),
       f('closure.until', 'Closed until and including (leave empty for today only; the notice turns off by itself after this day)', 'date'),
@@ -153,6 +177,11 @@
     { title: 'Cake pre-order', scroll: 'cake', fields: [
       f('cake.script', 'Handwritten line'), f('cake.title', 'Title'), f('cake.text', 'Text', 'area'), f('cake.image', 'Photo', 'image'),
       f('cake.noticeHours', 'Hours of notice needed', 'number'), f('cake.button', 'Button text'),
+      f('cake.serveMin', 'One pound of cake serves at least (people)', 'number'), f('cake.serveMax', 'One pound of cake serves at most (people)', 'number'),
+      f('cake.options', 'Cake choices (eggless, photo print...)', 'list', { title: (o) => `${o.name}: ${Number(o.price) ? `Rs. ${o.price}${o.perPound ? ' a pound' : ''}` : 'free'}${o.show === false ? ' (hidden)' : ''}`, add: 'Add a choice', blank: () => ({ id: uid('opt'), name: 'New choice', note: '', price: 0, perPound: false, notice: 0, show: true }), fields: [
+        f('name', 'Name'), f('note', 'Small note under the name (optional)'), f('price', 'Extra price in NPR (0 for free)', 'number'),
+        f('perPound', 'Price is per pound of cake', 'toggle', { def: false }), f('notice', 'Hours of notice this choice needs (0 = the normal notice)', 'number'), f('show', 'Show', 'toggle'),
+      ] }),
     ] },
     { title: 'Table booking', scroll: 'booking', fields: [
       f('booking.script', 'Handwritten line'), f('booking.title', 'Title'), f('booking.text', 'Text', 'area'), f('booking.image', 'Photo', 'image'),
@@ -168,6 +197,8 @@
     { title: 'Reviews section', scroll: 'reviews', note: 'Choose which reviews show in the Reviews tab above. Fill in your real Google rating and review count to show them; leave them empty to hide.', fields: [
       f('reviews.script', 'Handwritten line'), f('reviews.title', 'Title'), f('reviews.rating', 'Your Google rating, for example 4.8'), f('reviews.count', 'Number of Google reviews, for example 120'),
       f('reviews.formTitle', 'Button text'), f('reviews.thanks', 'Thank-you message', 'area'),
+      f('reviews.googleLink', 'Google review link (in your Google Business Profile, choose "Ask for reviews" and copy the link)'),
+      f('reviews.googleButton', 'Google review button text'), f('reviews.googleAsk', 'Message asking for a Google review (shown to customers a while after they order)', 'area'),
     ] },
     { title: 'Map and messages', scroll: 'visit', note: 'For the map on the page: in Google Maps choose Share, then Embed a map, and paste the link that starts with https://www.google.com/maps', fields: [
       f('visit.script', 'Handwritten line'), f('visit.title', 'Title'), f('visit.mapLink', 'Google Maps link (for the buttons)'), f('visit.mapEmbed', 'Google Maps embed link (for the map on the page)', 'area'),
@@ -188,6 +219,11 @@
       f('payment.fonepay.enabled', 'Accept Fonepay', 'toggle'), f('payment.fonepay.qr', 'Fonepay QR picture', 'image'), f('payment.fonepay.account', 'Fonepay name shown under the QR'),
     ] },
     { title: 'Footer', scroll: 'visit', fields: [f('footer.line', 'Closing line'), f('footer.note', 'Small note (optional)')] },
+    { title: 'Google and link previews', scroll: 'hero', note: 'What Google shows for your website, and what a shared link shows on WhatsApp, Facebook and Viber. Your hours, address, phone and menu prices are sent to Google from the rest of the website by themselves. Changes can take a few days to appear on Google.', fields: [
+      f('seo.title', 'Title in Google results (about 60 letters)'), f('seo.description', 'Description in Google results (about 150 letters)', 'area'),
+      f('seo.image', 'Photo for shared links (leave empty to use the top photo)', 'image'),
+      f('seo.city', 'Town'), f('seo.region', 'Province'), f('seo.lat', 'Map position: latitude', 'number', { step: 0.000001 }), f('seo.lng', 'Map position: longitude', 'number', { step: 0.000001 }),
+    ] },
   ];
 
   /* ---------- form builder ---------- */
@@ -217,7 +253,7 @@
       if (!picked) return;
       try {
         flash('Uploading photo...');
-        const small = await shrink(picked, 1800, true);
+        const small = await shrink(picked, field.max || 1800, true);
         const res = await api('POST', '/api/admin/upload', small, small.type || 'image/jpeg');
         apply(res.url);
         flash('Photo uploaded. Remember to save.');
@@ -348,6 +384,13 @@
         h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => useSeed(true) }, 'Use the backup'),
         h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => useSeed(false) }, 'No, keep the website as it is')));
     }
+    const waiting = [...((A.content.extras || {}).groups || []).flatMap((g) => g.options || []), ...((A.content.cake || {}).options || [])].filter((o) => o.show === false && Number(o.price) > 0);
+    if (waiting.length && !dismissed('v5-prices')) {
+      box.append(h('div', { class: 'ad-remind' },
+        h('span', {}, `New: customers can add extras to drinks and choose cake options. ${waiting.map((o) => o.name).join(', ')} are switched off until you check their prices.`),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => { show('edit'); setTimeout(() => { const d = Array.from(document.querySelectorAll('.ad-group > summary')).find((x) => /Drink extras/.test(x.textContent)); if (d) { d.parentElement.open = true; d.scrollIntoView({ block: 'start' }); } }, 50); } }, 'Check the prices'),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { dismiss('v5-prices'); drawReminders(); } }, 'Later')));
+    }
     for (const r of reminders()) {
       box.append(h('div', { class: 'ad-remind' },
         h('span', {}, `${r.t.name} is on ${niceDate(r.d)}, ${r.left === 0 ? 'today' : r.left === 1 ? 'tomorrow' : `in ${r.left} days`}. Themed cakes sell well; publish them about ${Number(r.t.before) || 7} days before.`),
@@ -467,6 +510,13 @@
         frag.append(h('label', { class: 'ad-field ad-check', for: id }, control, h('span', {}, field.l)));
         continue;
       }
+      if (field.type === 'checks') {
+        const now = () => (Array.isArray(get(obj, field.k)) ? get(obj, field.k) : []);
+        const box = h('div', { class: 'ad-checks', role: 'group', 'aria-label': field.l }, field.options().map(([v, label]) => h('label', { class: 'ad-check' },
+          h('input', { type: 'checkbox', checked: now().includes(v), onchange: (e) => { const next = now().filter((x) => x !== v); if (e.target.checked) next.push(v); set(obj, field.k, next); done(); } }), h('span', {}, label))));
+        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), box));
+        continue;
+      }
       if (field.type === 'toggle') {
         control = h('input', { type: 'checkbox', id, checked: val === undefined ? field.def !== false : Boolean(val), onchange: (e) => { set(obj, field.k, e.target.checked); done(); } });
         frag.append(h('label', { class: 'ad-field ad-check', for: id }, control, h('span', {}, field.l)));
@@ -576,7 +626,7 @@
       <p>${esc(o.name || 'Guest')}${o.phone ? ` · ${contact(o)}` : ''}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}
-      <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''} <span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li>Delivery <span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
+      <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` <em>+ ${esc(l.extras.join(', '))}</em>` : ''} <span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li>Delivery <span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}</p>
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <footer>
@@ -718,7 +768,9 @@
         <div class="ad-qr-sheet">${Array.from({ length: n }, (x, i) => {
           const link = `${(A.tableBase || base).replace(/\/+$/, '')}/?table=${i + 1}`;
           return `<figure class="ad-qr"><img src="/api/admin/qr?text=${encodeURIComponent(link)}" alt="QR code for table ${i + 1}"><figcaption><b>Table ${i + 1}</b><span>Scan to see the menu and order</span></figcaption></figure>`;
-        }).join('')}</div>`;
+        }).join('')}
+        ${A.content.reviews.googleLink ? `<figure class="ad-qr ad-qr--google"><img src="/api/admin/qr?text=${encodeURIComponent(A.content.reviews.googleLink)}" alt="QR code for Google reviews"><figcaption><b>Enjoyed your visit?</b><span>Scan to review us on Google</span></figcaption></figure>` : ''}</div>
+        ${A.content.reviews.googleLink ? '' : '<p class="ad-note ad-noprint">To print a "Review us on Google" card with these, add your Google review link in Edit website, Reviews section.</p>'}`;
     } else {
       box.innerHTML = `<h2>Security and staff</h2>
         <form class="ad-card ad-form" id="ad-pass-form">

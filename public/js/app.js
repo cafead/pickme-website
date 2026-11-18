@@ -45,10 +45,27 @@
     youtube: svg('<rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z"/>'),
     whatsapp: svg('<path d="M3.500 20.500l1.200-4.300A8.500 8.500 0 1 1 8 19.400z"/><path d="M9 8.500c-.3 1 .5 2.900 2 4.400s3.400 2.300 4.400 2l.9-1.200-2-1.200-.8.700c-.8-.3-2-1.500-2.300-2.300l.700-.8-1.200-2z"/>'),
     link: svg('<path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1"/><path d="M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1"/>'),
+    book: svg('<path d="M4 5.500A1.500 1.500 0 0 1 5.500 4H11v16H5.500A1.500 1.500 0 0 1 4 18.500z"/><path d="M20 5.500A1.500 1.500 0 0 0 18.500 4H13v16h5.500a1.500 1.500 0 0 0 1.500-1.500z"/>'),
+    cake: svg('<path d="M4 20h16v-7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2z"/><path d="M4 15c2 1.500 4 1.500 5.300 0 1.300 1.500 4.100 1.500 5.400 0 1.300 1.500 3.300 1.500 5.300 0"/><path d="M12 11V7.500"/><path d="M12 3.500c.8.8 1 1.800 0 2.500-1-.7-.8-1.700 0-2.500z"/>'),
+    calendar: svg('<rect x="3.500" y="5" width="17" height="15" rx="2.500"/><path d="M3.500 10h17M8 3v4M16 3v4"/>'),
+    chat: svg('<path d="M4 18.500V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8z"/><path d="M8.500 9.500h7M8.500 12.500h4"/>'),
+    search: svg('<circle cx="11" cy="11" r="6.500"/><path d="M20 20l-4.200-4.200"/>'),
+    share: svg('<circle cx="18" cy="5.500" r="2.500"/><circle cx="6" cy="12" r="2.500"/><circle cx="18" cy="18.500" r="2.500"/><path d="M8.200 10.800l7.600-4.100M8.200 13.200l7.600 4.100"/>'),
+    google: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#4285F4" d="M21.600 12.200c0-.7-.1-1.300-.2-2H12v3.800h5.400a4.600 4.600 0 0 1-2 3v2.500h3.200c1.900-1.700 3-4.300 3-7.300z"/><path fill="#34A853" d="M12 22c2.700 0 5-.9 6.600-2.400l-3.200-2.500c-.9.600-2 1-3.400 1-2.600 0-4.800-1.800-5.600-4.100H3.100v2.600A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.400 14c-.2-.6-.3-1.300-.3-2s.1-1.400.3-2V7.400H3.100a10 10 0 0 0 0 9.200z"/><path fill="#EA4335" d="M12 6c1.500 0 2.800.5 3.800 1.500l2.900-2.900A10 10 0 0 0 3.100 7.400L6.400 10C7.200 7.700 9.400 6 12 6z"/></svg>',
   };
   ICON.maps = ICON.pin;
 
-  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false, layout: false };
+  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false, layout: false, q: '', filter: '' };
+  const WIDE = () => matchMedia('(min-width: 821px)').matches;
+  // Small marks on menu items. Veg and non-veg use the usual green and brown squares.
+  const MARKS = {
+    veg: { label: 'Veg', icon: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="2" fill="none" stroke="#2E7D4F" stroke-width="1.6"/><circle cx="8" cy="8" r="3.600" fill="#2E7D4F"/></svg>' },
+    nonveg: { label: 'Non-veg', icon: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="2" fill="none" stroke="#8E2A1E" stroke-width="1.600"/><path d="M8 4.200l3.900 7H4.100z" fill="#8E2A1E"/></svg>' },
+    eggless: { label: 'Eggless' },
+    sugarfree: { label: 'Sugar-free' },
+    nuts: { label: 'Contains nuts' },
+    spicy: { label: 'Spicy' },
+  };
 
   // Parts of the page whose size can be changed by dragging their edge in admin ("Edit layout").
   const SIZES = {
@@ -68,16 +85,17 @@
     map: { sel: '.map', axes: 'xy', label: 'Map' },
   };
 
-  /* Make big phone photos small before upload. PNGs are kept as they are when keepPng is set (logos). */
+  /* Make big phone photos small before upload: no wider than `max`, and re-saved when the file is heavy.
+     WebP is used when the browser can make it (about a third smaller than JPG). PNGs are kept as they are when keepPng is set (logos, QR codes). */
   function shrink(file, max, keepPng) {
     return new Promise((resolve) => {
-      if (!/^image\/(jpeg|png|webp)$/.test(file.type) || (keepPng && file.type !== 'image/jpeg')) return resolve(file);
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type) || (keepPng && file.type === 'image/png' && file.size < 1.5e6)) return resolve(file);
       const url = URL.createObjectURL(file);
       const im = new Image();
       im.onload = () => {
         URL.revokeObjectURL(url);
         const scale = Math.min(1, max / Math.max(im.width, im.height));
-        if (scale === 1 && file.size < 1.2e6) return resolve(file);
+        if (scale === 1 && file.size < 350e3) return resolve(file);
         const cv = document.createElement('canvas');
         cv.width = Math.max(1, Math.round(im.width * scale));
         cv.height = Math.max(1, Math.round(im.height * scale));
@@ -85,7 +103,11 @@
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, cv.width, cv.height);
         ctx.drawImage(im, 0, 0, cv.width, cv.height);
-        cv.toBlob((b) => resolve(b || file), 'image/jpeg', 0.85);
+        const done = (b) => resolve(b && b.size < file.size ? b : file);
+        cv.toBlob((b) => {
+          if (b && b.type === 'image/webp') return done(b);
+          cv.toBlob(done, 'image/jpeg', 0.82);
+        }, 'image/webp', 0.8);
       };
       im.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
       im.src = url;
@@ -158,9 +180,9 @@
     if (!k) return '';
     return ` style="--ox:${clampN(k.x, 0, 100, 50)}%;--oy:${clampN(k.y, 0, 100, 50)}%;--z:${clampN(k.z, 1, 4, 1)}"${k.fit === 'contain' ? ' data-fit="contain"' : ''}`;
   }
-  const pic = (url, alt, cls) => {
+  const pic = (url, alt, cls, eager) => {
     const u = safeUrl(url);
-    return `<div class="pic ${cls || ''}" data-alt="${esc(alt)}">${u ? `<img src="${esc(u)}" alt="${esc(alt)}" loading="lazy"${cropAttrs(u)}>` : ''}</div>`;
+    return `<div class="pic ${cls || ''}" data-alt="${esc(alt)}">${u ? `<img src="${esc(u)}" alt="${esc(alt)}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async"${cropAttrs(u)}>` : ''}</div>`;
   };
   const head = (o, path, extra) => `<header class="head rv">${o.script || PREVIEW ? `<p class="script"${ed(path + '.script')}>${esc(o.script)}</p>` : ''}${o.title || PREVIEW ? `<h2${ed(path + '.title')}>${esc(o.title)}</h2>` : ''}${extra || ''}</header>`;
   const btn = (label, href, cls, path) => `<a class="btn ${cls || ''}" href="${esc(safeUrl(href) || '#')}"><span${path ? ed(path) : ''}>${esc(label)}</span>${ICON.arrow}</a>`;
@@ -209,39 +231,85 @@
 
   /* ---------- menu lookups and cart ---------- */
   function findPrice(itemId, label) {
-    const groups = (S.c.menu.categories || []).map((g) => ({ items: g.items, hidden: g.hidden }))
-      .concat((S.c.events.items || []).filter((e) => e.enabled !== false).map((e) => ({ items: e.menu })));
+    const groups = (S.c.menu.categories || []).map((g) => ({ id: g.id, items: g.items, hidden: g.hidden, timeFrom: g.timeFrom, timeTo: g.timeTo }))
+      .concat((S.c.events.items || []).filter((e) => e.enabled !== false).map((e) => ({ id: 'event-' + e.id, items: e.menu })));
     for (const g of groups) {
       for (const it of g.items || []) {
         if (it.id !== itemId) continue;
         const p = (it.prices || []).find((x) => (x.label || '') === (label || ''));
         if (!p) return null;
         const off = g.hidden || it.hidden || it.available === false;
-        return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p };
+        return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p, group: g.id, hours: hoursOf(it, g) };
       }
     }
     return null;
   }
+  // Items (or whole groups) served only between two times, like a morning combo.
+  function hoursOf(it, g) {
+    if (it.timeFrom || it.timeTo) return { from: it.timeFrom || '', to: it.timeTo || '' };
+    if (g && (g.timeFrom || g.timeTo)) return { from: g.timeFrom || '', to: g.timeTo || '' };
+    return null;
+  }
+  const servedNow = (hrs) => { if (!hrs) return true; const t = nepalTime(); return !((hrs.from && t < hrs.from) || (hrs.to && t > hrs.to)); };
+  const hoursText = (hrs) => (hrs.from && hrs.to ? `${t12(hrs.from)} to ${t12(hrs.to)}` : hrs.from ? `after ${t12(hrs.from)}` : `until ${t12(hrs.to)}`);
+  // Choices a customer can add (less sugar, extra shot), from the extras sets that cover the item's menu group.
+  function extrasOf(groupId) {
+    const x = S.c.extras || {};
+    if (x.show === false) return [];
+    const out = [];
+    for (const g of x.groups || []) {
+      if (g.show === false || !(g.categories || []).includes(groupId)) continue;
+      for (const o of g.options || []) if (o.show !== false && o.id && o.name && !out.some((y) => y.id === o.id)) out.push(o);
+    }
+    return out;
+  }
+  const cakeOpts = () => ((S.c.cake || {}).options || []).filter((o) => o.show !== false && o.id && o.name);
+  function pounds(label) {
+    const t = String(label || '').toLowerCase();
+    if (/half/.test(t)) return 0.5;
+    const m = t.match(/(\d+(?:\.\d+)?)\s*(pound|lb|kg)/);
+    if (!m) return 1;
+    return m[2] === 'kg' ? Number(m[1]) * 2.2 : Number(m[1]);
+  }
+  const optCost = (o, label) => Math.round(Math.max(0, Number(o.price) || 0) * (o.perPound ? pounds(label) : 1));
+  const lineKey = (l) => `${l.itemId}|${l.label}|${(l.extras || []).slice().sort().join(',')}`;
   function cartLines() {
     return S.cart.map((l) => {
       const f = findPrice(l.itemId, l.label);
-      return f && f.item.available !== false && Number(f.price.price) > 0
-        ? { itemId: l.itemId, label: l.label, qty: l.qty, name: f.item.name, price: Number(f.price.price), whole: Boolean(f.price.whole) }
-        : null;
+      if (!f || f.item.available === false || !(Number(f.price.price) > 0)) return null;
+      const whole = Boolean(f.price.whole);
+      const allowed = whole ? cakeOpts() : extrasOf(f.group);
+      const picked = (l.extras || []).map((id) => allowed.find((o) => o.id === id)).filter(Boolean);
+      if (picked.length !== (l.extras || []).length) return null;
+      const add = picked.reduce((sum, o) => sum + optCost(o, f.price.label), 0);
+      return {
+        key: lineKey(l), itemId: l.itemId, label: l.label, qty: l.qty, extras: picked.map((o) => o.id), extraNames: picked.map((o) => o.name),
+        notice: whole ? Math.max(0, ...picked.map((o) => Number(o.notice) || 0)) : 0, photo: picked.some((o) => o.id === 'photo'),
+        name: f.item.name, group: f.group, price: Number(f.price.price) + add, whole,
+      };
     }).filter(Boolean);
   }
   function saveCart() {
     try { localStorage.setItem('pm_cart', JSON.stringify(S.cart)); } catch (e) { /* storage not available */ }
-    const n = cartLines().reduce((s, l) => s + l.qty, 0);
+    const lines = cartLines();
+    const n = lines.reduce((s, l) => s + l.qty, 0);
+    const total = lines.reduce((s, l) => s + l.qty * l.price, 0);
     $$('.cart-count').forEach((el) => { el.textContent = n; el.hidden = !n; });
+    $$('.dk-total').forEach((el) => { el.textContent = n ? rs(total) : ''; });
+    $$('.dk-label').forEach((el) => { el.textContent = n ? 'Your order' : 'Order'; });
+    $$('.dk--order').forEach((el) => el.classList.toggle('is-full', Boolean(n)));
+    const pill = $('.order-pill');
+    if (pill) { pill.hidden = !n; $('span', pill).textContent = `View order · ${n} item${n === 1 ? '' : 's'} · ${rs(total)}`; }
   }
-  function addToCart(itemId, label, qty, replace) {
-    const line = S.cart.find((l) => l.itemId === itemId && l.label === label);
+  function addToCart(itemId, label, qty, replace, extras) {
+    const want = { itemId, label, extras: (extras || []).slice() };
+    const line = S.cart.find((l) => lineKey(l) === lineKey(want));
     if (line) line.qty = replace ? qty : Math.min(50, line.qty + qty);
-    else S.cart.push({ itemId, label, qty });
+    else S.cart.push(Object.assign(want, { qty }));
     S.cart = S.cart.filter((l) => l.qty > 0);
     saveCart();
   }
+  function bump() { $$('.cart-btn, .dk--order').forEach((b) => { b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump'); }); }
   function toast(msg) {
     let el = $('#toast');
     if (!el) {
@@ -266,7 +334,7 @@
     const strip = words.map((w) => `<span>${esc(w)}</span>`).join('<i aria-hidden="true">✦</i>') + '<i aria-hidden="true">✦</i>';
     const k = h.card || {};
     return `<section id="hero" class="hero hero--${esc(h.layout || 'right')}">
-      ${pic(h.image, 'Inside ' + c.brand.name, 'hero-media')}
+      ${pic(h.image, 'Inside ' + c.brand.name, 'hero-media', true)}
       <div class="hero-text">
         ${h.script || PREVIEW ? `<p class="script hero-in"${ed('hero.script')}>${esc(h.script)}</p>` : ''}
         <h1 class="hero-in"${ed('hero.title')}>${esc(h.title)}</h1>
@@ -353,81 +421,169 @@
       if ((e.menu || []).some((it) => !it.hidden)) out.push({ id: 'event-' + e.id, name: e.menuTitle || e.title, note: e.message, items: e.menu, path: `events.items.${i}.menu`, notePath: `events.items.${i}.message`, special: true });
     }
     (c.menu.categories || []).forEach((g, ci) => {
-      if (!g.hidden) out.push({ id: g.id, name: g.name, note: g.note, items: g.items || [], path: `menu.categories.${ci}.items`, notePath: `menu.categories.${ci}.note` });
+      if (!g.hidden) out.push({ id: g.id, name: g.name, note: g.note, items: g.items || [], path: `menu.categories.${ci}.items`, notePath: `menu.categories.${ci}.note`, timeFrom: g.timeFrom, timeTo: g.timeTo });
     });
     return out;
   }
-  function itemHtml(it, base, cards) {
+  function marksHtml(it) {
+    const c = S.c;
+    if (((c.menu || {}).marks || {}).show === false) return '';
+    const tags = (it.tags || []).filter((t) => MARKS[t]);
+    if (!tags.length) return '';
+    return `<span class="marks">${tags.map((t) => (MARKS[t].icon ? `<span class="mark mark--icon" title="${MARKS[t].label}" role="img" aria-label="${MARKS[t].label}">${MARKS[t].icon}</span>` : `<span class="mark mark--${t}">${MARKS[t].label}</span>`)).join('')}</span>`;
+  }
+  function itemHtml(it, base, cards, g) {
+    const hrs = hoursOf(it, g);
+    const later = hrs && !servedNow(hrs);
     const off = it.available === false;
-    const prices = off ? '<span class="mi-off">Not available today</span>' : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => `
-      <button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
+    const prices = off ? '<span class="mi-off">Not available today</span>' : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => (later && !p.whole
+      ? `<span class="pchip pchip--off">${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b></span>`
+      : `<button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
         aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
         ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">${p.whole ? 'Pre-order' : '+'}</i>
-      </button>`).join('');
+      </button>`)).join('');
+    const when = hrs ? `<p class="mi-time">${later ? 'Served' : 'Today'} ${hoursText(hrs)}</p>` : '';
     const badge = it.badge ? `<span class="badge"${ed(base + '.badge')}>${esc(it.badge)}</span>` : '';
-    const text = `<h4><span${ed(base + '.name')}>${esc(it.name)}</span>${cards ? '' : badge}</h4>${it.desc || PREVIEW ? `<p${ed(base + '.desc')}>${esc(it.desc)}</p>` : ''}`;
+    const text = `<h4><span${ed(base + '.name')}>${esc(it.name)}</span>${marksHtml(it)}${cards ? '' : badge}</h4>${it.desc || PREVIEW ? `<p${ed(base + '.desc')}>${esc(it.desc)}</p>` : ''}${when}`;
     if (cards) return `<article class="mc${off ? ' mi--off' : ''}"><div class="mc-top">${pic(it.image, it.name, 'mc-pic')}${badge}</div><div class="mc-body">${text}<div class="mi-prices">${prices}</div></div></article>`;
     const photo = safeUrl(it.image) ? pic(it.image, it.name, 'mi-pic') : '';
     return `<article class="mi${off ? ' mi--off' : ''}${photo ? '' : ' mi--plain'}">${photo}<div class="mi-main"><div class="mi-body">${text}</div><div class="mi-prices">${prices}</div></div></article>`;
   }
-  function menuBody(c) {
+  // The veg / eggless filter.
+  function passes(it) {
+    const t = it.tags || [];
+    if (S.filter === 'veg') return !t.includes('nonveg');
+    if (S.filter && MARKS[S.filter]) return t.includes(S.filter);
+    return true;
+  }
+  const norm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
+  function menuPanel(c) {
     const groups = menuGroups(c);
+    const cards = c.menu.layout === 'cards';
+    const wrapCls = cards ? 'menu-cards' : 'menu-list';
+    if (S.q.trim()) {
+      const words = norm(S.q).split(/\s+/).filter(Boolean);
+      // Items whose own name or description matches come first; if none do, items from a matching group (for example "coffee").
+      const find = (withGroup) => {
+        const hits = [];
+        for (const g of groups) {
+          g.items.forEach((it, ii) => {
+            if (it.hidden || !passes(it)) return;
+            const hay = norm(`${it.name} ${it.desc} ${(it.tags || []).map((t) => (MARKS[t] || {}).label).join(' ')}${withGroup ? ' ' + g.name : ''}`);
+            if (words.every((w) => hay.includes(w))) hits.push(itemHtml(it, `${g.path}.${ii}`, cards, g));
+          });
+        }
+        return hits;
+      };
+      let hits = find(false);
+      if (!hits.length) hits = find(true);
+      return hits.length
+        ? `<p class="menu-count" role="status">${hits.length} found for "${esc(S.q.trim())}"</p><div class="${wrapCls} menu-found">${hits.join('')}</div>`
+        : `<p class="menu-count" role="status">Nothing found for "${esc(S.q.trim())}". Try another word, like latte or cheesecake.</p>`;
+    }
     const g = groups.find((x) => x.id === S.tab) || groups[0];
     if (!g) return '<p class="muted">The menu is being updated.</p>';
     S.tab = g.id;
-    const cards = c.menu.layout === 'cards';
     const tabs = groups.map((x) => `<button type="button" role="tab" aria-selected="${x.id === g.id}" class="tab${x.id === g.id ? ' is-on' : ''}${x.special ? ' tab--special' : ''}" data-act="tab" data-id="${esc(x.id)}">${x.special ? '<i aria-hidden="true">✦</i> ' : ''}${esc(x.name)}</button>`).join('');
-    const items = g.items.map((it, ii) => (it.hidden ? '' : itemHtml(it, `${g.path}.${ii}`, cards))).join('');
+    const items = g.items.map((it, ii) => (it.hidden || !passes(it) ? '' : itemHtml(it, `${g.path}.${ii}`, cards, g))).join('');
     return `<div class="tabs" role="tablist" aria-label="Menu groups">${tabs}</div>
       ${g.note ? `<p class="menu-note${g.special ? ' menu-note--special' : ''}"${ed(g.notePath)}>${esc(g.note)}</p>` : ''}
-      <div class="${cards ? 'menu-cards' : 'menu-list'}" role="tabpanel">${items}</div>`;
+      ${g.timeFrom || g.timeTo ? `<p class="menu-note">Served ${hoursText({ from: g.timeFrom, to: g.timeTo })}</p>` : ''}
+      <div class="${wrapCls}" role="tabpanel">${items || '<p class="muted">Nothing here matches the filter.</p>'}</div>`;
   }
+  function menuTools(c) {
+    const m = c.menu || {};
+    const all = menuGroups(c).flatMap((g) => g.items.filter((it) => !it.hidden));
+    const used = new Set(all.flatMap((it) => it.tags || []));
+    const chips = [];
+    if (((m.marks || {}).filter !== false) && ((m.marks || {}).show !== false)) {
+      if (used.has('nonveg') || used.has('veg')) chips.push(['veg', `${MARKS.veg.icon} Veg only`]);
+      for (const t of ['eggless', 'sugarfree']) if (used.has(t)) chips.push([t, MARKS[t].label]);
+    }
+    const search = m.search !== false;
+    if (!search && !chips.length) return '';
+    return `<div class="menu-tools">
+      ${search ? `<label class="msearch">${ICON.search}<input type="search" id="menu-q" placeholder="Search the menu" autocomplete="off" enterkeyhint="search" value="${esc(S.q)}" aria-label="Search the menu"></label>` : ''}
+      ${chips.length ? `<div class="mfilters" role="group" aria-label="Filter the menu">${chips.map(([k, l]) => `<button type="button" class="mfilter${S.filter === k ? ' is-on' : ''}" data-act="filter" data-id="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div>` : ''}
+    </div>`;
+  }
+  const menuBody = (c) => `${menuTools(c)}<div id="menu-panel">${menuPanel(c)}</div>`;
+  function redrawMenu() { const p = $('#menu-panel'); if (p) { p.innerHTML = menuPanel(S.c); if (PREVIEW) setInline(); } }
   R.menu = (c) => `<section id="menu" class="sec sec--tint"><div class="wrap">
       ${head(c.menu, 'menu', c.menu.note ? `<p class="lede"${ed('menu.note')}>${esc(c.menu.note)}</p>` : '')}
       <div id="menu-body" class="rv">${menuBody(c)}</div>
     </div></section>`;
 
+  // Cakes that can be ordered whole, grouped by flavour with their sizes.
   function wholeCakes(c) {
     const out = [];
     for (const g of menuGroups(c)) {
       for (const it of g.items || []) {
         if (it.available === false || it.hidden) continue;
-        for (const p of it.prices || []) if (p.whole && Number(p.price) > 0) out.push({ id: it.id, name: it.name, label: p.label || '', price: p.price });
+        const sizes = (it.prices || []).filter((p) => p.whole && Number(p.price) > 0).map((p) => ({ label: p.label || '', price: Number(p.price) }));
+        if (sizes.length && !out.some((x) => x.id === it.id)) out.push({ id: it.id, name: it.name, sizes, tags: it.tags || [] });
       }
     }
     return out;
   }
+  function serves(label) {
+    const k = S.c.cake || {};
+    const lb = pounds(label);
+    const lo = Math.max(1, Math.round((Number(k.serveMin) || 4) * lb));
+    const hi = Math.max(lo, Math.round((Number(k.serveMax) || 6) * lb));
+    return lo === hi ? `Serves about ${lo}` : `Serves about ${lo} to ${hi}`;
+  }
+  function sizeChoices(cake, chosen) {
+    if (!cake) return '';
+    const pick = cake.sizes.some((z) => z.label === chosen) ? chosen : cake.sizes[0].label;
+    return cake.sizes.map((z, n) => `<input type="radio" name="size" id="cake-size-${n}" value="${esc(z.label)}"${z.label === pick ? ' checked' : ''}>
+      <label for="cake-size-${n}" class="size-card"><strong>${esc(z.label || 'Whole cake')}</strong><span>${rs(z.price)}</span><small>${serves(z.label)}</small></label>`).join('');
+  }
+  const optPrice = (o) => (Number(o.price) > 0 ? `+${rs(o.price)}${o.perPound ? ' a pound' : ''}` : 'Free');
+  // Recalculate the cake total and the notice needed whenever something changes.
   function cakeTotal() {
-    const sel = $('#cake-select');
+    const form = $('form[data-form=cake]');
+    if (!form) return;
+    const cake = wholeCakes(S.c).find((x) => x.id === form.elements.cakeId.value);
+    const sizeEl = $('input[name=size]:checked', form);
     const out = $('#cake-total');
-    if (!sel || !out || !sel.value) return;
-    const [id, label] = sel.value.split('|');
-    const f = findPrice(id, label);
+    if (!cake || !sizeEl) { if (out) out.textContent = ''; return; }
+    const size = cake.sizes.find((z) => z.label === sizeEl.value) || cake.sizes[0];
+    const picked = $$('input[name=opt]:checked', form).map((el) => cakeOpts().find((o) => o.id === el.value)).filter(Boolean);
     const qty = Math.max(1, Math.min(20, Number($('#cake-qty').value) || 1));
-    out.textContent = f ? rs(Number(f.price.price) * qty) : '';
+    const each = size.price + picked.reduce((sum, o) => sum + optCost(o, size.label), 0);
+    out.textContent = rs(each * qty);
+    const base = Number(S.c.cake.noticeHours) || 0;
+    const extra = picked.filter((o) => Number(o.notice) > base);
+    const hint = $('#cake-notice');
+    if (hint) hint.textContent = extra.length ? `${extra.map((o) => o.name).join(' and ')} needs at least ${Math.max(...extra.map((o) => Number(o.notice)))} hours notice, so please choose a later date if needed.` : `We need at least ${base} hours to prepare a whole cake.`;
   }
   R.cake = (c) => {
     const k = c.cake;
     const slot = nextSlot(c, k.noticeHours);
+    const cakes = wholeCakes(c);
+    const opts = cakeOpts();
     return `<section id="cake" class="sec"><div class="wrap split">
       <div class="split-pic rv">${deco(pic(k.image, 'Celebration cake', 'fade-pic'), siteBorder(c), 'deco--tall')}</div>
       <div class="split-body rv">
         ${head(k, 'cake')}
         <p class="lede"${ed('cake.text')}>${esc(k.text)}</p>
-        <form class="form" data-form="cake" novalidate>
-          <label class="f f--wide"><span>Cake</span><select name="cake" id="cake-select" required>
-            ${wholeCakes(c).map((w) => `<option value="${esc(w.id)}|${esc(w.label)}">${esc(w.name)}, ${esc(w.label)}: ${rs(w.price)}</option>`).join('')}
+        ${cakes.length ? `<form class="form cake-form" data-form="cake" novalidate>
+          <label class="f f--wide"><span>Flavour</span><select name="cakeId" id="cake-flavour" required>
+            ${cakes.map((w) => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('')}
           </select></label>
-          <label class="f"><span>How many</span><input name="qty" id="cake-qty" type="number" min="1" max="20" value="1" inputmode="numeric" required></label>
+          <fieldset class="f f--wide sizes" id="cake-sizes"><legend>Size</legend>${sizeChoices(cakes[0])}</fieldset>
+          ${opts.length ? `<fieldset class="f f--wide cake-opts"><legend>Make it special</legend>${opts.map((o) => `<label class="copt"><input type="checkbox" name="opt" value="${esc(o.id)}"><span><strong>${esc(o.name)}</strong>${o.note ? `<small>${esc(o.note)}</small>` : ''}</span><b>${optPrice(o)}</b></label>`).join('')}</fieldset>` : ''}
+          <label class="f"><span>How many cakes</span><input name="qty" id="cake-qty" type="number" min="1" max="20" value="1" inputmode="numeric" required></label>
           <label class="f"><span>Occasion (optional)</span><input name="occasion" id="cake-occasion" maxlength="80" placeholder="Birthday, anniversary"></label>
           <label class="f f--wide"><span>Name or message on the cake (optional)</span><input name="cakeMessage" id="cake-msg" maxlength="120" placeholder="Happy Birthday Aarav"></label>
           <div class="f"><span>Date</span><div data-bsp="date" data-value="${slot.date}"></div></div>
           <label class="f"><span>Time</span><select name="time" id="cake-time" required>${timeOptions(c, slot.time)}</select></label>
-          <p class="hint f--wide">We need at least ${esc(k.noticeHours)} hours to prepare a whole cake. You can add a photo of the design you want at the next step.</p>
+          <p class="hint f--wide" id="cake-notice">We need at least ${esc(k.noticeHours)} hours to prepare a whole cake.</p>
           <p class="sum sum--big f--wide"><span>Total</span><b id="cake-total"></b></p>
           <p class="form-msg f--wide" role="alert"></p>
-          <button class="btn f--wide" type="submit"><span${ed('cake.button')}>${esc(k.button || 'Continue to payment')}</span>${ICON.arrow}</button>
-        </form>
+          <button class="btn f--wide" type="submit"><span${ed('cake.button')}>${esc(k.button || 'Continue')}</span>${ICON.arrow}</button>
+        </form>` : '<p class="muted">Whole cakes will be listed here soon. Call or WhatsApp us to order one.</p>'}
       </div></div></section>`;
   };
 
@@ -501,6 +657,7 @@
       ${head(r, 'reviews', sum)}
       <div id="review-list" class="rv">${reviewList()}</div>
       <div class="row row--center rv">
+        ${googleReviewUrl() ? `<a class="btn btn--ghost btn--google" href="${esc(googleReviewUrl())}" target="_blank" rel="noopener">${ICON.google}<span${ed('reviews.googleButton')}>${esc(r.googleButton || 'Review us on Google')}</span></a>` : ''}
         ${safeUrl(c.visit.mapLink) ? `<a class="btn btn--ghost" href="${esc(safeUrl(c.visit.mapLink))}" target="_blank" rel="noopener"><span>See us on Google Maps</span>${ICON.arrow}</a>` : ''}
       </div>
       <details class="review-box rv">
@@ -578,7 +735,55 @@
       <p class="foot-line">${ICON.heart}<span${ed('footer.line')}>${esc(c.footer.line)}</span></p>
       ${c.footer.note ? `<p class="foot-note"${ed('footer.note')}>${esc(c.footer.note)}</p>` : ''}
     </footer>
-    ${bar.show !== false && (links.length || wa) ? `<div class="float-bar">${links.map((s) => icon(s, 'fb')).join('')}${wa ? waIcon('fb') : ''}</div>` : ''}`;
+    ${bar.show !== false && (links.length || wa) ? `<div class="float-bar">${links.map((s) => icon(s, 'fb')).join('')}${wa ? waIcon('fb') : ''}</div>` : ''}
+    ${dock(c)}
+    <button type="button" class="order-pill" data-act="cart" hidden>${ICON.bag}<span></span></button>`;
+  }
+  // Phones: a bar along the bottom with the main actions and the order, always in reach of a thumb.
+  function dock(c) {
+    const link = (id, icon, label) => (visible(c, id) ? `<a class="dk" href="#${id}">${ICON[icon]}<span>${label}</span></a>` : '');
+    return `<nav class="dock" aria-label="Quick actions">
+      ${link('menu', 'book', 'Menu')}${link('cake', 'cake', 'Cake')}${link('booking', 'calendar', 'Book')}
+      <button type="button" class="dk" data-act="chat">${ICON.chat}<span>Chat</span></button>
+      <button type="button" class="dk dk--order" data-act="cart" aria-label="Your order">${ICON.bag}<span class="cart-count" hidden>0</span><span class="dk-text"><span class="dk-label">Order</span><b class="dk-total"></b></span></button>
+    </nav>`;
+  }
+  // WhatsApp, a phone call and the social pages, in one sheet.
+  function chatHtml() {
+    const c = S.c;
+    const links = (c.social || []).filter((x) => x.show !== false && /^https?:\/\//i.test(x.url || ''));
+    return `<div class="shade" data-act="close"></div>
+      <div class="modal modal--sheet" role="dialog" aria-label="Contact us">
+        <header><h2>Talk to us</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>
+        <div class="chat-list">
+          <a class="chat-row chat-row--whatsapp" href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener">${ICON.whatsapp}<span><strong>WhatsApp</strong><small>${esc(c.brand.phone)}</small></span></a>
+          <a class="chat-row" href="tel:${esc(digits(c.brand.phone))}">${ICON.phone}<span><strong>Call us</strong><small>${esc(c.brand.hoursText)}</small></span></a>
+          ${links.map((x) => `<a class="chat-row chat-row--${esc(x.type)}" href="${esc(x.url)}" target="_blank" rel="noopener">${ICON[x.type] || ICON.link}<span><strong>${esc(SOCIAL_NAMES[x.type] || x.type)}</strong></span></a>`).join('')}
+        </div>
+      </div>`;
+  }
+  const googleReviewUrl = () => safeUrl((S.c.reviews || {}).googleLink) || safeUrl(S.c.visit.mapLink);
+  // After someone orders, ask for a Google review once they have had time to enjoy it (the same ask for everyone).
+  function reviewLater() {
+    clearTimeout(reviewLater.t);
+    let last = null;
+    let asked = 0;
+    try { last = JSON.parse(localStorage.getItem('pm_last_order') || 'null'); asked = Number(localStorage.getItem('pm_review_asked')) || 0; } catch (e) { return; }
+    if (!last || !last.at || PREVIEW || !googleReviewUrl() || asked > last.at) return;
+    const age = Date.now() - last.at;
+    const wait = 25 * 60e3;
+    if (age > 14 * 864e5) return;
+    if (age < wait) { reviewLater.t = setTimeout(reviewLater, wait - age + 1000); return; }
+    if ($('#g-ask')) return;
+    const r = S.c.reviews || {};
+    const box = document.createElement('aside');
+    box.id = 'g-ask';
+    box.className = 'g-ask';
+    box.setAttribute('aria-label', 'Review us on Google');
+    box.innerHTML = `${ICON.google}<p>${esc(r.googleAsk || 'Enjoyed it? A Google review helps us a lot.')}</p>
+      <a class="btn" href="${esc(googleReviewUrl())}" target="_blank" rel="noopener" data-act="review-later"><span>${esc(r.googleButton || 'Review us on Google')}</span></a>
+      <button type="button" class="icon-btn" data-act="review-later" aria-label="Not now">${ICON.x}</button>`;
+    document.body.appendChild(box);
   }
 
   /* ---------- render ---------- */
@@ -607,7 +812,14 @@
       $$('.rv').forEach((el) => observer.observe(el));
     }
     if (PREVIEW) window.scrollTo(0, y);
+    navHeight();
   }
+  // The top bar is taller when the closed notice or the table bar shows; the menu tabs stick just under it.
+  function navHeight() {
+    const n = $('.nav');
+    if (n) document.documentElement.style.setProperty('--nav-h', n.offsetHeight + 'px');
+  }
+  window.addEventListener('resize', () => { clearTimeout(navHeight.t); navHeight.t = setTimeout(navHeight, 150); });
   function showSlide(i) {
     const slides = $$('.slide');
     if (!slides.length) return;
@@ -637,6 +849,7 @@
         ${items ? `<h3 class="ev-h">${esc(e.menuTitle || 'Specials')}</h3><div class="menu-cards ev-menu">${items}</div>` : ''}
         <div class="row row--center ev-foot">
           ${items ? `<button type="button" class="btn" data-act="cart"><span>See my order</span>${ICON.arrow}</button>` : ''}
+          ${PREVIEW ? '' : `<button type="button" class="btn btn--ghost" data-act="share" data-id="${esc(e.id)}">${ICON.share}<span>Share</span></button>`}
           ${safeUrl(e.link) ? `<a class="btn btn--ghost" href="${esc(e.link)}" data-act="close"><span>${esc(e.button || 'More')}</span>${ICON.arrow}</a>` : ''}
           <button type="button" class="btn btn--ghost" data-act="close"><span>Close</span></button>
         </div>
@@ -664,28 +877,83 @@
     const f = $('[autofocus], button, input', layer());
     if (f) f.focus();
   }
+  const extrasLine = (l) => (l.extraNames && l.extraNames.length ? ` · ${l.extraNames.map(esc).join(', ')}` : '');
+  // "Goes well with": items from the paired menu groups that are not in the cart yet.
+  function upsellHtml(lines) {
+    const u = S.c.upsell || {};
+    if (u.show === false || !lines.length) return '';
+    const have = new Set(lines.map((l) => l.group));
+    const inCart = new Set(lines.map((l) => l.itemId));
+    const want = [];
+    for (const p of u.pairs || []) if (have.has(p.from) && !have.has(p.to) && !want.includes(p.to)) want.push(p.to);
+    const picks = [];
+    for (const gid of want) {
+      const g = (S.c.menu.categories || []).find((x) => x.id === gid);
+      if (!g || g.hidden) continue;
+      const items = (g.items || []).filter((it) => !it.hidden && it.available !== false && !inCart.has(it.id) && servedNow(hoursOf(it, g)) && (it.prices || []).some((p) => !p.whole && Number(p.price) > 0));
+      items.sort((a, b) => Number(Boolean(b.badge)) - Number(Boolean(a.badge)));
+      for (const it of items.slice(0, 3)) if (picks.length < 4) picks.push(it);
+    }
+    if (!picks.length) return '';
+    return `<section class="upsell" aria-label="${esc(u.title)}"><h3>${esc(u.title || 'Goes well with your order')}</h3><div class="up-row">${picks.map((it) => {
+      const p = it.prices.find((x) => !x.whole && Number(x.price) > 0);
+      return `<article class="up">${pic(it.image, it.name, 'up-pic')}<strong>${esc(it.name)}</strong>
+        <button type="button" class="pchip" data-act="add" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}" aria-label="Add ${esc(it.name)}, ${rs(p.price)}">${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">+</i></button></article>`;
+    }).join('')}</div></section>`;
+  }
   function cartHtml() {
     const lines = cartLines();
     const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
     return `<div class="shade" data-act="close"></div>
-      <aside class="drawer" role="dialog" aria-label="Your cart">
-        <header><h2>Your cart</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close cart">${ICON.x}</button></header>
-        ${lines.length ? `<ul class="lines">${lines.map((l) => `<li>
-            <div><strong>${esc(l.name)}</strong><small>${l.label ? esc(l.label) + ' · ' : ''}${rs(l.price)}</small></div>
-            <div class="qty"><button type="button" data-act="qty" data-item="${esc(l.itemId)}" data-label="${esc(l.label)}" data-d="-1" aria-label="One less ${esc(l.name)}">−</button><span>${l.qty}</span><button type="button" data-act="qty" data-item="${esc(l.itemId)}" data-label="${esc(l.label)}" data-d="1" aria-label="One more ${esc(l.name)}">+</button></div>
+      <aside class="drawer" role="dialog" aria-label="Your order">
+        <header><h2>Your order</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>
+        ${lines.length ? `<div class="drawer-scroll"><ul class="lines">${lines.map((l) => `<li>
+            <div><strong>${esc(l.name)}</strong><small>${l.label ? esc(l.label) + ' · ' : ''}${rs(l.price)}${extrasLine(l)}</small></div>
+            <div class="qty"><button type="button" data-act="qty" data-key="${esc(l.key)}" data-d="-1" aria-label="One less ${esc(l.name)}">−</button><span>${l.qty}</span><button type="button" data-act="qty" data-key="${esc(l.key)}" data-d="1" aria-label="One more ${esc(l.name)}">+</button></div>
             <b>${rs(l.price * l.qty)}</b></li>`).join('')}</ul>
+          ${upsellHtml(lines)}</div>
           <footer><p class="sum"><span>Subtotal</span><b>${rs(total)}</b></p>
             <p class="hint">Delivery inside Hetauda adds ${rs(S.c.payment.deliveryFee)}.</p>
             <button type="button" class="btn" data-act="checkout"><span>Continue to order</span>${ICON.arrow}</button>
             <button type="button" class="btn btn--ghost" data-act="close"><span>Keep browsing</span></button></footer>`
-        : `<p class="empty">Your cart is empty. Add something from the menu.</p>`}
+        : `<p class="empty">Your order is empty. Add something from the menu.</p>
+          <footer><a class="btn" href="#menu" data-act="close"><span>See the menu</span>${ICON.arrow}</a></footer>`}
       </aside>`;
+  }
+  // Extras for one item: tick what you like, choose how many, add.
+  function openExtras(itemId, label, back) {
+    const f = findPrice(itemId, label);
+    if (!f) return;
+    const opts = extrasOf(f.group);
+    const base = Number(f.price.price);
+    openLayer(`<div class="shade" data-act="close"></div>
+      <div class="modal modal--sheet" role="dialog" aria-label="${esc(f.item.name)}">
+        <header><h2>${esc(f.item.name)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>
+        <form class="xform" data-form="extras" data-item="${esc(itemId)}" data-label="${esc(label)}" data-back="${back ? 'cart' : ''}" novalidate>
+          <p class="muted">${label ? esc(label) + ' · ' : ''}${rs(base)}</p>
+          <fieldset class="xopts"><legend>${esc((S.c.extras || {}).title || 'Make it yours')} <small>(optional)</small></legend>
+            ${opts.map((o) => `<label class="copt"><input type="checkbox" name="x" value="${esc(o.id)}" data-price="${Number(o.price) || 0}"><span><strong>${esc(o.name)}</strong></span><b>${Number(o.price) > 0 ? '+' + rs(o.price) : ''}</b></label>`).join('')}
+          </fieldset>
+          <div class="xfoot">
+            <div class="qty"><button type="button" data-step="-1" aria-label="One less">−</button><span id="x-qty">1</span><button type="button" data-step="1" aria-label="One more">+</button></div>
+            <button class="btn" type="submit"><span>Add</span><b id="x-total" data-base="${base}">${rs(base)}</b></button>
+          </div>
+          <p class="form-msg" role="alert"></p>
+        </form>
+      </div>`);
+  }
+  function extrasTotal() {
+    const t = $('#x-total');
+    if (!t) return;
+    const qty = Number($('#x-qty').textContent) || 1;
+    const add = $$('input[name=x]:checked', layer()).reduce((sum, el) => sum + Number(el.dataset.price || 0), 0);
+    t.textContent = rs((Number(t.dataset.base) + add) * qty);
   }
   function sumHtml(type) {
     const lines = cartLines();
     const sub = lines.reduce((s, l) => s + l.price * l.qty, 0);
     const fee = type === 'delivery' ? Number(S.c.payment.deliveryFee) || 0 : 0;
-    return `<ul class="lines lines--mini">${lines.map((l) => `<li><div><strong>${l.qty} × ${esc(l.name)}</strong>${l.label ? `<small>${esc(l.label)}</small>` : ''}</div><b>${rs(l.price * l.qty)}</b></li>`).join('')}
+    return `<ul class="lines lines--mini">${lines.map((l) => `<li><div><strong>${l.qty} × ${esc(l.name)}</strong>${l.label || l.extraNames.length ? `<small>${esc(l.label)}${l.label && l.extraNames.length ? ' · ' : ''}${l.extraNames.map(esc).join(', ')}</small>` : ''}</div><b>${rs(l.price * l.qty)}</b></li>`).join('')}
       ${fee ? `<li><div><strong>Delivery</strong></div><b>${rs(fee)}</b></li>` : ''}</ul>
       <p class="sum sum--big"><span>Total to pay</span><b id="co-total">${rs(sub + fee)}</b></p>`;
   }
@@ -701,7 +969,9 @@
     const pre = S.preset || {};
     const type = TABLE ? 'dinein' : (pre.type || 'pickup');
     const later = hasWhole || pre.when === 'later' || !isOpen(c);
-    const slot = pre.date ? { date: pre.date, time: pre.time } : nextSlot(c, hasWhole ? c.cake.noticeHours : 0.5);
+    const notice = Math.max(Number(c.cake.noticeHours) || 0, ...lines.map((l) => l.notice || 0));
+    const wantsPhoto = lines.some((l) => l.photo);
+    const slot = pre.date ? { date: pre.date, time: pre.time } : nextSlot(c, hasWhole ? notice : 0.5);
     const methods = ['esewa', 'fonepay'].filter((m) => c.payment[m] && c.payment[m].enabled !== false);
     const phoneNeeded = type !== 'dinein';
     return `<div class="shade" data-act="close"></div>
@@ -725,11 +995,11 @@
           <div class="f--wide grid2" id="co-when"${later ? '' : ' hidden'}>
             <div class="f"><span>Date</span><div data-bsp="date" data-value="${slot.date}"></div></div>
             <label class="f"><span>Time</span><select name="time" id="co-time">${timeOptions(c, slot.time)}</select></label>
-            ${hasWhole ? `<p class="hint f--wide">Whole cakes need at least ${esc(c.cake.noticeHours)} hours notice.</p>` : (!isOpen(c) ? `<p class="hint f--wide">We are closed right now, so please pick a time (${esc(c.brand.hoursText)}).</p>` : '')}
+            ${hasWhole ? `<p class="hint f--wide">This cake needs at least ${notice} hours notice.</p>` : (!isOpen(c) ? `<p class="hint f--wide">We are closed right now, so please pick a time (${esc(c.brand.hoursText)}).</p>` : '')}
           </div>
           ${hasWhole ? `<label class="f"><span>Name or message on the cake (optional)</span><input name="cakeMessage" id="co-cake" maxlength="120" value="${esc(pre.cakeMessage || '')}"></label>
             <label class="f"><span>Occasion (optional)</span><input name="occasion" id="co-occasion" maxlength="80" value="${esc(pre.occasion || '')}"></label>
-            <label class="f f--wide"><span>Photo of the cake design you want (optional)</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
+            <label class="f f--wide"><span>${wantsPhoto ? 'Photo to print on the cake' : 'Photo of the cake design you want (optional)'}</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
           <label class="f f--wide"><span>Notes for us (optional)</span><textarea name="notes" id="co-notes" rows="2" maxlength="500" placeholder="Less sugar, extra ice"></textarea></label>
           <fieldset class="f f--wide seg"><legend>Payment</legend>
             <input type="radio" name="method" id="co-later-pay" value="later" checked><label for="co-later-pay">Pay later</label>
@@ -777,11 +1047,20 @@
     return (await post('/api/proof', small, small.type || 'image/jpeg')).file;
   }
   const FORMS = {
-    cake(d) {
-      if (!d.cake) throw new Error('Please choose a cake.');
+    extras(d, form) {
+      const qty = Math.max(1, Math.min(50, Number($('#x-qty').textContent) || 1));
+      const ids = $$('input[name=x]:checked', form).map((el) => el.value);
+      addToCart(form.dataset.item, form.dataset.label, qty, false, ids);
+      const f = findPrice(form.dataset.item, form.dataset.label);
+      if (form.dataset.back) openLayer(cartHtml()); else closeLayer();
+      toast(`${f ? f.item.name : 'Item'} added to your order`);
+      bump();
+    },
+    cake(d, form) {
+      if (!d.cakeId || d.size === undefined) throw new Error('Please choose a cake and a size.');
       if (!d.date || !d.time) throw new Error('Please choose a date and time.');
-      const [itemId, label] = d.cake.split('|');
-      addToCart(itemId, label, Math.max(1, Math.min(20, Number(d.qty) || 1)), true);
+      const opts = $$('input[name=opt]:checked', form).map((el) => el.value);
+      addToCart(d.cakeId, d.size, Math.max(1, Math.min(20, Number(d.qty) || 1)), true, opts);
       S.preset = { when: 'later', type: 'pickup', date: d.date, time: d.time, cakeMessage: d.cakeMessage, occasion: d.occasion };
       openCheckout();
     },
@@ -811,16 +1090,19 @@
       const file = payNow ? form.elements.proof.files[0] : null;
       if (d.type !== 'dinein' && !String(d.phone || '').trim()) throw new Error('Please enter your phone number so we can reach you.');
       if (d.when === 'later' && (!d.date || !d.time)) throw new Error('Please choose a date and time.');
+      const cartSnapshot = cartLines();
       const proof = await sendPicture(file);
       const refPhoto = form.elements.ref ? await sendPicture(form.elements.ref.files[0]) : '';
       const res = await post('/api/orders', {
         name: d.name, phone: d.phone, type: d.type, address: d.address, tableNo: d.tableNo, when: d.when, date: d.date, dateBs: d.dateBs, time: d.time,
         cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto, notes: d.notes, method: d.method, proof, txn: payNow ? d.txn : '',
-        lines: cartLines().map((l) => ({ itemId: l.itemId, label: l.label, qty: l.qty })),
+        lines: cartLines().map((l) => ({ itemId: l.itemId, label: l.label, qty: l.qty, extras: l.extras })),
       });
       S.cart = [];
       S.preset = null;
       saveCart();
+      try { localStorage.setItem('pm_last_order', JSON.stringify({ id: res.id, at: Date.now(), item: (cartSnapshot[0] || {}).name || '' })); } catch (e) { /* no storage */ }
+      reviewLater();
       const atCafe = d.type === 'dinein';
       openLayer(doneHtml(atCafe ? 'Your order is in' : 'Order received', [
         `Your order number is ${res.id}. Total ${rs(res.total)}.`,
@@ -850,6 +1132,7 @@
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.id === 'cake-flavour') $('#cake-sizes').innerHTML = `<legend>Size</legend>${sizeChoices(wholeCakes(S.c).find((x) => x.id === e.target.value))}`;
     if (e.target.closest('form[data-form=cake]')) cakeTotal();
     const form = e.target.closest('form[data-form=checkout]');
     if (!form) return;
@@ -869,8 +1152,11 @@
       if (now) $('#co-qr').innerHTML = qrHtml(e.target.value);
     }
   });
+  let searchTimer = null;
   document.addEventListener('input', (e) => {
     if (e.target.id === 'cake-qty') cakeTotal();
+    if (e.target.id === 'menu-q') { S.q = e.target.value; clearTimeout(searchTimer); searchTimer = setTimeout(redrawMenu, 120); }
+    if (e.target.name === 'x') extrasTotal();
     const el = S.inline && e.target.closest && e.target.closest('[data-edit]');
     if (el) window.parent.postMessage({ pm: 'edit', path: el.dataset.edit, value: el.textContent.replace(/\s*\n\s*/g, ' ').trim() }, location.origin);
   });
@@ -879,34 +1165,52 @@
   const ACT = {
     tab(el) {
       S.tab = el.dataset.id;
-      const box = $('#menu-body');
-      const swap = () => { box.innerHTML = menuBody(S.c); if (PREVIEW) setInline(); };
+      const swap = () => redrawMenu();
       if (document.startViewTransition && document.documentElement.classList.contains('anim')) document.startViewTransition(swap);
       else swap();
     },
     cat(el) {
-      if (S.c.menu.categories.some((x) => x.id === el.dataset.id)) { S.tab = el.dataset.id; $('#menu-body').innerHTML = menuBody(S.c); }
+      if (S.c.menu.categories.some((x) => x.id === el.dataset.id)) { S.tab = el.dataset.id; S.q = ''; const q = $('#menu-q'); if (q) q.value = ''; redrawMenu(); }
     },
     add(el) {
-      addToCart(el.dataset.item, el.dataset.label, 1);
       const f = findPrice(el.dataset.item, el.dataset.label);
-      toast(`${f ? f.item.name : 'Item'} added to your cart`);
-      $$('.cart-btn').forEach((b) => { b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump'); });
+      if (!f) return;
+      const inCart = Boolean(el.closest('.drawer'));
+      if (extrasOf(f.group).length) return openExtras(el.dataset.item, el.dataset.label, inCart);
+      addToCart(el.dataset.item, el.dataset.label, 1);
+      if (inCart) openLayer(cartHtml());
+      toast(`${f.item.name} added to your order`);
+      bump();
     },
+    filter(el) {
+      S.filter = S.filter === el.dataset.id ? '' : el.dataset.id;
+      $$('.mfilter').forEach((b) => { const on = b.dataset.id === S.filter; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on); });
+      redrawMenu();
+    },
+    chat() { openLayer(chatHtml()); },
+    share(el) {
+      const e = (S.c.events.items || []).find((x) => x.id === el.dataset.id);
+      if (!e) return;
+      const url = `${location.origin}/event/${encodeURIComponent(e.id)}`;
+      if (navigator.share) navigator.share({ title: e.title, text: e.text || e.message || '', url }).catch(() => {});
+      else window.open(`https://wa.me/?text=${encodeURIComponent(`${e.title}\n${url}`)}`, '_blank', 'noopener');
+    },
+    'review-later'() { try { localStorage.setItem('pm_review_asked', String(Date.now())); } catch (e) { /* no storage */ } const b = $('#g-ask'); if (b) b.remove(); },
     event(el) { openEvent(el.dataset.id); },
     cake(el) {
-      const sel = $('#cake-select');
-      const value = `${el.dataset.item}|${el.dataset.label}`;
-      if (!sel || !Array.from(sel.options).some((o) => o.value === value)) { addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout(); }
+      const form = $('form[data-form=cake]');
+      const sel = form && form.elements.cakeId;
+      if (!sel || !Array.from(sel.options).some((o) => o.value === el.dataset.item)) { addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout(); }
       closeLayer();
-      sel.value = value;
+      sel.value = el.dataset.item;
+      $('#cake-sizes').innerHTML = `<legend>Size</legend>${sizeChoices(wholeCakes(S.c).find((x) => x.id === sel.value), el.dataset.label)}`;
       cakeTotal();
       $('#cake').scrollIntoView({ behavior: 'smooth' });
     },
     cart() { openLayer(cartHtml()); },
     qty(el) {
-      const line = S.cart.find((l) => l.itemId === el.dataset.item && l.label === el.dataset.label);
-      if (line) addToCart(line.itemId, line.label, line.qty + Number(el.dataset.d), true);
+      const line = S.cart.find((l) => lineKey(l) === el.dataset.key);
+      if (line) addToCart(line.itemId, line.label, line.qty + Number(el.dataset.d), true, line.extras);
       openLayer(cartHtml());
     },
     checkout() { openCheckout(); },
@@ -929,6 +1233,8 @@
   };
   document.addEventListener('click', (e) => {
     if (S.inline && e.target.closest('[data-edit]')) { e.preventDefault(); return; }
+    const step = e.target.closest('[data-step]');
+    if (step && $('#x-qty')) { const q = $('#x-qty'); q.textContent = Math.max(1, Math.min(50, (Number(q.textContent) || 1) + Number(step.dataset.step))); extrasTotal(); return; }
     if (S.layout) { if (!e.target.closest('#crop-tools')) e.preventDefault(); return; }
     const el = e.target.closest('[data-act]');
     if (el && ACT[el.dataset.act]) {
@@ -952,7 +1258,7 @@
     const n = $('.nav');
     if (n) n.classList.toggle('is-stuck', y > 30);
     const media = $('.hero-media img');
-    if (media && y < 900 && document.documentElement.classList.contains('anim')) media.style.transform = `translate3d(0, ${y * 0.12}px, 0) scale(calc(1.06 * var(--z, 1)))`;
+    if (media && y < 900 && document.documentElement.classList.contains('anim') && WIDE()) media.style.transform = `translate3d(0, ${y * 0.12}px, 0) scale(calc(1.06 * var(--z, 1)))`;
   }, { passive: true });
 
   /* ---------- admin preview: drag edges to resize, drag photos to move them ---------- */
@@ -1123,8 +1429,11 @@
       render();
       if (location.hash && location.hash.length > 1 && !PREVIEW) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
       else if (TABLE && !PREVIEW && $('#menu')) $('#menu').scrollIntoView();
-      if (/^#event-/.test(location.hash) && !PREVIEW) openEvent(location.hash.slice(7));
+      const evPath = location.pathname.match(/^\/event\/([^/]+)/);
+      if (evPath && !PREVIEW) openEvent(decodeURIComponent(evPath[1]));
+      else if (/^#event-/.test(location.hash) && !PREVIEW) openEvent(location.hash.slice(7));
       else showClosedNotice();
+      reviewLater();
     } catch (err) {
       $('#app').innerHTML = '<p class="boot">The website could not load. Please refresh the page.</p>';
     }

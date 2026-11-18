@@ -44,6 +44,7 @@ function cat(name, note, rows) {
         badge: '',
         image: pid ? photo(pid, 600) : '',
         available: true,
+        tags: [],
         prices,
         ...(extra || {}),
       };
@@ -176,6 +177,9 @@ module.exports = {
     title: 'Pick what you love',
     note: 'All prices in NPR. Delivery inside Hetauda costs Rs. 150 extra.',
     layout: 'list',
+    // Small marks on items (veg, eggless...) and the search box above the tabs.
+    marks: { show: true, filter: true },
+    search: true,
     categories: [
       cat('Hot Coffee', '', [
         ['Espresso', two(140, 200, 'Single', 'Double')],
@@ -260,16 +264,16 @@ module.exports = {
         ['Cookies and Cream', one(180)],
       ]),
       cat('Snacks', '', [
-        ['Hot Dog (Chicken)', one(265)],
-        ['Hot Dog (Veg)', one(0), { available: false }],
-        ['Sandwich (Chicken)', one(280)],
-        ['Sandwich (Veg)', one(250)],
+        ['Hot Dog (Chicken)', one(265), { tags: ['nonveg'] }],
+        ['Hot Dog (Veg)', one(0), { available: false, tags: ['veg'] }],
+        ['Sandwich (Chicken)', one(280), { tags: ['nonveg'] }],
+        ['Sandwich (Veg)', one(250), { tags: ['veg'] }],
       ]),
       cat('Ramen', '', [
-        ['Veg Ramen', one(290)],
-        ['Egg Ramen', one(360)],
-        ['Sausage Ramen', one(390)],
-        ['Mix Ramen', one(430)],
+        ['Veg Ramen', one(290), { tags: ['veg'] }],
+        ['Egg Ramen', one(360), { tags: ['nonveg'] }],
+        ['Sausage Ramen', one(390), { tags: ['nonveg'] }],
+        ['Mix Ramen', one(430), { tags: ['nonveg'] }],
       ]),
     ],
   },
@@ -280,6 +284,16 @@ module.exports = {
     image: photo('1464349095431-e9a21285b5f3', 1200),
     noticeHours: 8,
     button: 'Continue',
+    // How many people one pound of cake serves, for the guide next to each size.
+    serveMin: 4,
+    serveMax: 6,
+    // Choices on a whole cake. Prices are per pound when "perPound" is on. Extra notice is in hours.
+    options: [
+      { id: 'candles', name: 'Candles and a cake knife', note: '', price: 0, perPound: false, notice: 0, show: true },
+      { id: 'eggless', name: 'Eggless', note: '', price: 100, perPound: true, notice: 0, show: false },
+      { id: 'sugarfree', name: 'Sugar-free', note: '', price: 100, perPound: true, notice: 0, show: false },
+      { id: 'photo', name: 'Photo printed on top', note: 'Add your photo at the next step', price: 300, perPound: false, notice: 48, show: false },
+    ],
   },
   booking: {
     script: 'Save your seat',
@@ -312,6 +326,10 @@ module.exports = {
     script: 'Kind words',
     title: 'What our guests say',
     formTitle: 'Leave a review',
+    // In Google Business Profile, "Ask for reviews" gives a link that opens the review box. Paste it here.
+    googleLink: '',
+    googleAsk: 'Enjoyed it? A Google review helps a small cafe a lot.',
+    googleButton: 'Review us on Google',
     rating: '',
     count: '',
     thanks: 'Thank you. Your review will appear here after we read it.',
@@ -329,6 +347,48 @@ module.exports = {
     { type: 'facebook', url: '', show: true },
     { type: 'tiktok', url: '', show: true },
   ],
+  // Choices customers can add to a drink (less sugar, extra shot...). Each set applies to the menu groups listed.
+  extras: {
+    show: true,
+    title: 'Make it yours',
+    groups: [
+      { id: 'coffee', name: 'Coffee', categories: ['hot-coffee', 'iced-coffee'], show: true, options: [
+        { id: 'less-sugar', name: 'Less sugar', price: 0, show: true },
+        { id: 'no-sugar', name: 'No sugar', price: 0, show: true },
+        { id: 'extra-shot', name: 'Extra shot', price: 60, show: false },
+        { id: 'whipped-cream', name: 'Whipped cream', price: 50, show: false },
+      ] },
+      { id: 'cold', name: 'Cold drinks', categories: ['iced-coffee', 'mocktails', 'shakes-lattes'], show: true, options: [
+        { id: 'less-ice', name: 'Less ice', price: 0, show: true },
+        { id: 'no-ice', name: 'No ice', price: 0, show: true },
+      ] },
+      { id: 'tea', name: 'Tea', categories: ['tea'], show: true, options: [
+        { id: 'less-sugar', name: 'Less sugar', price: 0, show: true },
+        { id: 'no-sugar', name: 'No sugar', price: 0, show: true },
+      ] },
+    ],
+  },
+  // "Goes well with" suggestions in the cart: when the cart has something from the first group, suggest items from the second.
+  upsell: {
+    show: true,
+    title: 'Goes well with your order',
+    pairs: [
+      { from: 'hot-coffee', to: 'cheesecake' },
+      { from: 'iced-coffee', to: 'cheesecake' },
+      { from: 'tea', to: 'cakes-pastries' },
+      { from: 'mocktails', to: 'snacks' },
+    ],
+  },
+  // What Google and link previews (WhatsApp, Facebook) show.
+  seo: {
+    title: 'Pick Me Cafe | Coffee, Cheesecake and Mocktails in Hetauda',
+    description: 'Pick Me Cafe in Sigreni, Hetauda-12. Coffee, cheesecake, mocktails and ice cream. Order online, book a table or pre-order a cake. Open 7 AM to 7 PM every day.',
+    image: '',
+    city: 'Hetauda',
+    region: 'Bagmati Province',
+    lat: 27.415735,
+    lng: 84.985909,
+  },
   // The round buttons in the bottom corner of every page.
   socialBar: { show: true, whatsapp: true },
   // Shown when the cafe is closed for a day (or until a date).

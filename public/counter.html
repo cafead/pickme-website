@@ -181,7 +181,7 @@
       <p>${contact(o)}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}
-      <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
+      <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` <em>+ ${esc(l.extras.join(', '))}</em>` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}${o.paid ? ' · checked' : ''}</p>
       <footer>
@@ -267,7 +267,7 @@
     $('slip').innerHTML = `<p style="text-align:center"><b>${esc(S.cafe.toUpperCase())}</b><br>${esc(o.id)} · ${TYPE[o.type].toUpperCase()}<br>${when(o.createdAt)}</p><hr>
       <p>${esc(o.name || 'Guest')}${o.phone ? `, ${esc(o.phone)}` : ''}${o.address ? `<br>Address: ${esc(o.address)}` : ''}${o.tableNo ? `<br>Table: ${esc(o.tableNo)}` : ''}
       <br>For: ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p><hr>
-      ${o.lines.map((l) => `<p>${l.qty} x ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''} = ${rs(l.qty * l.price)}</p>`).join('')}
+      ${o.lines.map((l) => `<p>${l.qty} x ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` + ${esc(l.extras.join(', '))}` : ''} = ${rs(l.qty * l.price)}</p>`).join('')}
       ${o.deliveryFee ? `<p>Delivery = ${rs(o.deliveryFee)}</p>` : ''}<hr>
       <p><b>TOTAL ${rs(o.total)}</b> · ${o.payment.method === 'later' ? 'pay later' : o.payment.method}${o.paid ? ', payment checked' : ''}</p>
       ${o.cakeMessage ? `<p>On the cake: <b>${esc(o.cakeMessage)}</b></p>` : ''}${o.occasion ? `<p>Occasion: ${esc(o.occasion)}</p>` : ''}${o.notes ? `<p>Notes: ${esc(o.notes)}</p>` : ''}`;

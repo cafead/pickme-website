@@ -65,6 +65,20 @@ if (/from the Nepali calendar/.test(content.data.booking.text || '')) {
   content.data.booking.text = content.data.booking.text.replace('Choose a date from the Nepali calendar', 'Choose a date');
   content.set(content.data);
 }
+// Version 5: items get food marks. Old menus get veg / non-veg marks guessed from item names, once.
+function markFood(data) {
+  let touched = false;
+  for (const g of (data.menu && data.menu.categories) || []) {
+    for (const it of g.items || []) {
+      if (Array.isArray(it.tags)) continue;
+      const n = String(it.name || '');
+      it.tags = /\bveg\b/i.test(n) ? ['veg'] : /chicken|sausage|\begg\b|\bmix\b|buff|mutton|pork|\bham\b|fish|prawn|bacon/i.test(n) ? ['nonveg'] : [];
+      touched = true;
+    }
+  }
+  return touched;
+}
+if (markFood(content.data)) content.set(content.data);
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -103,6 +117,8 @@ const SECTION_NAMES = {
   events: 'Events', menu: 'Menu', cake: 'Cake pre-order', booking: 'Table booking', story: 'Our story', gallery: 'Gallery',
   reviews: 'Reviews section', visit: 'Map and messages', social: 'Social links', payment: 'Payment', footer: 'Footer',
   sizes: 'Sizes', crops: 'Photo positions', categories: '', items: '', prices: '', cards: '', images: '',
+  extras: 'Drink extras', upsell: 'Goes well with', seo: 'Google and link previews', closure: 'Closed notice', socialBar: 'Social buttons',
+  groups: '', options: '', pairs: '',
 };
 const isPhoto = (v) => typeof v === 'string' && /^(https?:\/\/|\/uploads\/)/.test(v);
 function shortValue(v) {
@@ -319,7 +335,7 @@ function orderText(o) {
     `${TYPE_LABEL[o.type]}${o.address ? `: ${o.address}` : ''}${o.tableNo ? `, table ${o.tableNo}` : ''}`,
     o.schedule ? `For: ${o.schedule.bs || o.schedule.date} at ${o.schedule.time}` : 'For: as soon as possible',
     '',
-    ...o.lines.map((l) => `${l.qty} x ${l.name}${l.label ? ` (${l.label})` : ''} = Rs. ${l.qty * l.price}`),
+    ...o.lines.map((l) => `${l.qty} x ${lineName(l)} = Rs. ${l.qty * l.price}`),
     o.deliveryFee ? `Delivery = Rs. ${o.deliveryFee}` : null,
     `Total: Rs. ${o.total}`,
     o.cakeMessage ? `On the cake: ${o.cakeMessage}` : null,
@@ -356,8 +372,120 @@ const rawImage = express.raw({ type: () => true, limit: '8mb' });
 const json = express.json({ limit: '3mb' });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+/* ---------- pages: what Google and link previews (WhatsApp, Facebook) read ---------- */
+const PAGE = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+const attr = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const siteBase = (req) => `${req.protocol}://${req.get('host')}`;
+const absUrl = (base, u) => (/^https?:\/\//i.test(u || '') ? u : /^\/(?!\/)/.test(u || '') ? base + u : '');
+function liveEvents(c, includeComing) {
+  const today = nepalDate();
+  return (c.events.items || []).filter((e) => {
+    if (e.enabled === false || !/^\d{4}-\d{2}-\d{2}$/.test(e.start || '') || !e.id) return false;
+    const end = new Date(Date.parse(e.start) + (Number(e.days) || 1) * 864e5).toISOString().slice(0, 10);
+    return (includeComing || e.start <= today) && today < end;
+  });
+}
+// Structured details for Google: what the cafe is, where, when it is open, and the menu with prices.
+function cafeData(c, base) {
+  const seo = c.seo || {};
+  const d = String(c.brand.phone || c.brand.whatsapp || '').replace(/\D/g, '');
+  const phone = /^9\d{9}$/.test(d) ? `+977-${d}` : d ? `+${d}` : undefined;
+  const parts = String(c.brand.address || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const sections = (c.menu.categories || []).filter((g) => !g.hidden).map((g) => ({
+    '@type': 'MenuSection',
+    name: g.name,
+    hasMenuItem: (g.items || []).filter((it) => !it.hidden).map((it) => {
+      const p = (it.prices || []).filter((x) => Number(x.price) > 0);
+      return {
+        '@type': 'MenuItem',
+        name: it.name,
+        ...(it.desc ? { description: it.desc } : {}),
+        ...((it.tags || []).includes('veg') ? { suitableForDiet: 'https://schema.org/VegetarianDiet' } : {}),
+        offers: p.map((x) => ({ '@type': 'Offer', name: x.label || undefined, price: Number(x.price), priceCurrency: 'NPR' })),
+      };
+    }).filter((x) => x.offers.length),
+  })).filter((x) => x.hasMenuItem.length);
+  const prices = sections.flatMap((x) => x.hasMenuItem.flatMap((i) => i.offers.map((o) => o.price)));
+  const image = absUrl(base, seo.image || c.hero.image);
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CafeOrCoffeeShop',
+    '@id': base + '/#cafe',
+    name: c.brand.name,
+    url: base + '/',
+    ...(image ? { image: [image] } : {}),
+    ...(phone ? { telephone: phone } : {}),
+    address: { '@type': 'PostalAddress', streetAddress: parts.slice(0, 2).join(', '), addressLocality: seo.city || 'Hetauda', addressRegion: seo.region || undefined, addressCountry: 'NP' },
+    ...(Number(seo.lat) && Number(seo.lng) ? { geo: { '@type': 'GeoCoordinates', latitude: Number(seo.lat), longitude: Number(seo.lng) } } : {}),
+    ...(/^https?:/.test(c.visit.mapLink || '') ? { hasMap: c.visit.mapLink } : {}),
+    openingHoursSpecification: [{ '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], opens: c.brand.open, closes: c.brand.close }],
+    servesCuisine: ['Coffee', 'Cheesecake', 'Mocktails', 'Desserts'],
+    ...(prices.length ? { priceRange: `Rs. ${Math.min(...prices)} to Rs. ${Math.max(...prices)}` } : {}),
+    currenciesAccepted: 'NPR',
+    acceptsReservations: true,
+    hasMenu: { '@type': 'Menu', url: base + '/#menu', hasMenuSection: sections },
+    sameAs: (c.social || []).filter((x) => x.show !== false && /^https?:\/\//.test(x.url || '')).map((x) => x.url),
+  };
+}
+function renderPage(req, opts) {
+  const c = content.get();
+  const base = siteBase(req);
+  const seo = c.seo || {};
+  const o = Object.assign({ title: seo.title || c.brand.name, description: seo.description || '', image: seo.image || c.hero.image, url: base + '/' }, opts || {});
+  const image = absUrl(base, o.image);
+  const head = [
+    `<link rel="canonical" href="${attr(o.url)}">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="${attr(c.brand.name)}">`,
+    `<meta property="og:title" content="${attr(o.title)}">`,
+    `<meta property="og:description" content="${attr(o.description)}">`,
+    `<meta property="og:url" content="${attr(o.url)}">`,
+    image ? `<meta property="og:image" content="${attr(image)}">` : '',
+    `<meta name="twitter:card" content="summary_large_image">`,
+    o.noindex ? '<meta name="robots" content="noindex, nofollow">' : '',
+    o.noindex ? '' : `<script type="application/ld+json">${JSON.stringify(cafeData(c, base)).replace(/</g, '\\u003c')}</script>`,
+  ].filter(Boolean).join('\n');
+  return PAGE
+    .replace(/<title>[^<]*<\/title>/, `<title>${attr(o.title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${attr(o.description)}">`)
+    .replace(/<meta name="theme-color" content="[^"]*">/, `<meta name="theme-color" content="${attr(/^#[0-9a-f]{3,8}$/i.test(c.theme.bg || '') ? c.theme.bg : '#FBF6EE')}">`)
+    .replace('<!--SEO-->', head);
+}
+const sendPage = (res, html) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(html); };
+app.get(['/', '/index.html'], (req, res) => sendPage(res, renderPage(req)));
 // /admin is an easier address to type and share than /#admin. Both open the editor.
-app.get(['/admin', '/admin/'], (req, res) => res.sendFile(path.join(ROOT, 'public', 'index.html')));
+app.get(['/admin', '/admin/'], (req, res) => sendPage(res, renderPage(req, { noindex: true, title: 'Admin | ' + content.get().brand.name })));
+// Each event has its own address, so a shared link shows the event's photo and title.
+app.get('/event/:id', (req, res) => {
+  const c = content.get();
+  const e = (c.events.items || []).find((x) => x.id === req.params.id && x.enabled !== false);
+  if (!e) return res.redirect(302, '/');
+  sendPage(res, renderPage(req, {
+    title: `${e.title} | ${c.brand.name}`,
+    description: e.message || e.text || (c.seo || {}).description,
+    image: e.image || (e.photos || []).map((p) => p.image).find(Boolean) || '',
+    url: `${siteBase(req)}/event/${encodeURIComponent(e.id)}`,
+  }));
+});
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /counter\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
+});
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteBase(req);
+  const urls = [`${base}/`, ...liveEvents(content.get(), true).map((e) => `${base}/event/${encodeURIComponent(e.id)}`)];
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${attr(u)}</loc></url>`).join('\n')}\n</urlset>\n`);
+});
+// Lets people add the website to their phone's home screen like an app.
+app.get('/manifest.webmanifest', (req, res) => {
+  const c = content.get();
+  const logo = /^(\/(?!\/)|https:\/\/)/.test(c.brand.logo || '') ? c.brand.logo : '/img/logo.png';
+  res.type('application/manifest+json').send(JSON.stringify({
+    name: c.brand.name, short_name: c.brand.shortName || c.brand.name, start_url: '/', display: 'standalone',
+    background_color: c.theme.bg || '#FBF6EE', theme_color: c.theme.bg || '#FBF6EE',
+    icons: [{ src: logo, sizes: 'any', purpose: 'any' }],
+  }));
+});
 
 /* public: content and reviews */
 app.get('/api/content', (req, res) => res.json(content.get()));
@@ -399,19 +527,43 @@ app.post('/api/proof', limit('proof', 80, 30 * 60e3), rawImage, async (req, res)
 // Looks up a price in the menu, or in the special menu of a switched-on event.
 function findPrice(itemId, label) {
   const c = content.get();
-  const groups = (c.menu.categories || []).map((g) => ({ items: g.items, hidden: g.hidden }))
-    .concat((c.events.items || []).filter((e) => e.enabled !== false).map((e) => ({ items: e.menu })));
+  const groups = (c.menu.categories || []).map((g) => ({ id: g.id, items: g.items, hidden: g.hidden, timeFrom: g.timeFrom, timeTo: g.timeTo }))
+    .concat((c.events.items || []).filter((e) => e.enabled !== false).map((e) => ({ id: 'event-' + e.id, items: e.menu })));
   for (const g of groups) {
     for (const it of g.items || []) {
       if (it.id !== itemId) continue;
       const p = (it.prices || []).find((x) => (x.label || '') === (label || ''));
       if (!p) return null;
       const off = g.hidden || it.hidden || it.available === false;
-      return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p };
+      // An item (or its group) can be served only between two times, for example a morning combo.
+      const hours = it.timeFrom || it.timeTo ? { from: it.timeFrom, to: it.timeTo } : (g.timeFrom || g.timeTo ? { from: g.timeFrom, to: g.timeTo } : null);
+      return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p, group: g.id, hours };
     }
   }
   return null;
 }
+// Choices a customer can add to an item (less sugar, extra shot), from the extras sets that cover its menu group.
+function extrasFor(groupId) {
+  const x = content.get().extras || {};
+  if (x.show === false) return [];
+  const out = [];
+  for (const g of x.groups || []) {
+    if (g.show === false || !(g.categories || []).includes(groupId)) continue;
+    for (const o of g.options || []) if (o.show !== false && o.id && o.name && !out.some((y) => y.id === o.id)) out.push(o);
+  }
+  return out;
+}
+// How many pounds a cake size is, read from its name ("Half Pound", "1 Pound", "2 lb", "1 kg").
+function pounds(label) {
+  const t = String(label || '').toLowerCase();
+  if (/half/.test(t)) return 0.5;
+  const m = t.match(/(\d+(?:\.\d+)?)\s*(pound|lb|kg)/);
+  if (!m) return 1;
+  return m[2] === 'kg' ? Number(m[1]) * 2.2 : Number(m[1]);
+}
+const cakeOptions = () => ((content.get().cake || {}).options || []).filter((o) => o.show !== false && o.id && o.name);
+const t12 = (t) => { const [h, m] = String(t).split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+const lineName = (l) => `${l.name}${l.label ? ` (${l.label})` : ''}${l.extras && l.extras.length ? ` + ${l.extras.join(', ')}` : ''}`;
 const nepalDate = () => new Date(Date.now() + NP_OFFSET).toISOString().slice(0, 10);
 // The "closed today" notice. Returns it while it applies, otherwise null.
 function closedNotice() {
@@ -433,7 +585,7 @@ function checkSchedule(date, time, minLeadHours) {
   if (Number.isNaN(ts)) return 'Please choose a date and time.';
   if (time < c.brand.open || time > c.brand.close) return `We are open ${c.brand.hoursText}. Please choose a time in those hours.`;
   if (ts < Date.now() + minLeadHours * 3600e3 - 60e3) {
-    return minLeadHours ? `Whole cakes need at least ${minLeadHours} hours notice. Please choose a later time.` : 'That time has already passed. Please choose a later time.';
+    return minLeadHours ? `This cake needs at least ${minLeadHours} hours notice. Please choose a later time.` : 'That time has already passed. Please choose a later time.';
   }
   if (ts > Date.now() + 180 * 864e5) return 'Please choose a date within the next 6 months.';
   return null;
@@ -455,20 +607,46 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 60) return bad(res, 'Your cart is empty.');
   const lines = [];
   let hasWhole = false;
+  let extraNotice = 0;
+  const timed = [];
+  const changedMsg = 'Something in your cart has changed. Please refresh the page and add it again.';
   for (const l of b.lines) {
     const found = findPrice(str(l.itemId, 120), str(l.label, 60));
     const qty = Math.round(Number(l.qty));
-    if (!found || !(qty >= 1 && qty <= 50)) return bad(res, 'Something in your cart has changed. Please refresh the page and add it again.');
+    if (!found || !(qty >= 1 && qty <= 50)) return bad(res, changedMsg);
     if (found.item.available === false || !(Number(found.price.price) > 0)) return bad(res, `${found.item.name} is not available right now. Please remove it from your cart.`);
-    if (found.price.whole) hasWhole = true;
-    lines.push({ itemId: found.item.id, name: found.item.name, label: found.price.label || '', price: Number(found.price.price), qty, whole: Boolean(found.price.whole) });
+    const whole = Boolean(found.price.whole);
+    if (whole) hasWhole = true;
+    // Extras and cake choices are priced here, never by the browser.
+    const asked = Array.isArray(l.extras) ? [...new Set(l.extras.map((x) => str(x, 60)).filter(Boolean))].slice(0, 12) : [];
+    const allowed = whole ? cakeOptions() : extrasFor(found.group);
+    const picked = [];
+    let add = 0;
+    for (const id of asked) {
+      const o = allowed.find((x) => x.id === id);
+      if (!o) return bad(res, changedMsg);
+      const cost = Math.max(0, Number(o.price) || 0) * (whole && o.perPound ? pounds(found.price.label) : 1);
+      add += Math.round(cost);
+      picked.push(o.name);
+      if (whole) extraNotice = Math.max(extraNotice, Number(o.notice) || 0);
+    }
+    if (found.hours) timed.push({ name: found.item.name, ...found.hours });
+    lines.push({ itemId: found.item.id, name: found.item.name, label: found.price.label || '', extras: picked, extraIds: asked, price: Number(found.price.price) + add, qty, whole });
   }
 
   let schedule = null;
+  const servedAt = (time) => {
+    for (const t of timed) {
+      if ((t.from && time < t.from) || (t.to && time > t.to)) {
+        return `${t.name} is served ${t.from && t.to ? `from ${t12(t.from)} to ${t12(t.to)}` : t.from ? `after ${t12(t.from)}` : `until ${t12(t.to)}`}. Please remove it or choose another time.`;
+      }
+    }
+    return '';
+  };
   if (b.when === 'later' || hasWhole) {
     const date = str(b.date, 10);
     const time = str(b.time, 5);
-    const err = checkSchedule(date, time, hasWhole ? Number(c.cake.noticeHours) || 0 : 0);
+    const err = checkSchedule(date, time, hasWhole ? Math.max(Number(c.cake.noticeHours) || 0, extraNotice) : 0) || servedAt(time);
     if (err) return bad(res, err);
     schedule = { date, time, bs: str(b.dateBs, 40) };
     const shut = closedFor(date);
@@ -478,6 +656,8 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
     if (shut) return bad(res, closedNotice().allowLater ? `${shut} You can still order for a later day: choose "Later".` : shut);
     const now = nepalTime();
     if (now < c.brand.open || now > c.brand.close) return bad(res, `We are closed right now (open ${c.brand.hoursText}). Choose "Later" to schedule your order.`);
+    const off = servedAt(now);
+    if (off) return bad(res, off);
   }
 
   // Paying online is optional. Without it the order is "pay later" (at the counter or on delivery).
@@ -782,7 +962,7 @@ app.get('/api/desk/day.csv', desk, (req, res) => {
     rows.push([
       o.id, new Date(Date.parse(o.createdAt) + NP_OFFSET).toISOString().slice(11, 16), o.schedule ? `${o.schedule.date} ${o.schedule.time}` : 'now',
       TYPE_LABEL[o.type] || o.type, o.tableNo, o.name, o.phone,
-      o.lines.map((l) => `${l.qty} x ${l.name}${l.label ? ` (${l.label})` : ''}`).join('; '),
+      o.lines.map((l) => `${l.qty} x ${lineName(l)}`).join('; '),
       o.total, PAY_LABEL[o.payment.method] || o.payment.method, o.paid ? 'yes' : 'no', o.status, [o.cakeMessage && `Cake: ${o.cakeMessage}`, o.notes].filter(Boolean).join(' | '),
     ]);
   }
@@ -856,6 +1036,7 @@ async function restoreBackup(buf, by) {
     const current = content.get();
     if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by, note: 'Website before the backup was restored', changes: [] }, current);
     const next = fillDefaults(saved, freshDefaults());
+    markFood(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);
@@ -904,6 +1085,7 @@ app.use('/uploads', express.static(UPLOADS, {
 }));
 app.use(express.static(path.join(ROOT, 'public'), {
   extensions: ['html'],
+  index: false,
   setHeaders: (res, file) => { if (/\.(html|js|css)$/.test(file)) res.set('Cache-Control', 'no-cache'); },
 }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));

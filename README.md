@@ -8,7 +8,9 @@ The full website for Pick Me Cafe (Sigreni, Hetauda-12). One small Node.js serve
 | `/admin` (or `/#admin`) | The editor: change every text, photo, colour, font, price and section with a live preview beside it; orders, bookings, reviews, messages, staff logins, backup | Owner |
 | `/counter` | The counter screen: live orders, cake pre-orders and table bookings, payment screenshots, status updates, printable slips | Staff or owner |
 
-There is no build step.
+There is no build step. The website is built for phones first: on a phone, a bar along the bottom holds Menu, Cake, Book, Chat and the order, and the menu tabs stay at the top while you scroll. Computers get the wider layout.
+
+Other addresses: `/event/<event id>` opens one event (for sharing: the link preview shows the event's photo and title), `/sitemap.xml` and `/robots.txt` are for Google, and `/manifest.webmanifest` lets people add the site to their phone's home screen.
 
 ## What is where
 
@@ -84,10 +86,12 @@ Go to `/#admin` and log in (or press Ctrl+Shift+D on the website).
 
 - **Edit website**: the left side has every part of the site. Open one, change it, and the right side shows the result straight away. Nothing is public until you press **Save**.
 - **Edit text on the page**: switch this on above the preview, then click any dashed text in the preview and type.
-- **Photos**: every photo has an Upload button. Large phone photos are made smaller automatically. The site starts with stock photos from Unsplash, including one per menu item; check each one and replace it with your own.
+- **Photos**: every photo has an Upload button. Large phone photos are made smaller automatically before they upload (menu photos to 900 px, other photos to 1800 px, saved as WebP when the browser can). The site starts with stock photos from Unsplash, including one per menu item; check each one and replace it with your own.
 - **Logo**: Cafe details and logo.
 - **Colours, fonts and sizes**: colours, three fonts, heading and text size, page width, height of the top area, space between sections, corner roundness, the photo border theme, and whether photos blend into the background.
-- **Menu**: each group is a tab on the site. Items can have a photo, a short description, a badge, and one price or several sizes. Choose between a simple list and photo cards. Tick "Whole cake: pre-order only" for a price that needs notice.
+- **Menu**: each group is a tab on the site. Items can have a photo, a short description, a badge, food marks (veg, non-veg, eggless, sugar-free, contains nuts, spicy), and one price or several sizes. An item or a whole group can be served only between two times (for example a morning combo); outside those times it shows "Served 7:00 AM to 10:00 AM" and cannot be ordered. Choose between a simple list and photo cards. Tick "Whole cake: pre-order only" for a price that needs notice. The search box and the "Veg only" / "Eggless" filters can be switched off here.
+- **Drink extras**: sets of extras (less sugar, extra shot, whipped cream, less ice...) for the menu groups you tick. When a customer adds an item from those groups, a small sheet lets them tick extras and choose how many. Free extras show no price; priced ones add to the item. Extra shot and whipped cream start switched off until you check their prices.
+- **Goes well with**: pairs of menu groups. When the cart has a coffee, the cart suggests cheesecakes, and so on. Items with a badge are suggested first.
 - **Payment QR codes**: upload the eSewa and Fonepay QR pictures. Until you do, checkout shows a note that the QR is not added yet.
 - **Events and specials**: each event has a start date and a number of days, and appears and disappears on its own. Give it photos with a few words each, a message ("Choose your cake and grab it"), and special menu items with prices: its button then opens an event page where customers order, and the specials show first in the menu with a ✦. Each event has its own photo border theme, and can switch the whole website to it while it shows. "Show the events section" hides the section; it also hides itself when no event is showing.
 - **Event calendar and reminders**: 17 cake days (Christmas, New Year, Valentine's, Holi, Nepali New Year, Mother's and Father's Day, Teachers' Day, Teej, Dashain, Tihar, Halloween and more). Two weeks before each one, a reminder shows at the top of admin with a "Make the event" button that fills in the dates, text and border. Lunar festivals move every year: type this year's date under "Edit the calendar" (only Holi 2027, 21 March, is filled in, from the official 2083 holiday list).
@@ -96,7 +100,9 @@ Go to `/#admin` and log in (or press Ctrl+Shift+D on the website).
 - **Closed notice**: for a holiday or emergency. A red bar shows on every page and visitors see your message (with a photo if you like) once. Set the last closed day and it switches off by itself. Orders and bookings for closed days are refused; later days can still be ordered.
 - **Social media buttons**: Instagram, Facebook, TikTok, YouTube, Viber, Google Maps or any link, each with "Show". They sit as round buttons next to WhatsApp in the bottom corner, and in the footer.
 - **Map**: height and width are set in "Map and messages" (normal is 240 px high and half the page wide), or by dragging in Edit layout.
-- **Reviews section**: type your real Google rating and review count to show them; leave them empty to hide.
+- **Reviews section**: type your real Google rating and review count to show them; leave them empty to hide. Paste your Google review link (Google Business Profile › Ask for reviews) to get the "Review us on Google" button, a review card on the Table QR sheet, and a gentle "Enjoyed it?" note that customers see once, about 25 minutes after they order. Until you paste it, these use your Google Maps link.
+- **Cake pre-order**: how many people one pound serves (shown next to each size), and the cake choices: candles and knife (free), eggless and sugar-free (priced per pound), photo printed on top (needs 48 hours). Each choice has its own price and notice; the priced ones start switched off until you check the prices.
+- **Google and link previews**: the title and description Google shows, and the photo a shared link shows on WhatsApp, Facebook and Viber. Your hours, address, phone and menu prices are sent to Google from the rest of the website.
 - **Orders**: one day at a time (today first), placed that day or due that day, with totals (paid, not paid, still to do) and a "Download this day" spreadsheet. Each order has quick buttons (Acknowledge, Mark done, Mark paid), a status (pending, acknowledged, preparing, ready, done, cancelled), and its own history of who changed what and when. Filter by status or "Not paid".
 - **Bookings, Reviews, Messages**: see and update each one. Tick "Show on website" for the reviews you want. Paste Google reviews with "Add a review yourself".
 - **Edit text and Edit layout** (above the preview): type straight onto the page, or drag the edge of a photo or box to resize it (the page makes room on its own). Drag a photo to move it inside its frame; the small bar on it zooms in, zooms out, shows the whole photo, or resets. Each photo field also has "Adjust position and zoom" sliders. Sizes apply on computers; phones keep their own layout.
@@ -131,9 +137,17 @@ Go to `/counter`. Staff log in with the login ID and password you made for them 
 - **Payment**: "Pay later" is the default (at the counter or on delivery). Guests who want to pay now choose eSewa or Fonepay, scan your QR, and can upload a screenshot or type the transaction code. The order is saved as unpaid until someone ticks "Payment checked". The site does not talk to eSewa or Fonepay, so always check the money arrived.
 - **Where orders go**: every order and booking appears straight away in admin and on the counter screen. For an automatic WhatsApp message to your phone, set up the WhatsApp alert above. Guests ordering for pickup or delivery also get a button to send the order to your WhatsApp themselves.
 
+## Google: do these once
+
+1. Open your Google Business Profile (search "Pick Me Cafe Hetauda" on Google while signed in, or business.google.com).
+2. Set **Website**, **Menu link** and **Order online** to your website address, and **Reservations** to your address followed by `/#booking`.
+3. Choose **Ask for reviews**, copy the link, and paste it in admin › Reviews section › Google review link. Then print the Table QR sheet again to get the review card.
+4. Optional: in Google Search Console, add your website and send it `/sitemap.xml`.
+
 ## Notes
 
-- Prices are always taken from the saved menu (and event specials) on the server, so a customer cannot change a price in their browser. Hidden or unavailable items cannot be ordered.
+- Prices are always taken from the saved menu (and event specials) on the server, including extras and cake choices, so a customer cannot change a price in their browser. Hidden or unavailable items, switched-off extras and items outside their serving hours cannot be ordered.
+- When version 5 first starts on an older website, it guesses veg and non-veg marks from item names (Veg, Chicken, Egg, Sausage, Mix). Check them in the menu.
 - Whole cakes need the notice set in admin (8 hours to start with). Times must be inside opening hours.
 - Menu descriptions and badges start empty, apart from "House special" on the Pick Me Double Shot on Ice. Add your own in admin.
 - Every date picker uses the Nepali (BS) calendar, with the English date shown small under each day. It covers BS 2082 to 2090. Add more years to the `DAYS` table in `public/js/bs.js` when needed.

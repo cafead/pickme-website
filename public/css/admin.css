@@ -187,3 +187,8 @@
 .ad-avail-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #F4F0EA; }
 .ad-avail-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 6px 10px; border-top: 1px solid #EFE8DC; font-size: .92rem; }
 .ad-avail .ad-check { gap: 6px; font-size: .85rem; }
+/* version 5: tick lists (food marks, menu groups) */
+.ad-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.ad-checks .ad-check { font-size: .92rem; }
+.ad-qr--google figcaption b { color: #1a73e8; }
+.ad-card li em { font-style: normal; color: #6F5B48; font-size: .9em; }
