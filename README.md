@@ -20,6 +20,8 @@ There is no build step.
 | `public/js/admin.js`, `public/css/admin.css` | The admin editor |
 | `public/counter.html` | The counter screen |
 | `public/js/bs.js` | Nepali calendar (BS 2082 to 2090) |
+| `public/css/borders.css`, `public/img/borders/` | The photo border themes (made by `tools/borders.py`) |
+| `seed/` (optional) | Put a website backup `.zip` here and a fresh install starts from it (see Backups) |
 | `data/` (created when it runs) | Saved content, orders, bookings, reviews, messages, logins, uploaded photos, payment screenshots, activity log |
 
 ## Run it on your computer
@@ -84,25 +86,42 @@ Go to `/#admin` and log in (or press Ctrl+Shift+D on the website).
 - **Edit text on the page**: switch this on above the preview, then click any dashed text in the preview and type.
 - **Photos**: every photo has an Upload button. Large phone photos are made smaller automatically. The site starts with stock photos from Unsplash, including one per menu item; check each one and replace it with your own.
 - **Logo**: Cafe details and logo.
-- **Colours, fonts and sizes**: colours, three fonts, heading and text size, page width, height of the top area, corner roundness, and whether photos blend into the background.
+- **Colours, fonts and sizes**: colours, three fonts, heading and text size, page width, height of the top area, space between sections, corner roundness, the photo border theme, and whether photos blend into the background.
 - **Menu**: each group is a tab on the site. Items can have a photo, a short description, a badge, and one price or several sizes. Choose between a simple list and photo cards. Tick "Whole cake: pre-order only" for a price that needs notice.
 - **Payment QR codes**: upload the eSewa and Fonepay QR pictures. Until you do, checkout shows a note that the QR is not added yet.
-- **Events**: each slide has a start date and a number of days. It appears and disappears on its own.
+- **Events and specials**: each event has a start date and a number of days, and appears and disappears on its own. Give it photos with a few words each, a message ("Choose your cake and grab it"), and special menu items with prices: its button then opens an event page where customers order, and the specials show first in the menu with a ✦. Each event has its own photo border theme, and can switch the whole website to it while it shows. "Show the events section" hides the section; it also hides itself when no event is showing.
+- **Event calendar and reminders**: 17 cake days (Christmas, New Year, Valentine's, Holi, Nepali New Year, Mother's and Father's Day, Teachers' Day, Teej, Dashain, Tihar, Halloween and more). Two weeks before each one, a reminder shows at the top of admin with a "Make the event" button that fills in the dates, text and border. Lunar festivals move every year: type this year's date under "Edit the calendar" (only Holi 2027, 21 March, is filled in, from the official 2083 holiday list).
+- **Photo border themes**: 19 to choose from: gold line, Christmas (snow, holly, fairy lights, candy canes), Halloween (spider web, pumpkins, bats), Valentine's (hearts, rose petals), New Year (confetti, stars, fireworks), Nepali festivals (marigold garland, diyo lamps, prayer flags) and celebrations (balloons, sprinkles, bunting). They decorate the specialities, cake, booking and gallery photos, and event pages.
+- **Today's availability**: every menu item in one list with two ticks: "Available" (untick to show "Not available today") and "Show" (untick to hide it). Whole groups can be hidden too.
+- **Closed notice**: for a holiday or emergency. A red bar shows on every page and visitors see your message (with a photo if you like) once. Set the last closed day and it switches off by itself. Orders and bookings for closed days are refused; later days can still be ordered.
+- **Social media buttons**: Instagram, Facebook, TikTok, YouTube, Viber, Google Maps or any link, each with "Show". They sit as round buttons next to WhatsApp in the bottom corner, and in the footer.
+- **Map**: height and width are set in "Map and messages" (normal is 240 px high and half the page wide), or by dragging in Edit layout.
 - **Reviews section**: type your real Google rating and review count to show them; leave them empty to hide.
-- **Orders, Bookings, Reviews, Messages**: see and update each one. Tick "Show on website" for the reviews you want. Paste Google reviews with "Add a review yourself".
+- **Orders**: one day at a time (today first), placed that day or due that day, with totals (paid, not paid, still to do) and a "Download this day" spreadsheet. Each order has quick buttons (Acknowledge, Mark done, Mark paid), a status (pending, acknowledged, preparing, ready, done, cancelled), and its own history of who changed what and when. Filter by status or "Not paid".
+- **Bookings, Reviews, Messages**: see and update each one. Tick "Show on website" for the reviews you want. Paste Google reviews with "Add a review yourself".
 - **Edit text and Edit layout** (above the preview): type straight onto the page, or drag the edge of a photo or box to resize it (the page makes room on its own). Drag a photo to move it inside its frame; the small bar on it zooms in, zooms out, shows the whole photo, or resets. Each photo field also has "Adjust position and zoom" sliders. Sizes apply on computers; phones keep their own layout.
 - **Adding and removing**: in "Menu, prices and food photos", use "Add group", "Add item" and "Add size or price", and the Delete button on any group, item or price.
-- **History**: every save is kept. Each entry lists what changed (for example "Menu › Hot Coffee › Espresso › Single › price: 140 → 150"). Open an older version, check it in the preview, and press Save to bring it back. Deleted orders, bookings, reviews and messages can be brought back here too, and the activity log is here.
+- **History and backup**: download a website backup or a full backup, and restore one. Every save is kept. Each entry lists what changed (for example "Menu › Hot Coffee › Espresso › Single › price: 140 → 150"). Open an older version, check it in the preview, and press Save to bring it back. Deleted orders, bookings, reviews and messages can be brought back here too, and the activity log is here.
 - **Table QR**: makes a printable QR code for each table. Guests scan it, see the menu, and order without a phone number or payment. The order arrives with the table number.
-- **Security**: change the owner password, sign out every device, add staff logins, and download a backup.
+- **Security**: change the owner password, sign out every device, and add staff logins.
 - **Two devices**: you can be logged in on several devices at once. If the website is saved on one device while another has the editor open, the second one is asked before it overwrites the newer save.
+
+## Backups (do this before every update)
+
+Your photos and edits live on Railway's volume, not in GitHub, so an update from GitHub keeps them. A backup protects you if the volume is ever new or empty.
+
+1. **Before an update**: Admin › History and backup › **Download website backup**. This one `.zip` holds every photo, the menu and prices, all texts, colours, sizes, photo positions, events and the event calendar. "Full backup" also has orders, bookings, reviews and messages. Passwords and staff logins are never included.
+2. **If the new version starts empty**: Admin › History and backup › **Restore**, and choose the file. Nothing is deleted: the current website stays in History, and orders are only added.
+3. **To have Claude make the next version from your current website**: upload the website backup `.zip` in the chat with your request. Claude puts it in the `seed/` folder of the new version. A fresh install then starts from it by itself, and an existing site shows "Use the backup" at the top of admin.
+
+The backup format (for Claude or a developer): `manifest.json` (`kind: "pick-me-backup"`, `format: 1`, `createdAt`, `full`), `content.json` (everything shown on the website), `uploads/` (photos), and for full backups `orders.json`, `bookings.json`, `reviews.json`, `messages.json` and `proofs/` (payment screenshots). New settings that a backup doesn't have are filled in with their normal values when it is restored.
 
 ## Using the counter screen
 
 Go to `/counter`. Staff log in with the login ID and password you made for them under Security; the owner can leave the login ID empty.
 
-- Three tabs: Orders, Cake pre-orders, Table bookings. The screen refreshes every 12 seconds and shows a notice when something new arrives.
-- Change the status, tick "Payment checked", open the payment screenshot or the customer's cake design photo, print a slip, or message the customer on WhatsApp.
+- Three tabs: Orders, Cake pre-orders, Table bookings, and a line with today's totals. The screen refreshes every 12 seconds and shows a notice when something new arrives.
+- Quick buttons: Acknowledge, Mark done, Mark paid (and Confirm for bookings). Or change the status, tick "Paid", open the payment screenshot or the customer's cake design photo, print a slip, or message the customer on WhatsApp.
 - Staff cannot edit the website, delete anything, or see reviews, messages and logins.
 
 ## Ordering and payment
@@ -114,7 +133,7 @@ Go to `/counter`. Staff log in with the login ID and password you made for them 
 
 ## Notes
 
-- Prices are always taken from the saved menu on the server, so a customer cannot change a price in their browser.
+- Prices are always taken from the saved menu (and event specials) on the server, so a customer cannot change a price in their browser. Hidden or unavailable items cannot be ordered.
 - Whole cakes need the notice set in admin (8 hours to start with). Times must be inside opening hours.
 - Menu descriptions and badges start empty, apart from "House special" on the Pick Me Double Shot on Ice. Add your own in admin.
 - Every date picker uses the Nepali (BS) calendar, with the English date shown small under each day. It covers BS 2082 to 2090. Add more years to the `DAYS` table in `public/js/bs.js` when needed.

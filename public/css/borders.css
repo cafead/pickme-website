@@ -1,0 +1,34 @@
+/* Photo border themes. Each theme decorates the frame with ::before and ::after. Made by tools/borders.py */
+.deco { position: relative; isolation: isolate; --deco-r: var(--radius); }
+.deco::before, .deco::after { content: none; position: absolute; pointer-events: none; z-index: 3; background-repeat: no-repeat; }
+.deco--arch, .deco--tall { --deco-r: 999px 999px var(--radius) var(--radius); }
+.deco--arch { width: min(100%, var(--sz-arch-w, 300px)); margin: 0 auto 14px; }
+.deco--arch .arch-pic { width: 100%; margin-bottom: 0; }
+.deco--gal { display: grid; }
+.deco--gal .gal-item { width: 100%; }
+.deco--gold::before { content: ""; inset: -9px; padding: 1px; border-radius: var(--deco-r); background: var(--gold); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.deco--gold::after { content: ""; top: -18px; bottom: -18px; left: 0; right: 0; background: url("/img/borders/gold-gem.svg") no-repeat center top / 60px auto, url("/img/borders/gold-gem.svg") no-repeat center bottom / 60px auto; }
+.deco--snow::before { content: ""; top: -14px; left: -4%; right: -4%; height: 40px; background: url("/img/borders/snow-top.svg") repeat-x center top / auto 40px; }
+.deco--snow::after { content: ""; inset: -16px; background: url("/img/borders/snowflake.svg") no-repeat left bottom / 66px auto, url("/img/borders/snowflake.svg") no-repeat right 40% / 46px auto; }
+.deco--holly::after { content: ""; inset: -16px; background: url("/img/borders/holly-tl.svg") no-repeat left top / 78px auto, url("/img/borders/holly-br.svg") no-repeat right bottom / 78px auto; }
+.deco--lights::before { content: ""; top: -18px; left: -4%; right: -4%; height: 44px; background: url("/img/borders/lights-top.svg") repeat-x center top / auto 44px; }
+.deco--candy::after { content: ""; inset: -16px; background: url("/img/borders/candy-tl.svg") no-repeat left top / 74px auto, url("/img/borders/candy-br.svg") no-repeat right bottom / 74px auto; }
+.deco--web::after { content: ""; inset: -10px; background: url("/img/borders/web-tl.svg") no-repeat left top / 86px auto, url("/img/borders/spider-tr.svg") no-repeat right top / 52px auto; }
+.deco--pumpkin::after { content: ""; inset: -16px; background: url("/img/borders/pumpkin-bl.svg") no-repeat left bottom / 96px auto, url("/img/borders/pumpkin-br.svg") no-repeat right bottom / 72px auto; }
+.deco--bats::after { content: ""; inset: -22px; background: url("/img/borders/bats-tr.svg") no-repeat right top / 90px auto, url("/img/borders/bats-tl.svg") no-repeat left top / 70px auto; }
+.deco--hearts::after { content: ""; inset: -16px; background: url("/img/borders/hearts-tl.svg") no-repeat left top / 72px auto, url("/img/borders/hearts-br.svg") no-repeat right bottom / 72px auto; }
+.deco--petals::before { content: ""; top: -14px; left: -4%; right: -4%; height: 40px; background: url("/img/borders/petals-top.svg") repeat-x center top / auto 40px; }
+.deco--petals::after { content: ""; inset: -16px; background: url("/img/borders/petals-br.svg") no-repeat right bottom / 80px auto; }
+.deco--confetti::before { content: ""; top: -14px; left: -4%; right: -4%; height: 40px; background: url("/img/borders/confetti-top.svg") repeat-x center top / auto 40px; }
+.deco--confetti::after { content: ""; inset: -18px; background: url("/img/borders/confetti-top.svg") no-repeat left bottom / 120px auto; }
+.deco--stars::after { content: ""; inset: -16px; background: url("/img/borders/stars-tl.svg") no-repeat left top / 72px auto, url("/img/borders/stars-br.svg") no-repeat right bottom / 72px auto; }
+.deco--fireworks::after { content: ""; inset: -22px; background: url("/img/borders/fireworks-tl.svg") no-repeat left top / 84px auto, url("/img/borders/fireworks-tr.svg") no-repeat right top / 84px auto; }
+.deco--marigold::before { content: ""; top: -18px; left: -4%; right: -4%; height: 44px; background: url("/img/borders/marigold-top.svg") repeat-x center top / auto 44px; }
+.deco--diyo::before { content: ""; bottom: -18px; left: -4%; right: -4%; height: 40px; background: url("/img/borders/diyo-bottom.svg") repeat-x center bottom / auto 40px; }
+.deco--flags::before { content: ""; top: -14px; left: -4%; right: -4%; height: 40px; background: url("/img/borders/flags-top.svg") repeat-x center top / auto 40px; }
+.deco--balloons::after { content: ""; inset: -22px; background: url("/img/borders/balloons-bl.svg") no-repeat left bottom / 92px auto, url("/img/borders/balloon-tr.svg") no-repeat right top / 46px auto; }
+.deco--sprinkles::before { content: ""; top: -10px; left: -4%; right: -4%; height: 24px; background: url("/img/borders/sprinkles-strip.svg") repeat-x center top / auto 24px; }
+.deco--sprinkles::after { content: ""; bottom: -10px; left: -4%; right: -4%; height: 24px; background: url("/img/borders/sprinkles-strip.svg") repeat-x center bottom / auto 24px; }
+.deco--bunting::before { content: ""; top: -14px; left: -4%; right: -4%; height: 40px; background: url("/img/borders/bunting-top.svg") repeat-x center top / auto 40px; }
+@media (prefers-reduced-motion: no-preference) { .anim .deco--lights::before { animation: twinkle 2.4s ease-in-out infinite alternate; } }
+@keyframes twinkle { to { filter: brightness(1.25) saturate(1.2); } }

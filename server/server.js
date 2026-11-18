@@ -19,6 +19,9 @@ const AUDIT_FILE = path.join(DATA_DIR, 'audit.log');
 const HISTORY = path.join(DATA_DIR, 'history');
 for (const d of [DATA_DIR, UPLOADS, PROOFS, HISTORY]) fs.mkdirSync(d, { recursive: true });
 const QRCode = require('qrcode');
+const AdmZip = require('adm-zip');
+const SEED_DIR = path.join(ROOT, 'seed');
+const FRESH_START = !fs.existsSync(path.join(DATA_DIR, 'content.json'));
 
 /* ---------- tiny JSON file store ---------- */
 class Store {
@@ -64,6 +67,17 @@ if (/from the Nepali calendar/.test(content.data.booking.text || '')) {
 }
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
+// Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
+const ORDER_STEPS = ['pending', 'acknowledged', 'preparing', 'ready', 'done', 'cancelled'];
+const BOOKING_STEPS = ['pending', 'confirmed', 'seated', 'done', 'declined'];
+(function renameOldSteps() {
+  const map = { new: 'pending', accepted: 'acknowledged', completed: 'done' };
+  for (const store of [orders, bookings]) {
+    let changed = false;
+    for (const x of store.get()) if (map[x.status]) { x.status = map[x.status]; changed = true; }
+    if (changed) store.set(store.get());
+  }
+})();
 const reviews = new Store('reviews.json', []);
 const messages = new Store('messages.json', []);
 const auth = new Store('auth.json', {});
@@ -382,14 +396,35 @@ app.post('/api/proof', limit('proof', 80, 30 * 60e3), rawImage, async (req, res)
 });
 
 /* public: orders */
+// Looks up a price in the menu, or in the special menu of a switched-on event.
 function findPrice(itemId, label) {
-  for (const c of content.get().menu.categories || []) {
-    for (const it of c.items || []) {
+  const c = content.get();
+  const groups = (c.menu.categories || []).map((g) => ({ items: g.items, hidden: g.hidden }))
+    .concat((c.events.items || []).filter((e) => e.enabled !== false).map((e) => ({ items: e.menu })));
+  for (const g of groups) {
+    for (const it of g.items || []) {
       if (it.id !== itemId) continue;
       const p = (it.prices || []).find((x) => (x.label || '') === (label || ''));
-      return p ? { item: it, price: p } : null;
+      if (!p) return null;
+      const off = g.hidden || it.hidden || it.available === false;
+      return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p };
     }
   }
+  return null;
+}
+const nepalDate = () => new Date(Date.now() + NP_OFFSET).toISOString().slice(0, 10);
+// The "closed today" notice. Returns it while it applies, otherwise null.
+function closedNotice() {
+  const k = content.get().closure || {};
+  if (!k.on) return null;
+  if (k.until && /^\d{4}-\d{2}-\d{2}$/.test(k.until) && nepalDate() > k.until) return null;
+  return k;
+}
+function closedFor(date) {
+  const k = closedNotice();
+  if (!k) return null;
+  const last = k.until || nepalDate();
+  if (!date || date <= last || !k.allowLater) { const t = String(k.title || 'We are closed today').trim(); return /[.!?]$/.test(t) ? t : t + '.'; }
   return null;
 }
 function checkSchedule(date, time, minLeadHours) {
@@ -436,7 +471,11 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
     const err = checkSchedule(date, time, hasWhole ? Number(c.cake.noticeHours) || 0 : 0);
     if (err) return bad(res, err);
     schedule = { date, time, bs: str(b.dateBs, 40) };
+    const shut = closedFor(date);
+    if (shut) return bad(res, `${shut} Please choose a later date.`);
   } else {
+    const shut = closedFor('');
+    if (shut) return bad(res, closedNotice().allowLater ? `${shut} You can still order for a later day: choose "Later".` : shut);
     const now = nepalTime();
     if (now < c.brand.open || now > c.brand.close) return bad(res, `We are closed right now (open ${c.brand.hoursText}). Choose "Later" to schedule your order.`);
   }
@@ -453,8 +492,9 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   const order = {
     id: newCode(hasWhole ? 'CAKE' : 'PM'),
     createdAt: new Date().toISOString(),
-    status: 'new',
+    status: 'pending',
     paid: false,
+    log: [{ at: new Date().toISOString(), by: 'customer', what: 'Order placed' }],
     name, phone, type, address,
     tableNo: type === 'dinein' ? str(b.tableNo, 20) : '',
     lines, subtotal, deliveryFee, total: subtotal + deliveryFee,
@@ -486,10 +526,13 @@ app.post('/api/bookings', limit('booking', 30, 15 * 60e3), json, async (req, res
   const time = str(b.time, 5);
   const err = checkSchedule(date, time, 0);
   if (err) return bad(res, err);
+  const shut = closedFor(date);
+  if (shut) return bad(res, `${shut} Please choose another day.`);
   const booking = {
     id: newCode('TBL'),
     createdAt: new Date().toISOString(),
-    status: 'new',
+    status: 'pending',
+    log: [{ at: new Date().toISOString(), by: 'customer', what: 'Booking requested' }],
     name, phone, people, date, time,
     bs: str(b.dateBs, 40),
     seating: str(b.seating, 60),
@@ -685,17 +728,32 @@ app.get('/api/desk/proof/:file', desk, (req, res) => {
   res.sendFile(path.join(PROOFS, req.params.file), (e) => { if (e && !res.headersSent) res.sendStatus(404); });
 });
 function listRoutes(base, name, store, fields, guard) {
-  app.get(`/api/${base}/${name}`, guard, (req, res) => res.json(store.get().slice(0, 400)));
+  app.get(`/api/${base}/${name}`, guard, (req, res) => {
+    const d = String(req.query.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return res.json(store.get().slice(0, 400));
+    // One day: placed that day, or due that day (?by=due).
+    const day = (iso) => new Date(Date.parse(iso) + NP_OFFSET).toISOString().slice(0, 10);
+    const due = (x) => (x.schedule && x.schedule.date) || x.date || day(x.createdAt);
+    res.json(store.get().filter((x) => (req.query.by === 'due' ? due(x) : day(x.createdAt)) === d));
+  });
   app.patch(`/api/${base}/${name}/:id`, guard, json, async (req, res) => {
     const list = store.get();
     const row = list.find((x) => x.id === req.params.id);
     if (!row) return res.sendStatus(404);
     const done = [];
     for (const [k, check] of Object.entries(fields)) {
-      if (req.body[k] !== undefined && check(req.body[k])) { row[k] = req.body[k]; done.push(`${k}=${req.body[k]}`); }
+      if (req.body[k] !== undefined && check(req.body[k]) && row[k] !== req.body[k]) { row[k] = req.body[k]; done.push(`${k}=${req.body[k]}`); }
     }
     row.updatedAt = new Date().toISOString();
     row.updatedBy = who(req);
+    if (Array.isArray(row.log) || name === 'orders' || name === 'bookings') {
+      row.log = Array.isArray(row.log) ? row.log : [];
+      for (const d of done) {
+        const [k, v] = d.split('=');
+        const what = k === 'paid' ? (v === 'true' ? 'Marked paid' : 'Marked not paid') : `Marked ${v}`;
+        row.log.push({ at: row.updatedAt, by: who(req), what });
+      }
+    }
     await store.set(list);
     audit(who(req), `${name}-updated ${done.join(' ')}`, row.id);
     res.json(row);
@@ -709,8 +767,29 @@ function listRoutes(base, name, store, fields, guard) {
 }
 const oneOf = (...v) => (x) => v.includes(x);
 const isBool = (x) => typeof x === 'boolean';
-listRoutes('desk', 'orders', orders, { status: oneOf('new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'), paid: isBool }, desk);
-listRoutes('desk', 'bookings', bookings, { status: oneOf('new', 'confirmed', 'seated', 'declined', 'done') }, desk);
+listRoutes('desk', 'orders', orders, { status: oneOf(...ORDER_STEPS), paid: isBool }, desk);
+listRoutes('desk', 'bookings', bookings, { status: oneOf(...BOOKING_STEPS) }, desk);
+
+// One day's orders as a spreadsheet file (opens in Excel or Google Sheets).
+app.get('/api/desk/day.csv', desk, (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : nepalDate();
+  const due = req.query.by === 'due';
+  const day = (iso) => new Date(Date.parse(iso) + NP_OFFSET).toISOString().slice(0, 10);
+  const list = orders.get().filter((o) => (due ? (o.schedule ? o.schedule.date : day(o.createdAt)) : day(o.createdAt)) === date);
+  const cell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const rows = [['Order', 'Placed', 'For', 'Type', 'Table', 'Name', 'Phone', 'Items', 'Total (Rs)', 'Payment', 'Paid', 'Status', 'Notes']];
+  for (const o of list.slice().reverse()) {
+    rows.push([
+      o.id, new Date(Date.parse(o.createdAt) + NP_OFFSET).toISOString().slice(11, 16), o.schedule ? `${o.schedule.date} ${o.schedule.time}` : 'now',
+      TYPE_LABEL[o.type] || o.type, o.tableNo, o.name, o.phone,
+      o.lines.map((l) => `${l.qty} x ${l.name}${l.label ? ` (${l.label})` : ''}`).join('; '),
+      o.total, PAY_LABEL[o.payment.method] || o.payment.method, o.paid ? 'yes' : 'no', o.status, [o.cakeMessage && `Cake: ${o.cakeMessage}`, o.notes].filter(Boolean).join(' | '),
+    ]);
+  }
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="pick-me-orders-${date}.csv"`);
+  res.send('\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n'));
+});
 listRoutes('admin', 'reviews', reviews, { approved: isBool }, admin);
 listRoutes('admin', 'messages', messages, { read: isBool }, admin);
 app.post('/api/admin/reviews', admin, json, async (req, res) => {
@@ -721,6 +800,101 @@ app.post('/api/admin/reviews', admin, json, async (req, res) => {
   const r = { id: newCode('RV'), name, text, rating, favorite: str(req.body.favorite, 100), source: req.body.source === 'google' ? 'google' : 'site', approved: true, createdAt: new Date().toISOString() };
   await reviews.set([r, ...reviews.get()]);
   res.json(r);
+});
+
+/* ---------- backups ----------
+ * A backup is a .zip file:
+ *   manifest.json   { kind: "pick-me-backup", format: 1, createdAt, full }
+ *   content.json    every text, price, setting, size and photo position on the website
+ *   uploads/...     every photo uploaded in admin
+ *   orders.json, bookings.json, reviews.json, messages.json, proofs/...   (full backups only)
+ * Passwords and staff logins are never put in a backup.
+ * A backup placed in the seed/ folder of a new version is used automatically on a fresh install,
+ * and offered in admin otherwise.
+ */
+const BACKUP_KIND = 'pick-me-backup';
+const FILE_NAME = /^[a-f0-9]{16,40}\.(png|jpe?g|webp|gif|svg)$/;
+const meta = new Store('meta.json', {});
+function makeBackup(full) {
+  const zip = new AdmZip();
+  zip.addFile('manifest.json', Buffer.from(JSON.stringify({ kind: BACKUP_KIND, format: 1, createdAt: new Date().toISOString(), full: Boolean(full), cafe: content.get().brand.name }, null, 1)));
+  zip.addFile('content.json', Buffer.from(JSON.stringify(content.get(), null, 1)));
+  for (const f of fs.readdirSync(UPLOADS)) if (FILE_NAME.test(f)) zip.addLocalFile(path.join(UPLOADS, f), 'uploads/');
+  if (full) {
+    for (const [name, store] of Object.entries({ orders, bookings, reviews, messages })) zip.addFile(`${name}.json`, Buffer.from(JSON.stringify(store.get(), null, 1)));
+    for (const f of fs.readdirSync(PROOFS)) if (PROOF_NAME.test(f)) zip.addLocalFile(path.join(PROOFS, f), 'proofs/');
+  }
+  return zip.toBuffer();
+}
+// Reads a backup. Photos and records are added; nothing that exists is deleted.
+async function restoreBackup(buf, by) {
+  let zip;
+  try { zip = new AdmZip(buf); } catch { throw new Error('That file is not a Pick Me backup (.zip).'); }
+  const read = (name) => { const e = zip.getEntry(name); return e ? JSON.parse(e.getData().toString('utf8')) : null; };
+  let manifest;
+  try { manifest = read('manifest.json'); } catch { manifest = null; }
+  if (!manifest || manifest.kind !== BACKUP_KIND) throw new Error('That file is not a Pick Me backup (.zip).');
+  const out = { photos: 0, orders: 0, bookings: 0, reviews: 0, messages: 0, website: false, createdAt: manifest.createdAt };
+  for (const e of zip.getEntries()) {
+    const [dir, file] = e.entryName.split('/');
+    if (e.isDirectory || !file || e.entryName.split('/').length !== 2) continue;
+    if (dir === 'uploads' && FILE_NAME.test(file) && !fs.existsSync(path.join(UPLOADS, file))) { fs.writeFileSync(path.join(UPLOADS, file), e.getData()); out.photos += 1; }
+    if (dir === 'proofs' && PROOF_NAME.test(file) && !fs.existsSync(path.join(PROOFS, file))) fs.writeFileSync(path.join(PROOFS, file), e.getData());
+  }
+  for (const [name, store] of Object.entries({ orders, bookings, reviews, messages })) {
+    const rows = read(`${name}.json`);
+    if (!Array.isArray(rows)) continue;
+    const have = new Set(store.get().map((x) => x.id));
+    const add = rows.filter((x) => x && x.id && !have.has(x.id));
+    if (add.length) {
+      await store.set(store.get().concat(add).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt))));
+      out[name] = add.length;
+    }
+  }
+  const saved = read('content.json');
+  if (saved && saved.brand && saved.menu) {
+    const current = content.get();
+    if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by, note: 'Website before the backup was restored', changes: [] }, current);
+    const next = fillDefaults(saved, freshDefaults());
+    next._rev = (current._rev || 1) + 1;
+    const when = String(manifest.createdAt || '').slice(0, 10);
+    await content.set(next);
+    await addHistory({ at: new Date().toISOString(), by, note: `restored the backup from ${when}`, changes: describeChanges(current, next) }, next);
+    out.website = true;
+  }
+  audit(by, 'backup-restored', String(manifest.createdAt || ''));
+  return out;
+}
+function seedFiles() {
+  try { return fs.readdirSync(SEED_DIR).filter((f) => /\.zip$/i.test(f)).sort(); } catch { return []; }
+}
+app.get('/api/admin/backup', admin, (req, res) => {
+  const full = req.query.full === '1';
+  audit('owner', full ? 'full-backup-downloaded' : 'website-backup-downloaded');
+  res.set('Content-Type', 'application/zip');
+  res.set('Content-Disposition', `attachment; filename="pick-me-${full ? 'full' : 'website'}-backup-${nepalDate()}.zip"`);
+  res.send(makeBackup(full));
+});
+app.post('/api/admin/restore', admin, express.raw({ type: () => true, limit: '600mb' }), async (req, res) => {
+  try { res.json({ ok: true, ...(await restoreBackup(req.body, 'owner')) }); } catch (e) { bad(res, e.message); }
+});
+app.get('/api/admin/seed', admin, (req, res) => {
+  const done = meta.get().seedsUsed || [];
+  const file = seedFiles().filter((f) => !done.includes(f)).pop();
+  if (!file) return res.json({ file: null });
+  try {
+    const m = JSON.parse(new AdmZip(path.join(SEED_DIR, file)).getEntry('manifest.json').getData().toString('utf8'));
+    res.json({ file, createdAt: m.createdAt });
+  } catch { res.json({ file: null }); }
+});
+app.post('/api/admin/seed', admin, json, async (req, res) => {
+  const file = seedFiles().find((f) => f === req.body.file);
+  if (!file) return res.sendStatus(404);
+  const m = meta.get();
+  m.seedsUsed = (m.seedsUsed || []).concat(file);
+  await meta.set(m);
+  if (req.body.use === false) return res.json({ ok: true, skipped: true });
+  try { res.json({ ok: true, ...(await restoreBackup(fs.readFileSync(path.join(SEED_DIR, file)), 'owner')) }); } catch (e) { bad(res, e.message); }
 });
 
 /* files */
@@ -738,5 +912,15 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   if (!tooBig) console.error(err);
   res.status(tooBig ? 413 : 500).json({ error: tooBig ? 'That file is too large (8 MB at most).' : 'Something went wrong. Please try again.' });
 });
+
+(async function useSeedOnFreshStart() {
+  const file = seedFiles().pop();
+  if (!FRESH_START || !file) return;
+  try {
+    const out = await restoreBackup(fs.readFileSync(path.join(SEED_DIR, file)), 'setup');
+    await meta.set(Object.assign(meta.get(), { seedsUsed: seedFiles() }));
+    console.log(`Used the backup ${file}: ${out.photos} photos${out.website ? ', website content' : ''}.`);
+  } catch (e) { console.error('Could not use the backup in seed/:', e.message); }
+})();
 
 app.listen(PORT, () => console.log(`Pick Me Cafe is running on port ${PORT}. Data folder: ${DATA_DIR}`));

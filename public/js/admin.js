@@ -3,7 +3,7 @@
   'use strict';
   const { FONTS, esc, rs, shrink, SIZES } = window.PM;
   const root = document.getElementById('admin');
-  const A = { view: 'edit', content: null, saved: '', me: {}, orders: [], bookings: [], reviews: [], messages: [], staff: [], log: [], history: [], bin: [], tables: 10, open: new WeakSet(), timer: null, poll: null, inline: false, layout: false, mobile: 'edit' };
+  const A = { view: 'edit', content: null, saved: '', me: {}, orders: [], bookings: [], reviews: [], messages: [], staff: [], log: [], history: [], bin: [], tables: 10, day: '', dayBy: 'placed', dayOrders: [], orderFilter: 'all', seed: null, open: new WeakSet(), timer: null, poll: null, inline: false, layout: false, mobile: 'edit' };
 
   /* ---------- helpers ---------- */
   function h(tag, attrs, ...kids) {
@@ -53,6 +53,26 @@
   const f = (k, l, type, extra) => Object.assign({ k, l, type: type || 'text' }, extra || {});
   const fontOptions = (kind) => Object.keys(FONTS[kind]).map((n) => [n, n]);
   const catOptions = () => A.content.menu.categories.map((c) => [c.id, c.name]);
+  const BORDERS = [
+    ['none', 'Plain, no border'], ['gold', 'Gold line (everyday)'],
+    ['snow', 'Christmas: snow'], ['holly', 'Christmas: holly'], ['lights', 'Christmas: fairy lights'], ['candy', 'Christmas: candy canes'],
+    ['web', 'Halloween: spider web'], ['pumpkin', 'Halloween: pumpkins'], ['bats', 'Halloween: bats'],
+    ['hearts', "Valentine's: hearts"], ['petals', "Valentine's, Mother's Day, Teej: rose petals"],
+    ['confetti', 'New Year, Holi: confetti'], ['stars', "New Year, Father's Day: stars"], ['fireworks', 'New Year: fireworks'],
+    ['marigold', 'Dashain, Tihar, Nepali New Year: marigold garland'], ['diyo', 'Tihar: diyo lamps'], ['flags', 'Losar, Buddha Jayanti: prayer flags'],
+    ['balloons', "Birthdays, Children's Day: balloons"], ['sprinkles', 'Celebrations: sprinkles'], ['bunting', "Teachers' Day, parties: bunting"],
+  ];
+  const borderOptions = () => BORDERS;
+  const itemFields = () => [
+    f('name', 'Name'), f('desc', 'Short description (optional)'), f('badge', 'Small badge, for example Bestseller (optional)'),
+    f('available', 'Available (untick to show "Not available today")', 'toggle'), f('hidden', 'Hide from the website', 'toggle', { def: false }),
+    f('image', 'Photo (optional)', 'image'),
+    f('prices', 'Prices', 'list', { title: (p) => `${p.label || 'Price'}: Rs. ${p.price}${p.whole ? ' (whole cake)' : ''}`, add: 'Add size or price', blank: () => ({ label: '', price: 0 }), fields: [
+      f('label', 'Size name (leave empty if there is one price)'), f('price', 'Price in NPR', 'number'), f('whole', 'Whole cake: pre-order only', 'toggle', { def: false }),
+    ] }),
+  ];
+  const itemTitle = (i) => `${i.name}${i.hidden ? ' (hidden)' : i.available === false ? ' (not available)' : ''}: ${priceLine(i)}`;
+  const newItem = () => ({ id: uid('item'), name: 'New item', desc: '', badge: '', image: '', available: true, hidden: false, prices: [{ label: '', price: 0 }] });
   const priceLine = (it) => (it.prices || []).map((p) => `${p.label ? p.label + ' ' : ''}${p.price}`).join(' / ');
   function eventState(e) {
     if (e.enabled === false) return 'off';
@@ -76,6 +96,8 @@
       f('theme.headingScale', 'Heading size (0.7 to 1.5, normal is 1)', 'number', { step: 0.05 }), f('theme.bodySize', 'Text size in px (13 to 22)', 'number'),
       f('theme.width', 'Page width in px (900 to 1600)', 'number'), f('theme.heroHeight', 'Height of the top photo area in px (420 to 1100)', 'number'),
       f('theme.radius', 'Corner roundness (0 to 40)', 'number'),
+      f('theme.sectionGap', 'Space between sections in px (0 to 200, normal is 56)', 'number'),
+      f('theme.border', 'Photo border theme (an event can switch it while it shows)', 'select', { options: borderOptions }),
       f('theme.blend', 'Blend photos into the background', 'toggle'), f('theme.animations', 'Animations on', 'toggle'),
     ] },
     { title: 'Section order and visibility', scroll: 'hero', note: 'Use the arrows to move a section up or down the page.', fields: [
@@ -98,26 +120,35 @@
         f('title', 'Title'), f('text', 'Text', 'area'), f('image', 'Photo', 'image'), f('category', 'Opens this menu group', 'select', { options: catOptions }),
       ] }),
     ] },
-    { title: 'Events and themes (slideshow)', scroll: 'events', note: 'Each slide shows from its start date for the number of days you set, then disappears on its own. With two or more showing, they slide automatically.', fields: [
+    { title: 'Events and specials', scroll: 'events', note: 'Each event shows from its start date for the number of days you set, then disappears on its own. If an event has photos, a message or special items, its button opens its own page where customers can order. Special items also appear first in the menu while the event shows. When no event is showing, the section is hidden by itself.', fields: [
+      f('', 'Show the events section', 'section', { id: 'events' }),
       f('events.script', 'Handwritten line'), f('events.title', 'Title'), f('events.seconds', 'Seconds per slide', 'number'),
-      f('events.items', 'Slides', 'list', { title: (e) => `${e.title} (${eventState(e)})`, add: 'Add slide', blank: () => ({ id: uid('event'), enabled: true, tag: '', title: 'New event', text: '', image: '', button: '', link: '#menu', start: BS.todayAD(), days: 7 }), fields: [
-        f('enabled', 'Switched on', 'toggle'), f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Description', 'area'), f('image', 'Photo', 'image'),
+      f('events.items', 'Events', 'list', { title: (e) => `${e.title} (${eventState(e)})`, add: 'Add an empty event', blank: () => ({ id: uid('event'), template: '', enabled: true, tag: '', title: 'New event', text: '', image: '', button: 'See the specials', link: '', start: BS.todayAD(), days: 7, border: 'gold', borderSite: false, message: '', menuTitle: '', photos: [], menu: [] }), fields: [
+        f('enabled', 'Switched on', 'toggle'), f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Short description', 'area'), f('image', 'Main photo', 'image'),
         f('start', 'Start showing on', 'date'), f('days', 'Show for how many days', 'number'),
-        f('button', 'Button text (optional)'), f('link', 'Button goes to (#menu, #cake, #booking or a web link)'),
+        f('message', 'Message on the event page (for example: Choose your cake and grab it)', 'area'),
+        f('button', 'Button text'), f('link', 'Button goes to, if the event has no page of its own (#menu, #cake, #booking or a web link)'),
+        f('border', 'Photo border theme for this event', 'select', { options: borderOptions }),
+        f('borderSite', 'Use this border on the whole website while the event shows', 'toggle', { def: false }),
+        f('photos', 'Event photos', 'list', { title: (p) => p.caption || 'Photo', add: 'Add photo', blank: () => ({ image: '', caption: '' }), fields: [f('image', 'Photo', 'image'), f('caption', 'A few words under the photo')] }),
+        f('menuTitle', 'Name of the special menu (for example Christmas specials)'),
+        f('menu', 'Special menu items (customers can order these)', 'list', { title: itemTitle, add: 'Add special item', blank: newItem, fields: itemFields() }),
       ] }),
     ] },
+    { title: 'Event calendar and reminders', scroll: 'events', custom: calendarPanel, note: 'Days that sell themed cakes. You get a reminder at the top of admin before each one (2 weeks by default). Press "Make the event" to start one with the right border, text and dates; then add photos and special items. Days that move every year need this year\'s date typed in.' },
     { title: 'Menu, prices and food photos', scroll: 'menu', note: 'Each group is a tab on the site. Open a group to edit its items.', fields: [
       f('menu.script', 'Handwritten line'), f('menu.title', 'Title'), f('menu.note', 'Note under the title'),
       f('menu.layout', 'How items are shown', 'select', { options: () => [['list', 'Simple list with small photos'], ['cards', 'Cards with large photos']] }),
-      f('menu.categories', 'Groups', 'list', { title: (c) => `${c.name} (${(c.items || []).length})`, add: 'Add group', blank: () => ({ id: uid('group'), name: 'New group', note: '', items: [] }), fields: [
-        f('name', 'Group name'), f('note', 'Note shown above the items'),
-        f('items', 'Items', 'list', { title: (i) => `${i.name}${i.available === false ? ' (off)' : ''}: ${priceLine(i)}`, add: 'Add item', blank: () => ({ id: uid('item'), name: 'New item', desc: '', badge: '', image: '', available: true, prices: [{ label: '', price: 0 }] }), fields: [
-          f('name', 'Name'), f('desc', 'Short description (optional)'), f('badge', 'Small badge, for example Bestseller (optional)'), f('available', 'Available', 'toggle'), f('image', 'Photo (optional)', 'image'),
-          f('prices', 'Prices', 'list', { title: (p) => `${p.label || 'Price'}: Rs. ${p.price}${p.whole ? ' (whole cake)' : ''}`, add: 'Add size or price', blank: () => ({ label: '', price: 0 }), fields: [
-            f('label', 'Size name (leave empty if there is one price)'), f('price', 'Price in NPR', 'number'), f('whole', 'Whole cake: pre-order only', 'toggle', { def: false }),
-          ] }),
-        ] }),
+      f('menu.categories', 'Groups', 'list', { title: (c) => `${c.name} (${(c.items || []).length})${c.hidden ? ' (hidden)' : ''}`, add: 'Add group', blank: () => ({ id: uid('group'), name: 'New group', note: '', hidden: false, items: [] }), fields: [
+        f('name', 'Group name'), f('note', 'Note shown above the items'), f('hidden', 'Hide this whole group', 'toggle', { def: false }),
+        f('items', 'Items', 'list', { title: itemTitle, add: 'Add item', blank: newItem, fields: itemFields() }),
       ] }),
+    ] },
+    { title: "Today's availability", scroll: 'menu', custom: availabilityPanel, note: 'A quick list of everything on the menu. Untick "Available" to show "Not available today" on an item, or untick "Show" to hide it. Remember to press Save.' },
+    { title: 'Closed notice', scroll: 'hero', note: 'For a holiday or an emergency. While it is on, a bar shows at the top of every page and visitors see the message once. Orders and bookings for the closed days are refused.', fields: [
+      f('closure.on', 'Show the closed notice', 'toggle', { def: false }), f('closure.title', 'Heading'), f('closure.text', 'Message', 'area'), f('closure.image', 'Photo (optional)', 'image'),
+      f('closure.until', 'Closed until and including (leave empty for today only; the notice turns off by itself after this day)', 'date'),
+      f('closure.allowLater', 'Still take orders and bookings for later days', 'toggle'),
     ] },
     { title: 'Cake pre-order', scroll: 'cake', fields: [
       f('cake.script', 'Handwritten line'), f('cake.title', 'Title'), f('cake.text', 'Text', 'area'), f('cake.image', 'Photo', 'image'),
@@ -140,11 +171,14 @@
     ] },
     { title: 'Map and messages', scroll: 'visit', note: 'For the map on the page: in Google Maps choose Share, then Embed a map, and paste the link that starts with https://www.google.com/maps', fields: [
       f('visit.script', 'Handwritten line'), f('visit.title', 'Title'), f('visit.mapLink', 'Google Maps link (for the buttons)'), f('visit.mapEmbed', 'Google Maps embed link (for the map on the page)', 'area'),
+      f('sizes.map.h', 'Map height in px (normal 240)', 'number'), f('sizes.map.w', 'Map width in px (0 = half the page)', 'number'),
       f('visit.messageTitle', 'Message box title'), f('visit.messageText', 'Message box text', 'area'),
     ] },
-    { title: 'Social media links', scroll: 'visit', note: 'Only links that are filled in show on the site.', fields: [
-      f('social', '', 'list', { title: (s) => `${s.type}${s.url ? '' : ' (no link yet)'}`, add: 'Add social link', blank: () => ({ type: 'instagram', url: '' }), fields: [
-        f('type', 'Which one', 'select', { options: () => ['instagram', 'facebook', 'tiktok', 'youtube', 'maps', 'link'].map((x) => [x, x]) }), f('url', 'Link (https://...)'),
+    { title: 'Social media buttons', scroll: 'visit', note: 'These show as round buttons next to WhatsApp in the bottom corner of every page, and in the footer. A button only shows when it has a link and "Show" is ticked.', fields: [
+      f('socialBar.show', 'Show the round buttons in the bottom corner', 'toggle'), f('socialBar.whatsapp', 'Include the WhatsApp button', 'toggle'),
+      f('social', '', 'list', { title: (s) => `${s.type}${!s.url ? ' (no link yet)' : s.show === false ? ' (hidden)' : ''}`, add: 'Add social media', blank: () => ({ type: 'instagram', url: '', show: true }), fields: [
+        f('type', 'Which one', 'select', { options: () => [['instagram', 'Instagram'], ['facebook', 'Facebook'], ['tiktok', 'TikTok'], ['youtube', 'YouTube'], ['viber', 'Viber'], ['maps', 'Google Maps'], ['website', 'Website'], ['link', 'Other link']] }),
+        f('url', 'Link (https://...)'), f('show', 'Show', 'toggle'),
       ] }),
     ] },
     { title: 'Sizes and photo positions', scroll: 'hero', custom: sizesPanel, note: 'To change a size, press "Edit layout" above the preview, then drag the edge of a photo or box. To move a photo inside its frame, drag the photo; the small bar on it zooms in and out. Sizes you set here are for computers; phones keep their own layout.' },
@@ -241,6 +275,141 @@
     draw();
   }
 
+  /* ---------- event calendar ---------- */
+  const DAY = 864e5;
+  const addDays = (ad, n) => new Date(Date.parse(ad) + n * DAY).toISOString().slice(0, 10);
+  const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
+  const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const niceDate = (ad) => { const d = new Date(ad + 'T00:00:00Z'); return `${d.getUTCDate()} ${d.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()}, ${WEEKDAYS[d.getUTCDay()]}`; };
+  // The coming dates of a template, from today.
+  function occurrences(t, from) {
+    const y0 = Number(from.slice(0, 4));
+    const out = [];
+    const pad = (n) => String(n).padStart(2, '0');
+    if (t.rule === 'fixed' && /^\d{2}-\d{2}$/.test(t.md || '')) for (const y of [y0, y0 + 1]) out.push(`${y}-${t.md}`);
+    if (t.rule === 'nth') {
+      for (const y of [y0, y0 + 1]) {
+        const m = Number(t.month), wd = Number(t.weekday), n = Number(t.n);
+        if (!(m >= 1 && m <= 12 && wd >= 0 && wd <= 6 && n >= 1 && n <= 5)) break;
+        const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+        const d = 1 + ((wd - first + 7) % 7) + (n - 1) * 7;
+        if (d <= new Date(Date.UTC(y, m, 0)).getUTCDate()) out.push(`${y}-${pad(m)}-${pad(d)}`);
+      }
+    }
+    if (t.rule === 'bs' && /^\d{2}-\d{2}$/.test(t.md || '')) {
+      const b = BS.toBS(from);
+      const [mm, dd] = t.md.split('-').map(Number);
+      if (b) for (const y of [b.y, b.y + 1]) { try { if (y <= 2090) out.push(BS.toAD(y, mm, dd)); } catch (e) { /* outside the calendar */ } }
+    }
+    if (t.rule === 'dates') String(t.dates || '').split(',').map((x) => x.trim()).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).forEach((x) => out.push(x));
+    return out.filter((d) => d >= from).sort();
+  }
+  const coveredBy = (t, date) => (A.content.events.items || []).find((e) => e.template === t.key && e.start && e.start <= date && addDays(e.start, Number(e.days) || 1) > date);
+  function dismissed(key) { try { return JSON.parse(localStorage.getItem('pm_dismissed') || '[]').includes(key); } catch (e) { return false; } }
+  function dismiss(key) { try { const l = JSON.parse(localStorage.getItem('pm_dismissed') || '[]'); l.push(key); localStorage.setItem('pm_dismissed', JSON.stringify(l.slice(-100))); } catch (e) { /* no storage */ } }
+  function reminders() {
+    const today = BS.todayAD();
+    const out = [];
+    for (const t of A.content.eventTemplates || []) {
+      const d = occurrences(t, today)[0];
+      if (!d) continue;
+      const left = daysBetween(today, d);
+      if (left <= (Number(t.remind) || 14) && !coveredBy(t, d) && !dismissed(`${t.key}:${d}`)) out.push({ t, d, left });
+    }
+    return out;
+  }
+  function makeEvent(t, date) {
+    const before = Math.max(0, Number(t.before) || 7);
+    const today = BS.todayAD();
+    const start = addDays(date, -before) < today ? today : addDays(date, -before);
+    const ev = {
+      id: uid('event'), template: t.key, enabled: true, tag: t.tag || t.name, title: t.title || t.name, text: t.text || '', image: '',
+      button: 'See the specials', link: '', start, days: daysBetween(start, date) + 1, border: t.border || 'gold', borderSite: true,
+      message: t.message || '', menuTitle: `${t.name} specials`, photos: [], menu: [],
+    };
+    A.content.events.items.push(ev);
+    const sec = A.content.sections.find((x) => x.id === 'events');
+    if (sec) sec.show = true;
+    A.open.add(ev);
+    changed();
+    drawReminders();
+    show('edit', true);
+    const panel = Array.from(document.querySelectorAll('.ad-group')).find((d) => /Events and specials/.test(d.querySelector('summary').textContent));
+    if (panel) { panel.open = true; panel.scrollIntoView({ block: 'start' }); }
+    flash(`${t.name} event made. Add photos and special items, then press Save.`);
+  }
+  function drawReminders() {
+    const box = document.getElementById('ad-remind');
+    if (!box || !A.content) return;
+    box.replaceChildren();
+    if (A.seed) {
+      box.append(h('div', { class: 'ad-remind ad-remind--seed' },
+        h('span', {}, `This version of the website came with a backup made on ${niceDate(String(A.seed.createdAt).slice(0, 10))}. Use it to bring back your photos, menu and texts?`),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => useSeed(true) }, 'Use the backup'),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => useSeed(false) }, 'No, keep the website as it is')));
+    }
+    for (const r of reminders()) {
+      box.append(h('div', { class: 'ad-remind' },
+        h('span', {}, `${r.t.name} is on ${niceDate(r.d)}, ${r.left === 0 ? 'today' : r.left === 1 ? 'tomorrow' : `in ${r.left} days`}. Themed cakes sell well; publish them about ${Number(r.t.before) || 7} days before.`),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => makeEvent(r.t, r.d) }, 'Make the event'),
+        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { dismiss(`${r.t.key}:${r.d}`); drawReminders(); } }, 'Not this time')));
+    }
+  }
+  async function useSeed(use) {
+    if (use && !window.confirm('Replace the website with the backup? The current website stays in History, so you can go back.')) return;
+    try {
+      const res = await api('POST', '/api/admin/seed', { file: A.seed.file, use });
+      A.seed = null;
+      if (use) await afterRestore(res);
+      drawReminders();
+    } catch (e) { flash(e.message, true); }
+  }
+  async function afterRestore(res) {
+    A.content = await fetch('/api/content').then((x) => x.json());
+    A.saved = JSON.stringify(A.content);
+    document.getElementById('ad-body').replaceChildren();
+    show('edit', true);
+    status();
+    drawReminders();
+    flash(`Backup restored: ${res.website ? 'website, ' : ''}${res.photos} new photos, ${res.orders} orders, ${res.bookings} bookings.`);
+  }
+  function calendarPanel(body) {
+    const today = BS.todayAD();
+    const rows = (A.content.eventTemplates || []).map((t) => ({ t, d: occurrences(t, today)[0] }))
+      .sort((a, b) => (a.d || '9999').localeCompare(b.d || '9999'));
+    body.append(h('ul', { class: 'ad-cal' }, rows.map(({ t, d }) => {
+      const ev = d && coveredBy(t, d);
+      const bs = d ? BS.toBS(d) : null;
+      return h('li', {},
+        h('div', {}, h('b', {}, t.name), h('span', {}, d ? `${niceDate(d)}${bs ? ` · ${bs.d} ${BS.MONTHS[bs.m - 1]} ${bs.y}` : ''} · ${daysBetween(today, d) === 0 ? 'today' : `in ${daysBetween(today, d)} days`}` : `Date not set yet (usually ${t.usual || 'changes every year'}). Type it under "Edit the calendar".`)),
+        ev ? h('span', { class: 'ad-tag' }, 'Event made') : d && h('button', { type: 'button', class: 'ad-btn', onclick: () => makeEvent(t, d) }, 'Make the event'));
+    })));
+    const edit = h('details', { class: 'ad-crop-wrap' }, h('summary', {}, 'Edit the calendar (dates, reminders, default text)'));
+    edit.append(buildFields([f('eventTemplates', '', 'list', {
+      title: (t) => t.name, add: 'Add a day', blank: () => ({ key: uid('day'), name: 'New day', rule: 'fixed', md: '01-01', dates: '', usual: '', remind: 14, before: 7, border: 'gold', tag: '', title: '', text: '', message: '' }),
+      fields: [
+        f('name', 'Name'),
+        f('rule', 'Date', 'select', { options: () => [['fixed', 'Same English date every year'], ['bs', 'Same Nepali date every year'], ['nth', 'A weekday in a month (for example 2nd Sunday of May)'], ['dates', 'Changes every year: type the dates']] }),
+        f('md', 'Month and day, MM-DD (for the first two choices; Nepali months 01 = Baisakh)'),
+        f('month', 'Month 1 to 12 (weekday choice)', 'number'), f('weekday', 'Weekday 0 = Sunday ... 6 = Saturday', 'number'), f('n', 'Which one: 1 = first, 2 = second...', 'number'),
+        f('dates', 'Dates, YYYY-MM-DD, separated by commas (changes every year)'), f('usual', 'Usually in (shown when no date is set)'),
+        f('remind', 'Remind me how many days before', 'number'), f('before', 'Start showing the event how many days before', 'number'),
+        f('border', 'Border theme', 'select', { options: borderOptions }),
+        f('tag', 'Small label'), f('title', 'Event title'), f('text', 'Short description', 'area'), f('message', 'Message on the event page', 'area'),
+      ],
+    })], A.content, () => drawReminders()));
+    body.append(edit);
+  }
+  function availabilityPanel(body) {
+    const groups = A.content.menu.categories || [];
+    body.append(h('div', { class: 'ad-avail' }, groups.map((g) => h('div', { class: 'ad-avail-group' },
+      h('div', { class: 'ad-avail-head' }, h('b', {}, g.name),
+        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: !g.hidden, onchange: (e) => { g.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show group'))),
+      (g.items || []).map((it) => h('div', { class: 'ad-avail-row' }, h('span', {}, it.name),
+        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: it.available !== false, onchange: (e) => { it.available = e.target.checked; changed(); } }), h('span', {}, 'Available')),
+        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: !it.hidden, onchange: (e) => { it.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show'))))))));
+  }
+
   function listField(field, obj) {
     const wrap = h('div', { class: 'ad-list' });
     const draw = () => {
@@ -289,6 +458,13 @@
       }
       if (field.type === 'image') {
         frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), imageField(field, obj, done)));
+        continue;
+      }
+      if (field.type === 'section') {
+        const sec = (A.content.sections || []).find((x) => x.id === field.id);
+        if (!sec) continue;
+        control = h('input', { type: 'checkbox', id, checked: sec.show !== false, onchange: (e) => { sec.show = e.target.checked; done(); } });
+        frag.append(h('label', { class: 'ad-field ad-check', for: id }, control, h('span', {}, field.l)));
         continue;
       }
       if (field.type === 'toggle') {
@@ -387,38 +563,79 @@
   const line = (label, v) => (v ? `<p><b>${label}:</b> ${esc(v)}</p>` : '');
   const alerts = () => `<p class="ad-note">Email alerts: <b>${A.me.email ? 'on' : 'off'}</b> · WhatsApp alerts: <b>${A.me.whatsapp ? 'on' : 'off'}</b>. The README explains how to switch them on. This list refreshes every 30 seconds. Staff can use the <a href="/counter" target="_blank" rel="noopener">counter screen</a>.</p>`;
 
+  const STEP_NAMES = { pending: 'Pending', acknowledged: 'Acknowledged', preparing: 'Preparing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled', confirmed: 'Confirmed', seated: 'Seated', declined: 'Declined' };
+  const ORDER_STEPS = ['pending', 'acknowledged', 'preparing', 'ready', 'done', 'cancelled'];
+  const BOOKING_STEPS = ['pending', 'confirmed', 'seated', 'done', 'declined'];
+  const stepOptions = (list, cur) => list.map((x) => `<option value="${x}"${x === cur ? ' selected' : ''}>${STEP_NAMES[x]}</option>`).join('');
+  const clock = (iso) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kathmandu', hour: 'numeric', minute: '2-digit', hour12: true });
+  const logList = (x) => (Array.isArray(x.log) && x.log.length ? `<details class="ad-log-mini"><summary>History of this ${x.lines ? 'order' : 'booking'}</summary><ul>${x.log.map((l) => `<li>${clock(l.at)} · ${esc(l.what)} <span>${esc(l.by)}</span></li>`).join('')}</ul></details>` : '');
   function orderCard(o) {
-    return `<article class="ad-card${o.status === 'new' ? ' is-new' : ''}">
-      <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}</span><b>${rs(o.total)}</b></header>
+    const quick = (step, label) => (o.status !== step && o.status !== 'cancelled' ? `<button type="button" class="ad-btn" data-quick="orders" data-id="${esc(o.id)}" data-step="${step}">${label}</button>` : '');
+    return `<article class="ad-card is-${esc(o.status)}">
+      <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="ad-step ad-step--${esc(o.status)}">${STEP_NAMES[o.status] || esc(o.status)}</span><span class="ad-step ${o.paid ? 'ad-step--paid' : 'ad-step--unpaid'}">${o.paid ? 'Paid' : 'Not paid'}</span><b>${rs(o.total)}</b></header>
       <p>${esc(o.name || 'Guest')}${o.phone ? ` · ${contact(o)}` : ''}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
-      ${line('Address', o.address)}${line('Table', o.tableNo)}
+      ${line('Address', o.address)}
       <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''} <span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li>Delivery <span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}</p>
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <footer>
-        <label>Status <select data-patch="desk/orders" data-id="${esc(o.id)}" data-key="status">${options(['new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'], o.status)}</select></label>
-        <label class="ad-check"><input type="checkbox" data-patch="desk/orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}><span>Payment checked</span></label>
-        ${o.payment.proof ? `<a class="ad-btn" href="/api/desk/proof/${esc(o.payment.proof)}" target="_blank" rel="noopener">See ${esc(o.payment.method)} screenshot</a>` : ''}
-        ${o.refPhoto ? `<a class="ad-btn" href="/api/desk/proof/${esc(o.refPhoto)}" target="_blank" rel="noopener">See cake design photo</a>` : ''}
+        ${quick('acknowledged', 'Acknowledge')}${quick('done', 'Mark done')}
+        ${o.paid ? `<button type="button" class="ad-btn ad-btn--quiet" data-quickpaid="false" data-id="${esc(o.id)}">Mark not paid</button>` : `<button type="button" class="ad-btn ad-btn--main" data-quickpaid="true" data-id="${esc(o.id)}">Mark paid</button>`}
+        <label>Status <select data-patch="desk/orders" data-id="${esc(o.id)}" data-key="status">${stepOptions(ORDER_STEPS, o.status)}</select></label>
+        ${o.payment.proof ? `<a class="ad-btn ad-btn--quiet" href="/api/desk/proof/${esc(o.payment.proof)}" target="_blank" rel="noopener">Payment screenshot</a>` : ''}
+        ${o.refPhoto ? `<a class="ad-btn ad-btn--quiet" href="/api/desk/proof/${esc(o.refPhoto)}" target="_blank" rel="noopener">Cake design photo</a>` : ''}
         <button type="button" class="ad-btn ad-btn--quiet" data-del="orders" data-id="${esc(o.id)}">Delete</button>
-      </footer></article>`;
+      </footer>${logList(o)}</article>`;
+  }
+  function daySummary(list) {
+    const live = list.filter((o) => o.status !== 'cancelled');
+    const sum = (arr) => arr.reduce((t, o) => t + Number(o.total || 0), 0);
+    const count = (k) => live.filter((o) => o.type === k).length;
+    const tile = (label, value, cls) => `<div class="ad-tile ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
+    return `<div class="ad-tiles">
+      ${tile('Orders', `${live.length}${list.length > live.length ? ` <small>(${list.length - live.length} cancelled)</small>` : ''}`)}
+      ${tile('Total', rs(sum(live)))}${tile('Paid', rs(sum(live.filter((o) => o.paid))), 'is-paid')}${tile('Not paid yet', rs(sum(live.filter((o) => !o.paid))), 'is-unpaid')}
+      ${tile('Still to do', live.filter((o) => o.status !== 'done').length)}
+      ${tile('At the cafe / pickup / delivery', `${count('dinein')} / ${count('pickup')} / ${count('delivery')}`)}
+    </div>`;
   }
   function listView(kind) {
     const box = h('div', { class: 'ad-page' });
     if (kind === 'orders') {
-      box.innerHTML = `<h2>Orders</h2>${alerts()}` + (A.orders.length ? A.orders.map(orderCard).join('') : '<p class="ad-empty">No orders yet.</p>');
+      const day = A.day || BS.todayAD();
+      const bs = BS.toBS(day);
+      const list = A.dayOrders.filter((o) => A.orderFilter === 'all' || (A.orderFilter === 'unpaid' ? !o.paid && o.status !== 'cancelled' : o.status === A.orderFilter));
+      const chip = (k, label) => `<button type="button" class="ad-chip${A.orderFilter === k ? ' is-on' : ''}" data-ofilter="${k}">${label}</button>`;
+      box.innerHTML = `<h2>Orders</h2>${alerts()}
+        <form class="ad-card ad-dayform" id="ad-day-form">
+          <div class="ad-row">
+            <button type="button" class="ad-btn ad-btn--quiet" data-day="-1" aria-label="Previous day">‹ Previous day</button>
+            <label class="ad-inline">Day <input type="date" name="day" value="${day}"></label>
+            <button type="button" class="ad-btn ad-btn--quiet" data-day="1" aria-label="Next day">Next day ›</button>
+            <button type="button" class="ad-btn ad-btn--quiet" data-day="0">Today</button>
+          </div>
+          <p class="ad-bsday">${bs ? `${bs.d} ${BS.MONTHS[bs.m - 1]} ${bs.y}` : ''} · ${niceDate(day)}</p>
+          <div class="ad-row">
+            <label class="ad-inline">Show <select name="by"><option value="placed"${A.dayBy === 'placed' ? ' selected' : ''}>orders placed this day</option><option value="due"${A.dayBy === 'due' ? ' selected' : ''}>orders due this day</option></select></label>
+            <a class="ad-btn" href="/api/desk/day.csv?date=${day}&by=${A.dayBy}">Download this day (opens in Excel)</a>
+          </div>
+        </form>
+        ${daySummary(A.dayOrders)}
+        <div class="ad-chips">${chip('all', 'All')}${ORDER_STEPS.map((k) => chip(k, STEP_NAMES[k])).join('')}${chip('unpaid', 'Not paid')}</div>`
+        + (list.length ? list.map(orderCard).join('') : '<p class="ad-empty">No orders here.</p>');
     } else if (kind === 'bookings') {
       box.innerHTML = `<h2>Table bookings</h2>${alerts()}` + (A.bookings.length ? A.bookings.map((b) => `
-        <article class="ad-card${b.status === 'new' ? ' is-new' : ''}">
-          <header><strong>${esc(b.id)}</strong><span>asked ${when(b.createdAt)}</span><b>${esc(b.people)} people</b></header>
+        <article class="ad-card is-${esc(b.status)}">
+          <header><strong>${esc(b.id)}</strong><span>asked ${when(b.createdAt)}</span><span class="ad-step ad-step--${esc(b.status)}">${STEP_NAMES[b.status] || esc(b.status)}</span><b>${esc(b.people)} people</b></header>
           <p><b>${esc(b.bs || b.date)} at ${esc(b.time)}</b>${b.seating ? ` · ${esc(b.seating)}` : ''}</p>
           <p>${esc(b.name || 'Guest')} · ${contact(b)}</p>
           ${line('Food ready on arrival', b.food)}${line('Name on cake', b.cakeName)}${line('Decoration', b.decoration)}${line('Remarks', b.remarks)}
           <footer>
-            <label>Status <select data-patch="desk/bookings" data-id="${esc(b.id)}" data-key="status">${options(['new', 'confirmed', 'seated', 'declined', 'done'], b.status)}</select></label>
+            ${b.status === 'pending' ? `<button type="button" class="ad-btn ad-btn--main" data-quick="bookings" data-id="${esc(b.id)}" data-step="confirmed">Confirm</button>` : ''}
+            <label>Status <select data-patch="desk/bookings" data-id="${esc(b.id)}" data-key="status">${stepOptions(BOOKING_STEPS, b.status)}</select></label>
             <button type="button" class="ad-btn ad-btn--quiet" data-del="bookings" data-id="${esc(b.id)}">Delete</button>
-          </footer>
+          </footer>${logList(b)}
         </article>`).join('') : '<p class="ad-empty">No bookings yet.</p>');
     } else if (kind === 'reviews') {
       box.innerHTML = `<h2>Reviews</h2>
@@ -456,7 +673,20 @@
           </footer>
         </article>`).join('') : '<p class="ad-empty">No messages yet.</p>');
     } else if (kind === 'history') {
-      box.innerHTML = `<h2>History</h2>
+      box.innerHTML = `<h2>History and backup</h2>
+        <div class="ad-card">
+          <header><strong>Backups</strong></header>
+          <p class="ad-note">Download a website backup before you put a new version of the website on GitHub. If the new version starts empty, come here and restore the file: your photos, menu, prices, texts, sizes and photo positions come back. To have Claude build the next version on top of your current website, upload the website backup file in the chat.</p>
+          <footer>
+            <a class="ad-btn ad-btn--main" href="/api/admin/backup">Download website backup</a>
+            <a class="ad-btn" href="/api/admin/backup?full=1">Download full backup (also orders, bookings, reviews, messages)</a>
+          </footer>
+          <form class="ad-form" id="ad-restore-form">
+            <label>Restore from a backup file (.zip)<input type="file" name="file" accept=".zip,application/zip" required></label>
+            <footer><button class="ad-btn" type="submit">Restore</button><span class="ad-note">Nothing is deleted: the current website is kept in the list below, and orders are only added.</span></footer>
+          </form>
+          <p class="ad-note">Passwords and staff logins are never put in a backup.</p>
+        </div>
         <p class="ad-note">Every time you press Save, the website is kept here. Open an older version to look at it in the editor; press Save if you want to use it again. Nothing changes until you save.</p>
         <div class="ad-card"><header><strong>Website versions</strong></header>
           ${A.history.length ? A.history.map((v, n) => `<div class="ad-version">
@@ -516,12 +746,7 @@
             <footer><button class="ad-btn" type="submit">Add staff login</button></footer>
           </form>
         </div>
-        <div class="ad-card">
-          <header><strong>Backup</strong></header>
-          <p class="ad-note">Downloads the website content, orders, bookings, reviews and messages as one file. Uploaded photos are not included.</p>
-          <footer><a class="ad-btn" href="/api/admin/export">Download backup</a></footer>
-        </div>
-        <p class="ad-note">The activity log is under History.</p>`;
+        <p class="ad-note">Backups and the activity log are under History and backup.</p>`;
     }
     return box;
   }
@@ -529,11 +754,14 @@
   async function loadLists() {
     const [o, b, r, m] = await Promise.all([api('GET', '/api/desk/orders'), api('GET', '/api/desk/bookings'), api('GET', '/api/admin/reviews'), api('GET', '/api/admin/messages')]);
     A.orders = o; A.bookings = b; A.reviews = r; A.messages = m;
-    const count = { orders: o.filter((x) => x.status === 'new').length, bookings: b.filter((x) => x.status === 'new').length, reviews: r.filter((x) => !x.approved).length, messages: m.filter((x) => !x.read).length };
+    const count = { orders: o.filter((x) => x.status === 'pending').length, bookings: b.filter((x) => x.status === 'pending').length, reviews: r.filter((x) => !x.approved).length, messages: m.filter((x) => !x.read).length };
     for (const [k, n] of Object.entries(count)) {
       const el = document.querySelector(`[data-count="${k}"]`);
       if (el) { el.textContent = n; el.hidden = !n; }
     }
+  }
+  async function loadDay() {
+    A.dayOrders = await api('GET', `/api/desk/orders?date=${A.day || BS.todayAD()}&by=${A.dayBy}`);
   }
   async function loadSecurity() {
     A.staff = await api('GET', '/api/admin/staff');
@@ -552,6 +780,7 @@
   async function reload(view) {
     if (view === 'security') await loadSecurity();
     else if (view === 'history') await loadHistory();
+    else if (view === 'orders') await Promise.all([loadLists(), loadDay()]);
     else if (view !== 'tables') await loadLists();
     show(view, true);
   }
@@ -565,13 +794,14 @@
     root.replaceChildren(
       h('header', { class: 'ad-top' },
         h('strong', { class: 'ad-name' }, 'Pick Me Cafe admin'),
-        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('tables', 'Table QR'), tab('history', 'History'), tab('security', 'Security')),
+        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security')),
         h('span', { class: 'ad-right' },
           h('span', { id: 'ad-status', class: 'ad-status' }, 'All changes saved'),
           h('button', { type: 'button', id: 'ad-save', class: 'ad-btn ad-btn--main', disabled: true, onclick: save }, 'Save'),
           h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: discard }, 'Undo changes'),
           h('a', { class: 'ad-btn ad-btn--quiet', href: '/', target: '_blank', rel: 'noopener' }, 'Open site'),
           h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: async () => { await api('POST', '/api/auth/logout'); login(); } }, 'Log out'))),
+      h('div', { id: 'ad-remind', class: 'ad-reminders' }),
       h('div', { id: 'ad-body', class: 'ad-body' }),
       h('div', { id: 'ad-flash', class: 'ad-flash', role: 'status' }));
   }
@@ -610,10 +840,16 @@
   const formData = (form) => Object.fromEntries(new FormData(form).entries());
   root.addEventListener('change', async (e) => {
     const t = e.target;
+    if (t.closest && t.closest('#ad-day-form')) {
+      if (t.name === 'day' && /^\d{4}-\d{2}-\d{2}$/.test(t.value)) A.day = t.value;
+      if (t.name === 'by') A.dayBy = t.value;
+      try { await reload('orders'); } catch (err) { flash(err.message, true); }
+      return;
+    }
     if (!t.dataset.patch) return;
     try {
       await api('PATCH', `/api/${t.dataset.patch}/${t.dataset.id}`, { [t.dataset.key]: t.type === 'checkbox' ? t.checked : t.value });
-      await loadLists();
+      await reload(A.view);
       flash('Updated.');
     } catch (err) { flash(err.message, true); }
   });
@@ -623,7 +859,15 @@
     const doIt = e.target.closest('[data-do]');
     const version = e.target.closest('[data-version]');
     const unbin = e.target.closest('[data-unbin]');
+    const quick = e.target.closest('[data-quick]');
+    const quickPaid = e.target.closest('[data-quickpaid]');
+    const dayBtn = e.target.closest('[data-day]');
+    const ofilter = e.target.closest('[data-ofilter]');
     try {
+      if (quick) { await api('PATCH', `/api/desk/${quick.dataset.quick}/${quick.dataset.id}`, { status: quick.dataset.step }); await reload(A.view); flash('Updated.'); return; }
+      if (quickPaid) { await api('PATCH', `/api/desk/orders/${quickPaid.dataset.id}`, { paid: quickPaid.dataset.quickpaid === 'true' }); await reload(A.view); flash('Updated.'); return; }
+      if (dayBtn) { e.preventDefault(); const n = Number(dayBtn.dataset.day); A.day = n === 0 ? BS.todayAD() : addDays(A.day || BS.todayAD(), n); await reload('orders'); return; }
+      if (ofilter) { A.orderFilter = ofilter.dataset.ofilter; show('orders', true); return; }
       if (version) {
         if (status() && !window.confirm('You have unsaved changes. Open this older version anyway? Your unsaved changes are lost.')) return;
         const old = await api('GET', `/api/admin/history/${version.dataset.version}`);
@@ -668,9 +912,21 @@
   });
   root.addEventListener('submit', async (e) => {
     const id = e.target.id;
-    if (!/^ad-(newrev|pass-form|staff-form|tables-form)$/.test(id)) return;
+    if (!/^ad-(newrev|pass-form|staff-form|tables-form|restore-form|day-form)$/.test(id)) return;
     e.preventDefault();
+    if (id === 'ad-day-form') return;
     try {
+      if (id === 'ad-restore-form') {
+        const file = e.target.elements.file.files[0];
+        if (!file) return;
+        if (!window.confirm('Restore this backup? The current website stays in History, so you can go back.')) return;
+        flash('Restoring the backup...');
+        const r = await fetch('/api/admin/restore', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file });
+        const res = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(res.error || 'Could not restore that file.');
+        await afterRestore(res);
+        return;
+      }
       if (id === 'ad-tables-form') { const d = formData(e.target); A.tables = d.n; A.tableBase = String(d.base || '').trim() || location.origin; show('tables', true); return; }
       if (id === 'ad-newrev') { await api('POST', '/api/admin/reviews', formData(e.target)); await reload('reviews'); flash('Review added.'); }
       if (id === 'ad-pass-form') { await api('POST', '/api/admin/password', formData(e.target)); await reload('security'); flash('Password changed. Other devices are signed out.'); }
@@ -721,10 +977,12 @@
     A.saved = JSON.stringify(A.content);
     shell();
     show('edit');
+    drawReminders();
     loadLists().catch(() => {});
+    api('GET', '/api/admin/seed').then((r) => { if (r.file) { A.seed = r; drawReminders(); } }).catch(() => {});
     clearInterval(A.poll);
     A.poll = setInterval(async () => {
-      try { await loadLists(); if (!/edit|security|history|tables/.test(A.view)) show(A.view); } catch (e) { /* shown at next action */ }
+      try { await loadLists(); if (A.view === 'orders') await loadDay(); if (!/edit|security|history|tables/.test(A.view)) show(A.view); } catch (e) { /* shown at next action */ }
     }, 30000);
   }
   boot();

@@ -65,7 +65,7 @@
     storyPhoto: { sel: '.story-pic', axes: 'xy', label: 'Our story photo' },
     gallery: { sel: '.gal-item', axes: 'xy', label: 'Gallery photos' },
     reviewCard: { sel: '.rev', axes: 'x', label: 'Review cards' },
-    map: { sel: '.map', axes: 'y', label: 'Map' },
+    map: { sel: '.map', axes: 'xy', label: 'Map' },
   };
 
   /* Make big phone photos small before upload. PNGs are kept as they are when keepPng is set (logos). */
@@ -123,6 +123,7 @@
     set('--body', within(t.bodySize, 13, 22, 16) + 'px');
     set('--wrap', within(t.width, 900, 1600, 1180) + 'px');
     set('--hero-h', within(t.heroHeight, 420, 1100, 760) + 'px');
+    set('--sec-gap', within(t.sectionGap, 0, 200, 56) + 'px');
     const fd = font(t.fontDisplay, 'Marcellus');
     const fs = font(t.fontScript, 'Allura');
     const fb = font(t.fontBody, 'Jost');
@@ -165,7 +166,20 @@
   const btn = (label, href, cls, path) => `<a class="btn ${cls || ''}" href="${esc(safeUrl(href) || '#')}"><span${path ? ed(path) : ''}>${esc(label)}</span>${ICON.arrow}</a>`;
   const logo = (c) => (safeUrl(c.brand.logo) ? `<img class="logo-img" src="${esc(safeUrl(c.brand.logo))}" alt="">` : `<span class="logo-mono" aria-hidden="true">${esc((c.brand.shortName || c.brand.name || 'P').slice(0, 1))}</span>`);
   const nepalTime = () => new Date(Date.now() + 345 * 60e3).toISOString().slice(11, 16);
-  const isOpen = (c) => { const t = nepalTime(); return t >= c.brand.open && t <= c.brand.close; };
+  // The "closed today" notice from admin, while it applies.
+  function closure(c) {
+    const k = c.closure || {};
+    if (!k.on) return null;
+    if (k.until && /^\d{4}-\d{2}-\d{2}$/.test(k.until) && BS.todayAD() > k.until) return null;
+    return k;
+  }
+  const isOpen = (c) => { const t = nepalTime(); return !closure(c) && t >= c.brand.open && t <= c.brand.close; };
+  // Photo border theme: an event can switch the whole site to its border while it shows.
+  function siteBorder(c) {
+    const ev = activeEvents(c).find(({ e }) => e.borderSite && e.border);
+    return ev ? ev.e.border : (c.theme.border || 'none');
+  }
+  const deco = (html, border, cls) => (border && border !== 'none' ? `<div class="deco deco--${esc(border)} ${cls || ''}">${html}</div>` : html);
   const t12 = (t) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${m < 10 ? '0' : ''}${m} ${h < 12 ? 'AM' : 'PM'}`; };
   function timeOptions(c, chosen) {
     const [oh, om] = c.brand.open.split(':').map(Number);
@@ -195,11 +209,15 @@
 
   /* ---------- menu lookups and cart ---------- */
   function findPrice(itemId, label) {
-    for (const cat of S.c.menu.categories) {
-      for (const it of cat.items || []) {
+    const groups = (S.c.menu.categories || []).map((g) => ({ items: g.items, hidden: g.hidden }))
+      .concat((S.c.events.items || []).filter((e) => e.enabled !== false).map((e) => ({ items: e.menu })));
+    for (const g of groups) {
+      for (const it of g.items || []) {
         if (it.id !== itemId) continue;
         const p = (it.prices || []).find((x) => (x.label || '') === (label || ''));
-        return p ? { item: it, price: p } : null;
+        if (!p) return null;
+        const off = g.hidden || it.hidden || it.available === false;
+        return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p };
       }
     }
     return null;
@@ -255,7 +273,7 @@
         ${h.line || PREVIEW ? `<p class="hero-line hero-in"${ed('hero.line')}>${esc(h.line)}</p>` : ''}
         ${h.tagline || PREVIEW ? `<p class="ital hero-in"${ed('hero.tagline')}>${esc(h.tagline)}</p>` : ''}
         <div class="pill hero-in">
-          <span>${ICON.clock}<span><small class="${open ? 'dot dot--on' : 'dot'}">${open ? 'Open now' : 'Closed now'}</small><span${ed('brand.hoursText')}>${esc(c.brand.hoursText)}</span></span></span>
+          <span>${ICON.clock}<span><small class="${open ? 'dot dot--on' : 'dot'}">${open ? 'Open now' : (closure(c) ? 'Closed today' : 'Closed now')}</small><span${ed('brand.hoursText')}>${esc(c.brand.hoursText)}</span></span></span>
           <a href="${esc(safeUrl(c.visit.mapLink) || '#visit')}"${safeUrl(c.visit.mapLink) ? ' target="_blank" rel="noopener"' : ''}>${ICON.pin}<span><small>Find us</small>${esc(c.brand.address.split(',').slice(0, 2).join(','))}</span></a>
           <a href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener">${ICON.whatsapp}<span><small>Call or WhatsApp</small>${esc(c.brand.phone)}</span></a>
         </div>
@@ -272,16 +290,17 @@
 
   function fromPrice(c, catId) {
     const cat = (c.menu.categories || []).find((x) => x.id === catId);
-    const all = cat ? (cat.items || []).filter((i) => i.available !== false).flatMap((i) => (i.prices || []).map((p) => Number(p.price))).filter((n) => n > 0) : [];
+    const all = cat && !cat.hidden ? (cat.items || []).filter((i) => i.available !== false && !i.hidden).flatMap((i) => (i.prices || []).map((p) => Number(p.price))).filter((n) => n > 0) : [];
     return all.length ? `From ${rs(Math.min(...all))}` : '';
   }
   R.highlights = (c) => {
     const h = c.highlights;
+    const border = siteBorder(c);
     return `<section id="highlights" class="sec"><div class="wrap">
       ${head(h, 'highlights')}
       <div class="trio">${(h.cards || []).map((k, i) => `
         <a class="arch rv" style="--d:${i * 90}ms" href="#menu" data-act="cat" data-id="${esc(k.category)}">
-          ${pic(k.image, k.title, 'arch-pic')}
+          ${deco(pic(k.image, k.title, 'arch-pic'), border, 'deco--arch')}
           <h3${ed(`highlights.cards.${i}.title`)}>${esc(k.title)}</h3>
           <p${ed(`highlights.cards.${i}.text`)}>${esc(k.text)}</p>
           ${fromPrice(c, k.category) ? `<span class="from">${fromPrice(c, k.category)}</span>` : ''}
@@ -298,6 +317,7 @@
       return now >= Date.parse(e.start) && now < end ? { e, i, left: Math.round((end - now) / 864e5) } : null;
     }).filter(Boolean);
   }
+  const hasPage = (e) => Boolean((e.menu || []).some((it) => !it.hidden) || (e.photos || []).some((p) => safeUrl(p.image)) || e.message);
   R.events = (c) => {
     const list = activeEvents(c);
     if (!list.length) return '';
@@ -312,7 +332,9 @@
             <p class="slide-tags">${e.tag ? `<span class="tag"${ed(`events.items.${i}.tag`)}>${esc(e.tag)}</span>` : ''}<span class="tag tag--soft">${left} day${left === 1 ? '' : 's'} left</span></p>
             <h3${ed(`events.items.${i}.title`)}>${esc(e.title)}</h3>
             <p${ed(`events.items.${i}.text`)}>${esc(e.text)}</p>
-            ${e.button ? btn(e.button, e.link || '#menu', '', `events.items.${i}.button`) : ''}
+            ${hasPage(e)
+              ? `<button type="button" class="btn" data-act="event" data-id="${esc(e.id)}"><span${ed(`events.items.${i}.button`)}>${esc(e.button || 'See the specials')}</span>${ICON.arrow}</button>`
+              : (e.button ? btn(e.button, e.link || '#menu', '', `events.items.${i}.button`) : '')}
           </div></article>`).join('')}
         ${many ? `<div class="slide-bar"><i></i></div>
           <div class="slide-ctl">
@@ -324,30 +346,40 @@
       </div></div></section>`;
   };
 
+  // Menu groups shown as tabs: the specials of events showing now come first.
+  function menuGroups(c) {
+    const out = [];
+    for (const { e, i } of activeEvents(c)) {
+      if ((e.menu || []).some((it) => !it.hidden)) out.push({ id: 'event-' + e.id, name: e.menuTitle || e.title, note: e.message, items: e.menu, path: `events.items.${i}.menu`, notePath: `events.items.${i}.message`, special: true });
+    }
+    (c.menu.categories || []).forEach((g, ci) => {
+      if (!g.hidden) out.push({ id: g.id, name: g.name, note: g.note, items: g.items || [], path: `menu.categories.${ci}.items`, notePath: `menu.categories.${ci}.note` });
+    });
+    return out;
+  }
+  function itemHtml(it, base, cards) {
+    const off = it.available === false;
+    const prices = off ? '<span class="mi-off">Not available today</span>' : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => `
+      <button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
+        aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
+        ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">${p.whole ? 'Pre-order' : '+'}</i>
+      </button>`).join('');
+    const badge = it.badge ? `<span class="badge"${ed(base + '.badge')}>${esc(it.badge)}</span>` : '';
+    const text = `<h4><span${ed(base + '.name')}>${esc(it.name)}</span>${cards ? '' : badge}</h4>${it.desc || PREVIEW ? `<p${ed(base + '.desc')}>${esc(it.desc)}</p>` : ''}`;
+    if (cards) return `<article class="mc${off ? ' mi--off' : ''}"><div class="mc-top">${pic(it.image, it.name, 'mc-pic')}${badge}</div><div class="mc-body">${text}<div class="mi-prices">${prices}</div></div></article>`;
+    const photo = safeUrl(it.image) ? pic(it.image, it.name, 'mi-pic') : '';
+    return `<article class="mi${off ? ' mi--off' : ''}${photo ? '' : ' mi--plain'}">${photo}<div class="mi-main"><div class="mi-body">${text}</div><div class="mi-prices">${prices}</div></div></article>`;
+  }
   function menuBody(c) {
-    const cats = c.menu.categories || [];
-    const ci = Math.max(0, cats.findIndex((x) => x.id === S.tab));
-    const cat = cats[ci];
-    if (!cat) return '<p class="muted">The menu is being updated.</p>';
-    S.tab = cat.id;
+    const groups = menuGroups(c);
+    const g = groups.find((x) => x.id === S.tab) || groups[0];
+    if (!g) return '<p class="muted">The menu is being updated.</p>';
+    S.tab = g.id;
     const cards = c.menu.layout === 'cards';
-    const tabs = cats.map((x) => `<button type="button" role="tab" aria-selected="${x.id === cat.id}" class="tab${x.id === cat.id ? ' is-on' : ''}" data-act="tab" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('');
-    const items = (cat.items || []).map((it, ii) => {
-      const off = it.available === false;
-      const base = `menu.categories.${ci}.items.${ii}`;
-      const prices = off ? '<span class="mi-off">Not available today</span>' : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => `
-        <button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
-          aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
-          ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">${p.whole ? 'Pre-order' : '+'}</i>
-        </button>`).join('');
-      const badge = it.badge ? `<span class="badge"${ed(base + '.badge')}>${esc(it.badge)}</span>` : '';
-      const text = `<h4><span${ed(base + '.name')}>${esc(it.name)}</span>${cards ? '' : badge}</h4>${it.desc || PREVIEW ? `<p${ed(base + '.desc')}>${esc(it.desc)}</p>` : ''}`;
-      return cards
-        ? `<article class="mc${off ? ' mi--off' : ''}"><div class="mc-top">${pic(it.image, it.name, 'mc-pic')}${badge}</div><div class="mc-body">${text}<div class="mi-prices">${prices}</div></div></article>`
-        : `<article class="mi${off ? ' mi--off' : ''}">${safeUrl(it.image) ? pic(it.image, it.name, 'mi-pic') : ''}<div class="mi-body">${text}</div><div class="mi-prices">${prices}</div></article>`;
-    }).join('');
+    const tabs = groups.map((x) => `<button type="button" role="tab" aria-selected="${x.id === g.id}" class="tab${x.id === g.id ? ' is-on' : ''}${x.special ? ' tab--special' : ''}" data-act="tab" data-id="${esc(x.id)}">${x.special ? '<i aria-hidden="true">✦</i> ' : ''}${esc(x.name)}</button>`).join('');
+    const items = g.items.map((it, ii) => (it.hidden ? '' : itemHtml(it, `${g.path}.${ii}`, cards))).join('');
     return `<div class="tabs" role="tablist" aria-label="Menu groups">${tabs}</div>
-      ${cat.note ? `<p class="menu-note"${ed(`menu.categories.${ci}.note`)}>${esc(cat.note)}</p>` : ''}
+      ${g.note ? `<p class="menu-note${g.special ? ' menu-note--special' : ''}"${ed(g.notePath)}>${esc(g.note)}</p>` : ''}
       <div class="${cards ? 'menu-cards' : 'menu-list'}" role="tabpanel">${items}</div>`;
   }
   R.menu = (c) => `<section id="menu" class="sec sec--tint"><div class="wrap">
@@ -357,9 +389,9 @@
 
   function wholeCakes(c) {
     const out = [];
-    for (const cat of c.menu.categories || []) {
-      for (const it of cat.items || []) {
-        if (it.available === false) continue;
+    for (const g of menuGroups(c)) {
+      for (const it of g.items || []) {
+        if (it.available === false || it.hidden) continue;
         for (const p of it.prices || []) if (p.whole && Number(p.price) > 0) out.push({ id: it.id, name: it.name, label: p.label || '', price: p.price });
       }
     }
@@ -378,7 +410,7 @@
     const k = c.cake;
     const slot = nextSlot(c, k.noticeHours);
     return `<section id="cake" class="sec"><div class="wrap split">
-      <div class="split-pic rv">${pic(k.image, 'Celebration cake', 'fade-pic')}</div>
+      <div class="split-pic rv">${deco(pic(k.image, 'Celebration cake', 'fade-pic'), siteBorder(c), 'deco--tall')}</div>
       <div class="split-body rv">
         ${head(k, 'cake')}
         <p class="lede"${ed('cake.text')}>${esc(k.text)}</p>
@@ -404,7 +436,7 @@
     const seats = String(b.seating || '').split(',').map((x) => x.trim()).filter(Boolean);
     const slot = nextSlot(c, 1);
     return `<section id="booking" class="sec sec--tint"><div class="wrap split split--flip">
-      <div class="split-pic rv">${pic(b.image, 'A table at ' + c.brand.name, 'fade-pic')}</div>
+      <div class="split-pic rv">${deco(pic(b.image, 'A table at ' + c.brand.name, 'fade-pic'), siteBorder(c), 'deco--tall')}</div>
       <div class="split-body rv">
         ${head(b, 'booking')}
         <p class="lede"${ed('booking.text')}>${esc(b.text)}</p>
@@ -440,13 +472,14 @@
   R.gallery = (c) => {
     const g = c.gallery;
     if (!(g.images || []).length) return '';
+    const border = siteBorder(c);
     return `<section id="gallery" class="sec"><div class="wrap">
       ${head(g, 'gallery')}
-      <div class="gal">${g.images.map((im, i) => `
+      <div class="gal">${g.images.map((im, i) => deco(`
         <button type="button" class="gal-item rv" style="--d:${i * 70}ms" data-act="zoom" data-src="${esc(safeUrl(im.image))}" data-cap="${esc(im.caption)}" aria-label="Open photo: ${esc(im.caption || 'gallery photo')}">
           ${pic(im.image, im.caption || 'Gallery photo')}
           ${im.caption || im.tag ? `<span>${im.tag ? `<small>${esc(im.tag)}</small>` : ''}${esc(im.caption)}</span>` : ''}
-        </button>`).join('')}
+        </button>`, border, 'deco--gal')).join('')}
       </div></div></section>`;
   };
 
@@ -525,20 +558,27 @@
         <button type="button" class="cart-btn" data-act="cart" aria-label="Open cart">${ICON.bag}<span class="cart-count" hidden>0</span></button>
         <button type="button" class="nav-toggle" data-act="nav" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">${ICON.menu}</button>
       </div></div>
+      ${closure(c) ? `<p class="closed-bar"><strong${ed('closure.title')}>${esc(c.closure.title)}</strong> <span${ed('closure.text')}>${esc(c.closure.text)}</span></p>` : ''}
       ${TABLE && !PREVIEW ? `<p class="table-bar">${ICON.bag}<span>Table ${esc(TABLE)}: add what you like from the menu, then tap the bag to send your order. Pay at the counter when you are done.</span></p>` : ''}</header>`;
   }
+  const SOCIAL_NAMES = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', maps: 'Google Maps', viber: 'Viber', website: 'Website', link: 'Link' };
   function footer(c) {
-    const soc = (c.social || []).filter((s) => /^https?:\/\//i.test(s.url || '')).map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener" aria-label="${esc(s.type)}">${ICON[s.type] || ICON.link}</a>`).join('');
+    const bar = c.socialBar || {};
+    const wa = bar.whatsapp !== false;
+    const links = (c.social || []).filter((s) => s.show !== false && /^https?:\/\//i.test(s.url || ''));
+    const icon = (s, cls) => `<a class="${cls} ${cls}--${esc(s.type)}" href="${esc(s.url)}" target="_blank" rel="noopener" aria-label="${esc(SOCIAL_NAMES[s.type] || s.type)}">${ICON[s.type] || ICON.link}</a>`;
+    const waIcon = (cls) => `<a class="${cls} ${cls}--whatsapp" href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener" aria-label="WhatsApp">${ICON.whatsapp}</a>`;
+    const soc = links.map((s) => icon(s, 'sl')).join('');
     return `<footer class="foot"><div class="wrap foot-in">
       <a class="brand brand--foot" href="#hero">${logo(c)}<span>${esc(c.brand.name)}</span></a>
       <p>${ICON.pin}<span>${esc(c.brand.address)}</span></p>
       <p>${ICON.clock}<span>${esc(c.brand.hoursText)}</span></p>
-      <div class="soc">${soc}<a href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener" aria-label="WhatsApp">${ICON.whatsapp}</a></div>
+      <div class="soc">${soc}${wa ? waIcon('sl') : ''}</div>
       </div>
       <p class="foot-line">${ICON.heart}<span${ed('footer.line')}>${esc(c.footer.line)}</span></p>
       ${c.footer.note ? `<p class="foot-note"${ed('footer.note')}>${esc(c.footer.note)}</p>` : ''}
     </footer>
-    <a class="wa-float" href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp">${ICON.whatsapp}</a>`;
+    ${bar.show !== false && (links.length || wa) ? `<div class="float-bar">${links.map((s) => icon(s, 'fb')).join('')}${wa ? waIcon('fb') : ''}</div>` : ''}`;
   }
 
   /* ---------- render ---------- */
@@ -552,6 +592,7 @@
     applyTheme(c.theme);
     applySizes(c.sizes);
     document.documentElement.classList.toggle('at-table', Boolean(TABLE && !PREVIEW));
+    document.documentElement.classList.toggle('is-closed', Boolean(closure(c)));
     const y = window.scrollY;
     $('#app').innerHTML = nav(c) + '<main>' + c.sections.filter((s) => s.show !== false && R[s.id]).map((s) => R[s.id](c)).join('') + '</main>' + footer(c);
     $$('[data-bsp]', $('#app')).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: el.dataset.value }));
@@ -577,6 +618,42 @@
     if (bar) { bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
   }
   document.addEventListener('animationend', (e) => { if (e.target.matches && e.target.matches('.slide-bar i')) showSlide(S.slide + 1); });
+
+  /* ---------- event page: photos, message and special menu ---------- */
+  function openEvent(id) {
+    const c = S.c;
+    const i = (c.events.items || []).findIndex((e) => e.id === id);
+    if (i < 0) return;
+    const e = c.events.items[i];
+    const items = (e.menu || []).map((it, ii) => (it.hidden ? '' : itemHtml(it, `events.items.${i}.menu.${ii}`, true))).join('');
+    const photos = (e.photos || []).filter((p) => safeUrl(p.image)).map((p) => `<figure class="ev-photo">${deco(pic(p.image, p.caption || e.title, 'ev-pic'), e.border, 'deco--ev')}${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ''}</figure>`).join('');
+    openLayer(`<div class="shade" data-act="close"></div>
+      <div class="modal modal--event" role="dialog" aria-label="${esc(e.title)}">
+        <button type="button" class="icon-btn ev-close" data-act="close" aria-label="Close">${ICON.x}</button>
+        <div class="ev-hero">${pic(e.image, e.title, 'ev-hero-pic')}
+          <div class="ev-hero-text">${e.tag ? `<span class="tag">${esc(e.tag)}</span>` : ''}<h2>${esc(e.title)}</h2>${e.text ? `<p>${esc(e.text)}</p>` : ''}</div></div>
+        ${e.message ? `<p class="ev-message">${esc(e.message)}</p>` : ''}
+        ${photos ? `<div class="ev-photos">${photos}</div>` : ''}
+        ${items ? `<h3 class="ev-h">${esc(e.menuTitle || 'Specials')}</h3><div class="menu-cards ev-menu">${items}</div>` : ''}
+        <div class="row row--center ev-foot">
+          ${items ? `<button type="button" class="btn" data-act="cart"><span>See my order</span>${ICON.arrow}</button>` : ''}
+          ${safeUrl(e.link) ? `<a class="btn btn--ghost" href="${esc(e.link)}" data-act="close"><span>${esc(e.button || 'More')}</span>${ICON.arrow}</a>` : ''}
+          <button type="button" class="btn btn--ghost" data-act="close"><span>Close</span></button>
+        </div>
+      </div>`);
+  }
+  function showClosedNotice() {
+    const k = closure(S.c);
+    if (!k || PREVIEW) return;
+    try { if (sessionStorage.getItem('pm_closed_seen') === (k.title + k.text)) return; sessionStorage.setItem('pm_closed_seen', k.title + k.text); } catch (e) { /* no storage */ }
+    openLayer(`<div class="shade" data-act="close"></div>
+      <div class="modal modal--done modal--closed" role="dialog" aria-label="${esc(k.title)}">
+        ${safeUrl(k.image) ? pic(k.image, k.title, 'closed-pic') : ''}
+        <h2>${esc(k.title)}</h2><p>${esc(k.text)}</p>
+        ${k.allowLater ? '<p class="hint">You can still order or book for a later day.</p>' : ''}
+        <button type="button" class="btn" data-act="close"><span>Okay</span></button>
+      </div>`);
+  }
 
   /* ---------- cart drawer and checkout ---------- */
   const layer = () => $('#layer');
@@ -816,10 +893,13 @@
       toast(`${f ? f.item.name : 'Item'} added to your cart`);
       $$('.cart-btn').forEach((b) => { b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump'); });
     },
+    event(el) { openEvent(el.dataset.id); },
     cake(el) {
       const sel = $('#cake-select');
-      if (!sel) { addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout(); }
-      sel.value = `${el.dataset.item}|${el.dataset.label}`;
+      const value = `${el.dataset.item}|${el.dataset.label}`;
+      if (!sel || !Array.from(sel.options).some((o) => o.value === value)) { addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout(); }
+      closeLayer();
+      sel.value = value;
       cakeTotal();
       $('#cake').scrollIntoView({ behavior: 'smooth' });
     },
@@ -1043,6 +1123,8 @@
       render();
       if (location.hash && location.hash.length > 1 && !PREVIEW) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
       else if (TABLE && !PREVIEW && $('#menu')) $('#menu').scrollIntoView();
+      if (/^#event-/.test(location.hash) && !PREVIEW) openEvent(location.hash.slice(7));
+      else showClosedNotice();
     } catch (err) {
       $('#app').innerHTML = '<p class="boot">The website could not load. Please refresh the page.</p>';
     }

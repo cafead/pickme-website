@@ -137,3 +137,53 @@
   .ad-grid, .ad-grid--2 { grid-template-columns: 1fr; }
   .ad-version { flex-direction: column; }
 }
+
+/* reminders and the backup prompt, under the top bar */
+.ad-reminders { display: grid; gap: 6px; padding: 0 16px; background: #fff; }
+.ad-reminders:empty { display: none; }
+.ad-reminders > :last-child { margin-bottom: 8px; }
+.ad-remind { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid #E5C77E; border-radius: 10px; background: #FFF6DD; }
+.ad-remind > span { flex: 1 1 320px; }
+.ad-remind--seed { background: #E8F1FB; border-color: #A9C5E8; }
+
+/* orders */
+.ad-card.is-pending { border-left: 5px solid #B3371F; }
+.ad-card.is-acknowledged, .ad-card.is-preparing, .ad-card.is-confirmed, .ad-card.is-seated { border-left: 5px solid #1D5FA8; }
+.ad-card.is-ready { border-left: 5px solid #8A6D1B; }
+.ad-card.is-done { border-left: 5px solid #24693F; opacity: .85; }
+.ad-card.is-cancelled, .ad-card.is-declined { border-left: 5px solid #9E9E9E; opacity: .7; }
+.ad-step { padding: 2px 10px; border-radius: 999px; font-size: .8rem !important; font-weight: 600; background: #EEE; color: #333 !important; }
+.ad-step--pending { background: #FBE3DE; color: #8E2A1E !important; }
+.ad-step--acknowledged, .ad-step--preparing, .ad-step--confirmed, .ad-step--seated { background: #DFEAF7; color: #174A84 !important; }
+.ad-step--ready { background: #F6EBC8; color: #6A520F !important; }
+.ad-step--done, .ad-step--paid { background: #DDEFE3; color: #1B5532 !important; }
+.ad-step--unpaid { background: #F4F0EA; color: #5F5243 !important; }
+.ad-dayform { gap: 8px; }
+.ad-inline { display: flex !important; align-items: center; gap: 8px; }
+.ad-inline input, .ad-inline select { width: auto !important; }
+.ad-bsday { font: 1.15rem "Marcellus", Georgia, serif; }
+.ad-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.ad-tile { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid #D8CDBD; border-radius: 10px; background: #fff; }
+.ad-tile span { font-size: .8rem; color: #5F5243; }
+.ad-tile b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.ad-tile small { font-weight: 400; color: #5F5243; font-size: .8rem; }
+.ad-tile.is-paid b { color: #1B5532; }
+.ad-tile.is-unpaid b { color: #8E2A1E; }
+.ad-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ad-chip { min-height: 36px; padding: 0 14px; border: 1px solid #D8CDBD; border-radius: 999px; background: #fff; }
+.ad-chip.is-on { background: #2B2118; border-color: #2B2118; color: #fff; }
+.ad-log-mini summary { cursor: pointer; font-size: .85rem; color: #5E4417; }
+.ad-log-mini ul { border: 0 !important; padding: 6px 0 0 !important; }
+.ad-log-mini li { font-size: .85rem; justify-content: flex-start !important; gap: 8px !important; }
+.ad-log-mini li span { color: #5F5243; }
+
+/* event calendar and availability */
+.ad-cal { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ad-cal li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #E0D6C7; border-radius: 9px; background: #FDFBF8; }
+.ad-cal li > div { display: grid; gap: 2px; }
+.ad-cal li span { font-size: .85rem; color: #5F5243; }
+.ad-avail { display: grid; gap: 10px; }
+.ad-avail-group { border: 1px solid #E0D6C7; border-radius: 9px; background: #FDFBF8; overflow: hidden; }
+.ad-avail-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; background: #F4F0EA; }
+.ad-avail-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 6px 10px; border-top: 1px solid #EFE8DC; font-size: .92rem; }
+.ad-avail .ad-check { gap: 6px; font-size: .85rem; }

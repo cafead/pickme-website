@@ -89,6 +89,8 @@ module.exports = {
     heroHeight: 760,
     blend: true,
     animations: true,
+    sectionGap: 56,
+    border: 'gold',
   },
   sections: [
     { id: 'hero', label: 'Home', show: true, nav: true },
@@ -130,22 +132,45 @@ module.exports = {
     seconds: 5,
     items: [
       {
-        id: 'christmas-cakes', enabled: true, tag: 'Christmas Week', title: 'Christmas theme cakes',
-        text: 'Our Christmas cakes arrive for Christmas Week, 19 to 25 December. Pre-order yours now.',
-        image: photo('1512389142860-9c449e58a543', 1600), button: 'Pre-order a cake', link: '#cake', start: '2026-11-17', days: 39,
+        id: 'christmas-week', template: 'christmas', enabled: true, tag: 'Christmas Week', title: 'Christmas theme cakes',
+        text: 'Our Christmas cakes and drinks arrive for Christmas Week, 19 to 25 December. Pre-order your cake now.',
+        image: photo('1512389142860-9c449e58a543', 1600), button: 'See the Christmas specials', link: '', start: '2026-11-17', days: 39,
+        border: 'snow', borderSite: false,
+        message: 'Choose your Christmas cake, tell us the name to write on it, and grab it on the day.',
+        menuTitle: 'Christmas specials',
+        photos: [],
+        menu: [],
       },
       {
-        id: 'christmas-drinks', enabled: true, tag: 'Christmas Week', title: 'Christmas drinks',
-        text: 'Special Christmas drinks join the menu for one week only.',
-        image: photo('1514432324607-a09d9b4aefdd', 1600), button: 'See the menu', link: '#menu', start: '2026-11-17', days: 39,
-      },
-      {
-        id: 'christmas-tables', enabled: true, tag: 'Christmas Week', title: 'Celebrate with friends',
+        id: 'christmas-tables', template: '', enabled: true, tag: 'Christmas Week', title: 'Celebrate with friends',
         text: 'Book a table for your group, and tell us the cake and decoration you want ready when you arrive.',
         image: photo('1513558161293-cdaf765ed2fd', 1600), button: 'Book a table', link: '#booking', start: '2026-11-17', days: 39,
+        border: 'lights', borderSite: false, message: '', menuTitle: '', photos: [], menu: [],
       },
     ],
   },
+  // Days to plan themed cakes for. The admin page reminds you before each one.
+  // rule: fixed = same English date every year (md MM-DD); bs = same Nepali date (md MM-DD);
+  // nth = nth weekday of a month (month 1-12, weekday 0=Sunday, n); dates = changes every year, so list the dates.
+  eventTemplates: [
+    { key: 'christmas', name: 'Christmas', rule: 'fixed', md: '12-25', remind: 14, before: 7, border: 'snow', tag: 'Christmas Week', title: 'Christmas theme cakes', text: 'Christmas cakes, cookies and winter drinks for the season.', message: 'Choose your Christmas cake and grab it on the day.' },
+    { key: 'new-year', name: 'English New Year', rule: 'fixed', md: '01-01', remind: 14, before: 5, border: 'confetti', tag: 'New Year', title: 'New Year party cakes', text: 'Welcome the new year with a cake to share.', message: 'Pick your New Year cake and we will have it ready.' },
+    { key: 'valentine', name: "Valentine's Day", rule: 'fixed', md: '02-14', remind: 14, before: 7, border: 'hearts', tag: "Valentine's Day", title: "Valentine's cakes for two", text: 'Heart cakes, red velvet and drinks for two.', message: 'Choose a cake for someone special and write their name on it.' },
+    { key: 'womens-day', name: "Women's Day", rule: 'fixed', md: '03-08', remind: 14, before: 4, border: 'petals', tag: "Women's Day", title: "Women's Day specials", text: 'A treat for the women who inspire us.', message: 'Pick a cake or a box of cookies to say thank you.' },
+    { key: 'holi', name: 'Holi', rule: 'dates', dates: '2027-03-21', usual: 'March', remind: 14, before: 5, border: 'confetti', tag: 'Holi', title: 'Holi colour treats', text: 'Colourful cakes and cool drinks for Holi.', message: 'Grab a colourful cake for your Holi party.' },
+    { key: 'nepali-new-year', name: 'Nepali New Year', rule: 'bs', md: '01-01', remind: 14, before: 7, border: 'marigold', tag: 'Naya Barsha', title: 'Nepali New Year cakes', text: 'Celebrate the new year with family and a cake.', message: 'Choose your New Year cake and we will have it ready.' },
+    { key: 'mothers-day-nepal', name: "Mother's Day (Mata Tirtha Aunsi)", rule: 'dates', dates: '', usual: 'April or May', remind: 14, before: 7, border: 'petals', tag: "Mother's Day", title: "Mother's Day cakes", text: 'Say thank you to your mother with her favourite cake.', message: 'Choose a cake for your mother and write her name on it.' },
+    { key: 'mothers-day', name: "International Mother's Day", rule: 'nth', month: 5, weekday: 0, n: 2, remind: 14, before: 7, border: 'petals', tag: "Mother's Day", title: "Mother's Day cakes", text: 'Say thank you to your mother with her favourite cake.', message: 'Choose a cake for your mother and write her name on it.' },
+    { key: 'fathers-day', name: "International Father's Day", rule: 'nth', month: 6, weekday: 0, n: 3, remind: 14, before: 7, border: 'stars', tag: "Father's Day", title: "Father's Day cakes", text: 'Special cakes and cookies for dad.', message: 'Choose your cake and grab it for dad.' },
+    { key: 'teachers-day', name: "Teachers' Day (Guru Purnima)", rule: 'dates', dates: '', usual: 'July', remind: 14, before: 7, border: 'bunting', tag: "Teachers' Day", title: "Teachers' Day cakes", text: 'Thank your teachers with a cake from the whole class.', message: 'Order a cake for your teacher and we will write the message.' },
+    { key: 'friendship-day', name: 'Friendship Day', rule: 'nth', month: 8, weekday: 0, n: 1, remind: 14, before: 5, border: 'balloons', tag: 'Friendship Day', title: 'Friendship Day treats', text: 'Bring your friends for cake and mocktails.', message: 'Pick a cake to share with your friends.' },
+    { key: 'fathers-day-nepal', name: "Father's Day (Kushe Aunsi)", rule: 'dates', dates: '', usual: 'August or September', remind: 14, before: 7, border: 'stars', tag: "Father's Day", title: "Father's Day cakes", text: 'Special cakes and cookies for dad.', message: 'Choose your cake and grab it for dad.' },
+    { key: 'teej', name: 'Teej', rule: 'dates', dates: '', usual: 'August or September', remind: 14, before: 5, border: 'petals', tag: 'Teej', title: 'Teej specials', text: 'Red velvet cakes and treats for Teej.', message: 'Choose your Teej cake and grab it on the day.' },
+    { key: 'childrens-day', name: "Children's Day", rule: 'bs', md: '05-29', remind: 14, before: 5, border: 'balloons', tag: "Children's Day", title: "Children's Day treats", text: 'Fun cakes, cupcakes and ice cream for the kids.', message: 'Pick a cake the kids will love.' },
+    { key: 'dashain', name: 'Dashain', rule: 'dates', dates: '', usual: 'September or October', remind: 21, before: 10, border: 'marigold', tag: 'Dashain', title: 'Dashain celebration cakes', text: 'Cakes for family gatherings this Dashain.', message: 'Order your Dashain cake early and pick it up on the day.' },
+    { key: 'halloween', name: 'Halloween', rule: 'fixed', md: '10-31', remind: 14, before: 7, border: 'web', tag: 'Halloween', title: 'Spooky Halloween cakes', text: 'Pumpkin, chocolate and spooky cupcakes.', message: 'Choose your Halloween cake if you dare.' },
+    { key: 'tihar', name: 'Tihar', rule: 'dates', dates: '', usual: 'October or November', remind: 21, before: 7, border: 'diyo', tag: 'Tihar', title: 'Tihar sweets and cakes', text: 'Cakes and sweet boxes for Bhai Tika and Laxmi Puja.', message: 'Choose your Tihar cake or sweet box and grab it on the day.' },
+  ],
   menu: {
     script: 'Our Menu',
     title: 'Pick what you love',
@@ -300,10 +325,21 @@ module.exports = {
     messageText: 'Your message opens in WhatsApp, so we can reply to you there.',
   },
   social: [
-    { type: 'instagram', url: '' },
-    { type: 'facebook', url: '' },
-    { type: 'tiktok', url: '' },
+    { type: 'instagram', url: '', show: true },
+    { type: 'facebook', url: '', show: true },
+    { type: 'tiktok', url: '', show: true },
   ],
+  // The round buttons in the bottom corner of every page.
+  socialBar: { show: true, whatsapp: true },
+  // Shown when the cafe is closed for a day (or until a date).
+  closure: {
+    on: false,
+    title: 'We are closed today',
+    text: 'Sorry, the cafe is closed today. We will be back tomorrow at 7 AM.',
+    image: '',
+    until: '',
+    allowLater: true,
+  },
   payment: {
     deliveryFee: 150,
     deliveryNote: 'Delivery inside Hetauda only.',
@@ -316,6 +352,6 @@ module.exports = {
     note: '',
   },
   // Sizes set by dragging in admin ("Edit layout"), and photo positions and zoom.
-  sizes: {},
+  sizes: { map: { h: 240 } },
   crops: {},
 };

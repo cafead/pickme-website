@@ -37,8 +37,16 @@
   .filters { display: flex; flex-wrap: wrap; gap: 8px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; align-items: start; }
   .card { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-left: 5px solid var(--line); border-radius: 12px; background: var(--card); }
-  .card.new { border-left-color: var(--new); }
-  .card.accepted, .card.preparing, .card.confirmed, .card.seated { border-left-color: var(--go); }
+  .card.pending { border-left-color: var(--new); }
+  .card.acknowledged, .card.preparing, .card.confirmed, .card.seated { border-left-color: var(--go); }
+  .card.done, .card.cancelled, .card.declined { opacity: .75; }
+  .step { padding: 1px 9px; border-radius: 999px; background: #EEE; font-size: .8rem; font-weight: 600; }
+  .step--pending { background: #FBE3DE; color: #8E2A1E; }
+  .step--acknowledged, .step--preparing, .step--confirmed, .step--seated { background: #DFEAF7; color: #174A84; }
+  .step--ready { background: #F6EBC8; color: #6A520F; }
+  .step--done { background: #DDEFE3; color: #1B5532; }
+  .today { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .today b { font-variant-numeric: tabular-nums; }
   .card.ready { border-left-color: var(--ok); }
   .card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
   .card header strong { font: 700 1rem ui-monospace, Menlo, Consolas, monospace; }
@@ -109,12 +117,14 @@
       <input type="search" id="search" placeholder="Search number, name or phone" aria-label="Search">
       <select id="filter" aria-label="Show">
         <option value="active">Active only</option>
-        <option value="new">New only</option>
+        <option value="pending">Pending only</option>
+        <option value="unpaid">Not paid</option>
         <option value="all">Everything</option>
         <option value="closed">Finished or cancelled</option>
       </select>
     </div>
   </div>
+  <p class="today" id="today"></p>
   <div class="grid" id="grid"></div>
 </main>
 
@@ -131,9 +141,10 @@
   const when = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kathmandu', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
   const wa = (p) => String(p || '').replace(/\D/g, '').replace(/^(?=9\d{9}$)/, '977');
   const TYPE = { dinein: 'Dine-in', pickup: 'Pickup', delivery: 'Delivery' };
-  const ORDER_STEPS = ['new', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'];
-  const TABLE_STEPS = ['new', 'confirmed', 'seated', 'declined', 'done'];
-  const CLOSED = ['completed', 'cancelled', 'declined', 'done'];
+  const ORDER_STEPS = ['pending', 'acknowledged', 'preparing', 'ready', 'done', 'cancelled'];
+  const TABLE_STEPS = ['pending', 'confirmed', 'seated', 'done', 'declined'];
+  const CLOSED = ['done', 'cancelled', 'declined'];
+  const NAMES = { pending: 'Pending', acknowledged: 'Acknowledged', preparing: 'Preparing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled', confirmed: 'Confirmed', seated: 'Seated', declined: 'Declined' };
   const S = { tab: 'orders', orders: [], bookings: [], known: null, timer: null, cafe: 'Pick Me Cafe' };
 
   function toast(msg, ms) {
@@ -159,22 +170,25 @@
 
   const line = (label, v) => (v ? `<p><b>${label}:</b> ${esc(v)}</p>` : '');
   const contact = (x) => `${esc(x.name || 'Guest')}${x.phone ? ` · <a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}`;
-  const steps = (list, cur) => list.map((s) => `<option value="${s}"${s === cur ? ' selected' : ''}>${s}</option>`).join('');
+  const steps = (list, cur) => list.map((s) => `<option value="${s}"${s === cur ? ' selected' : ''}>${NAMES[s]}</option>`).join('');
+  const quick = (kind, x, step, label, main) => (x.status !== step && !CLOSED.includes(x.status) ? `<button type="button" class="${main ? 'main' : ''}" data-quick="${kind}" data-id="${esc(x.id)}" data-step="${step}">${label}</button>` : '');
   const picture = (file, label) => (file ? `<button type="button" data-pic="${esc(file)}">${label}</button>` : '');
   const waBtn = (x, text) => !x.phone ? '' : `<a class="btn" href="https://wa.me/${esc(wa(x.phone))}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp customer</a>`;
 
   function orderCard(o) {
     return `<article class="card ${esc(o.status)}">
-      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
+      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="step step--${esc(o.status)}">${NAMES[o.status] || esc(o.status)}</span><span class="step ${o.paid ? 'step--done' : ''}">${o.paid ? 'Paid' : 'Not paid'}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
       <p>${contact(o)}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
-      ${line('Address', o.address)}${line('Table', o.tableNo)}
+      ${line('Address', o.address)}
       <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}${o.paid ? ' · checked' : ''}</p>
       <footer>
+        ${quick('orders', o, 'acknowledged', 'Acknowledge', o.status === 'pending')}${quick('orders', o, 'done', 'Mark done')}
+        ${o.paid ? '' : `<button type="button" class="main" data-paid="${esc(o.id)}">Mark paid</button>`}
         <select data-patch="orders" data-id="${esc(o.id)}" data-key="status" aria-label="Status">${steps(ORDER_STEPS, o.status)}</select>
-        <label><input type="checkbox" data-patch="orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}> Payment checked</label>
+        <label><input type="checkbox" data-patch="orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}> Paid</label>
       </footer>
       <footer>
         ${picture(o.payment.proof, 'Payment screenshot')}${picture(o.refPhoto, 'Cake design photo')}
@@ -184,11 +198,12 @@
   }
   function tableCard(b) {
     return `<article class="card ${esc(b.status)}">
-      <header><strong>${esc(b.id)}</strong><span class="tag">${esc(b.people)} people</span><small>asked ${when(b.createdAt)}</small></header>
+      <header><strong>${esc(b.id)}</strong><span class="tag">${esc(b.people)} people</span><span class="step step--${esc(b.status)}">${NAMES[b.status] || esc(b.status)}</span><small>asked ${when(b.createdAt)}</small></header>
       <p><b>${esc(b.bs || b.date)} at ${esc(b.time)}</b>${b.seating ? ` · ${esc(b.seating)}` : ''}</p>
       <p>${contact(b)}</p>
       ${line('Food ready on arrival', b.food)}${line('Name on cake', b.cakeName)}${line('Decoration', b.decoration)}${line('Remarks', b.remarks)}
       <footer>
+        ${quick('bookings', b, 'confirmed', 'Confirm', true)}
         <select data-patch="bookings" data-id="${esc(b.id)}" data-key="status" aria-label="Status">${steps(TABLE_STEPS, b.status)}</select>
         ${waBtn(b, `Hello ${b.name || ''}, your table at ${S.cafe} for ${b.bs || b.date} at ${b.time} (${b.people} people) is ${b.status.toUpperCase()}.`)}
       </footer></article>`;
@@ -204,11 +219,16 @@
       open += n;
     }
     document.title = (open ? `(${open}) ` : '') + 'Counter | Pick Me Cafe';
+    const todayAD = new Date(Date.now() + 345 * 60e3).toISOString().slice(0, 10);
+    const day = (iso) => new Date(Date.parse(iso) + 345 * 60e3).toISOString().slice(0, 10);
+    const t = S.orders.filter((o) => day(o.createdAt) === todayAD && o.status !== 'cancelled');
+    const sum = (arr) => arr.reduce((n, o) => n + Number(o.total || 0), 0);
+    $('today').innerHTML = `<span>Today: <b>${t.length}</b> orders</span><span>Total <b>${rs(sum(t))}</b></span><span>Paid <b>${rs(sum(t.filter((o) => o.paid)))}</b></span><span>Not paid <b>${rs(sum(t.filter((o) => !o.paid)))}</b></span><span>Still to do <b>${t.filter((o) => o.status !== 'done').length}</b></span>`;
     const q = $('search').value.trim().toLowerCase();
     const f = $('filter').value;
     const rows = all[S.tab].filter((x) => {
       const closed = CLOSED.includes(x.status);
-      if ((f === 'active' && closed) || (f === 'closed' && !closed) || (f === 'new' && x.status !== 'new')) return false;
+      if ((f === 'active' && closed) || (f === 'closed' && !closed) || (f === 'pending' && x.status !== 'pending') || (f === 'unpaid' && (x.paid || !x.lines || x.status === 'cancelled'))) return false;
       return !q || [x.id, x.name, x.phone, x.address, x.cakeMessage, x.bs].some((v) => String(v || '').toLowerCase().includes(q));
     });
     const busy = $('grid').contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
@@ -280,6 +300,12 @@
     if (pic) { $('viewer-img').src = '/api/desk/proof/' + pic.dataset.pic; $('viewer').hidden = false; }
     const print = e.target.closest('[data-print]');
     if (print) printSlip(print.dataset.print);
+    const q = e.target.closest('[data-quick]');
+    const paid = e.target.closest('[data-paid]');
+    if (q || paid) {
+      const req = q ? api('PATCH', `/api/desk/${q.dataset.quick}/${q.dataset.id}`, { status: q.dataset.step }) : api('PATCH', `/api/desk/orders/${paid.dataset.paid}`, { paid: true });
+      req.then(() => { toast('Updated.'); load(true); }).catch((err) => { if (err.message !== 'login') toast(err.message); });
+    }
   });
   document.addEventListener('change', async (e) => {
     const t = e.target;
