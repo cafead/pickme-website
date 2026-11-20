@@ -29,6 +29,7 @@
 
   const svg = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const ICON = {
+    lock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
     clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
     pin: svg('<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>'),
     phone: svg('<path d="M5 4h4l2 5-2.500 1.500a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>'),
@@ -457,7 +458,6 @@
           <div class="slide-ctl">
             <div class="dots">${slides.map((s, n) => `<button type="button" data-act="slide" data-i="${n}" class="${n === S.slide ? 'is-on' : ''}" aria-label="Show slide ${n + 1}: ${esc((s.p && s.p.caption) || s.e.title)}"></button>`).join('')}</div>
             <div class="row"><button type="button" class="icon-btn" data-act="slide-step" data-d="-1" aria-label="Previous slide">${ICON.left}</button>
-              <button type="button" class="icon-btn" data-act="slide-pause" aria-label="Pause or play the slideshow">${ICON.pause}</button>
               <button type="button" class="icon-btn" data-act="slide-step" data-d="1" aria-label="Next slide">${ICON.right}</button></div>
           </div>` : ''}
       </div></div></section>`;
@@ -844,6 +844,7 @@
       </div>
       <p class="foot-line">${ICON.heart}<span${ed('footer.line')}>${esc(c.footer.line)}</span></p>
       ${c.footer.note ? `<p class="foot-note"${ed('footer.note')}>${esc(c.footer.note)}</p>` : ''}
+      <p class="foot-staff"><button type="button" class="lock-btn" data-act="lock" aria-label="Staff login: tap twice">${ICON.lock}</button></p>
     </footer>
     ${bar.show !== false && (links.length || wa) ? `<div class="float-bar">${links.map((s) => icon(s, 'fb')).join('')}${wa ? waIcon('fb') : ''}</div>` : ''}
     ${dock(c)}
@@ -946,7 +947,8 @@
     paintBar();
   }
   // The slideshow runs on a timer, so it also moves on phones with "reduce motion" or battery saver on.
-  // It waits while paused, while the mouse is over it, and while the page is in the background.
+  // It keeps going under the mouse. On phones it waits while a finger holds the photo,
+  // and while the page is in the background.
   function paintBar() {
     const box = $('#events .slides');
     const bar = box && $('.slide-bar i', box);
@@ -963,7 +965,7 @@
     S.slideTimer = setInterval(() => {
       const b = $('#events .slides');
       if (!b) { clearInterval(S.slideTimer); return; }
-      if (b.classList.contains('is-paused') || document.hidden || (b.matches(':hover') && matchMedia('(hover: hover)').matches)) return;
+      if (b.classList.contains('is-held') || document.hidden) return;
       S.slideMs += step;
       if (S.slideMs >= slideLength(b)) showSlide(S.slide + 1); else paintBar();
     }, step);
@@ -1078,6 +1080,23 @@
           ${safeUrl(e.link) ? `<a class="btn btn--ghost" href="${esc(e.link)}" data-act="close"><span>${esc(e.button || 'More')}</span>${ICON.arrow}</a>` : ''}
           <button type="button" class="btn btn--ghost" data-act="close"><span>Close</span></button>
         </div>
+      </div>`);
+  }
+  // Staff and owner login, opened by tapping the little lock in the footer twice.
+  function openStaffLogin() {
+    openLayer(`<div class="shade" data-act="close"></div>
+      <div class="modal modal--login" role="dialog" aria-label="Staff login">
+        <button type="button" class="icon-btn ev-close" data-act="close" aria-label="Close">${ICON.x}</button>
+        <span class="login-badge">${ICON.lock}</span>
+        <h2>Staff login</h2>
+        <p class="hint">Owner: your password only. Staff: your login ID and password.</p>
+        <form data-form="login" class="login-form">
+          <label class="f"><span>Login ID <small>(staff only)</small></span><input name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40"></label>
+          <label class="f"><span>Password</span><input name="password" type="password" required autocomplete="current-password" autofocus></label>
+          <label class="login-keep"><input type="checkbox" name="remember" checked><span>Keep me signed in on this device</span></label>
+          <p class="form-msg" role="status"></p>
+          <button type="submit" class="btn">${ICON.lock}<span>Log in</span></button>
+        </form>
       </div>`);
   }
   function showClosedNotice() {
@@ -1274,6 +1293,11 @@
     return (await post('/api/proof', small, small.type || 'image/jpeg')).file;
   }
   const FORMS = {
+    async login(d) {
+      const r = await post('/api/auth/login', { username: d.username || '', password: d.password || '', remember: Boolean(d.remember) });
+      location.href = r.role === 'staff' ? '/counter' : '/admin';
+      return 'Signed in. Opening...';
+    },
     extras(d, form) {
       const qty = Math.max(1, Math.min(50, Number($('#x-qty').textContent) || 1));
       const ids = $$('input[name=x]:checked', form).map((el) => el.value);
@@ -1390,6 +1414,11 @@
 
   /* ---------- clicks ---------- */
   const ACT = {
+    // A single tap does nothing; two taps close together open the login.
+    lock() {
+      const now = Date.now();
+      if (now - (S.lockTap || 0) < 450) { S.lockTap = 0; openStaffLogin(); } else S.lockTap = now;
+    },
     tab(el) {
       S.tab = el.dataset.id;
       const swap = () => redrawMenu();
@@ -1456,10 +1485,6 @@
     close() { closeLayer(); },
     slide(el) { showSlide(Number(el.dataset.i)); },
     'slide-step'(el) { showSlide(S.slide + Number(el.dataset.d)); },
-    'slide-pause'(el) {
-      const paused = $('.slides').classList.toggle('is-paused');
-      el.innerHTML = paused ? ICON.play : ICON.pause;
-    },
     nav(el) {
       const open = !$('#nav-links').classList.contains('is-open');
       $('#nav-links').classList.toggle('is-open', open);
@@ -1489,12 +1514,31 @@
     if (step && $('#x-qty')) { const q = $('#x-qty'); q.textContent = Math.max(1, Math.min(50, (Number(q.textContent) || 1) + Number(step.dataset.step))); extrasTotal(); return; }
     if (S.layout) { if (!e.target.closest('#crop-tools')) e.preventDefault(); return; }
     const el = e.target.closest('[data-act]');
+    // After a long hold on an event photo (which only pauses the slideshow), do not open the photo.
+    if (el && el.dataset.group === 'event' && Date.now() < (S.noZoomUntil || 0)) { e.preventDefault(); return; }
     if (el && ACT[el.dataset.act]) {
       if (el.tagName === 'BUTTON' || el.classList.contains('shade')) e.preventDefault();
       ACT[el.dataset.act](el);
     }
     if (e.target.closest('.nav-links a')) $('#nav-links').classList.remove('is-open');
   });
+  // Phones: holding a finger on an event photo pauses the slideshow until the finger lifts.
+  // A quick tap still opens the photo large; a long hold does not.
+  let holdAt = 0;
+  document.addEventListener('touchstart', (e) => {
+    const stage = e.target.closest && e.target.closest('#events .ev-stage');
+    if (!stage) return;
+    holdAt = Date.now();
+    stage.closest('.slides').classList.add('is-held');
+  }, { passive: true });
+  const letGo = () => {
+    const held = $('#events .slides.is-held');
+    if (!held) return;
+    held.classList.remove('is-held');
+    if (Date.now() - holdAt > 450) S.noZoomUntil = Date.now() + 700;
+  };
+  document.addEventListener('touchend', letGo, { passive: true });
+  document.addEventListener('touchcancel', letGo, { passive: true });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && layer().innerHTML) closeLayer();
     if (e.key === 'Enter' && S.inline && e.target.closest && e.target.closest('[data-edit]')) { e.preventDefault(); e.target.blur(); }

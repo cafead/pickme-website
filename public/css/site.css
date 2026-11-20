@@ -427,6 +427,25 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @media (hover: hover) { .soc a:hover { background: var(--accent); transform: translateY(-3px); } .soc a:hover svg { color: #fff; } }
 .foot-line { margin-top: 26px; display: inline-flex; align-items: center; gap: 10px; font: italic 500 1.2rem var(--f-ital); letter-spacing: .18em; color: var(--accent); }
 .foot-note { margin-top: 8px; color: var(--muted); font-size: .9rem; }
+/* the little staff lock: faint, and it needs two taps */
+.foot-staff { margin-top: 14px; }
+.lock-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); opacity: .32; cursor: default; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: opacity .3s; }
+.lock-btn:hover, .lock-btn:focus-visible { opacity: .6; }
+.lock-btn svg { width: 15px; height: 15px; }
+.modal--login { display: grid; gap: 10px; justify-items: center; text-align: center; }
+.modal--login h2 { margin: 0; }
+.login-badge { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--gold) 70%, transparent); color: var(--accent); background: var(--surface); }
+.login-badge svg { width: 22px; height: 22px; }
+.login-form { display: grid; gap: 12px; width: min(340px, 100%); text-align: left; margin-top: 6px; }
+.login-form .f input { width: 100%; }
+.login-form small { color: var(--muted); font-weight: 400; }
+.login-keep { display: flex; align-items: center; gap: 10px; font-size: .92rem; color: var(--muted); }
+.login-keep input { width: 18px; height: 18px; accent-color: var(--accent); }
+.login-form .btn { justify-self: stretch; justify-content: center; }
+@media (min-width: 640px) { .modal.modal--login { width: min(440px, 100% - 24px); } }
+/* event photos: no long-press menu on phones (a hold pauses the slideshow) */
+.ev-shot { -webkit-tap-highlight-color: transparent; }
+.ev-shot img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 /* The round buttons in the corner are for bigger screens. Phones get the bar along the bottom. */
 .float-bar { display: none; position: fixed; right: 16px; bottom: 16px; z-index: 35; align-items: center; gap: 8px; padding: 5px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 80%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: 0 14px 30px -18px rgba(59, 42, 26, .6); }

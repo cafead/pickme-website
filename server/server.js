@@ -1114,14 +1114,21 @@ function makeBackup(full) {
 async function restoreBackup(buf, by) {
   let zip;
   try { zip = new AdmZip(buf); } catch { throw new Error('That file is not a Pick Me backup (.zip).'); }
-  const read = (name) => { const e = zip.getEntry(name); return e ? JSON.parse(e.getData().toString('utf8')) : null; };
+  // A zip made on a Mac by compressing the backup folder has everything inside one folder,
+  // plus __MACOSX extras. Find the folder that holds manifest.json and read from there.
+  const entries = zip.getEntries().filter((e) => !e.isDirectory && !/(^|\/)(__MACOSX|\.DS_Store)(\/|$)/.test(e.entryName));
+  const top = entries.find((e) => /^([^/]+\/)?manifest\.json$/.test(e.entryName));
+  const base = top ? top.entryName.slice(0, -'manifest.json'.length) : '';
+  const read = (name) => { const e = zip.getEntry(base + name); return e ? JSON.parse(e.getData().toString('utf8')) : null; };
   let manifest;
   try { manifest = read('manifest.json'); } catch { manifest = null; }
   if (!manifest || manifest.kind !== BACKUP_KIND) throw new Error('That file is not a Pick Me backup (.zip).');
   const out = { photos: 0, orders: 0, bookings: 0, reviews: 0, messages: 0, website: false, createdAt: manifest.createdAt };
-  for (const e of zip.getEntries()) {
-    const [dir, file] = e.entryName.split('/');
-    if (e.isDirectory || !file || e.entryName.split('/').length !== 2) continue;
+  for (const e of entries) {
+    if (!e.entryName.startsWith(base)) continue;
+    const rest = e.entryName.slice(base.length);
+    const [dir, file] = rest.split('/');
+    if (!file || rest.split('/').length !== 2) continue;
     if (dir === 'uploads' && FILE_NAME.test(file) && !fs.existsSync(path.join(UPLOADS, file))) { fs.writeFileSync(path.join(UPLOADS, file), e.getData()); out.photos += 1; }
     if (dir === 'proofs' && PROOF_NAME.test(file) && !fs.existsSync(path.join(PROOFS, file))) fs.writeFileSync(path.join(PROOFS, file), e.getData());
   }
