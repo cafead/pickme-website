@@ -95,6 +95,25 @@ function ensureSections(data) {
   return touched;
 }
 if (ensureSections(content.data)) content.set(content.data);
+// Version 7: one event shows at a time, as a slideshow of its own photos. The first photo is the main photo
+// (kept in "image" too, for link previews). Photo borders are chosen once, under Colours, so events lose theirs.
+function tidyEvents(data) {
+  let touched = false;
+  const items = data.events && Array.isArray(data.events.items) ? data.events.items : [];
+  for (const e of items) {
+    if (!e || typeof e !== 'object') continue;
+    if (!Array.isArray(e.photos)) { e.photos = []; touched = true; }
+    const keep = e.photos.filter((p) => p && typeof p === 'object' && typeof p.image === 'string' && p.image);
+    if (keep.length !== e.photos.length) { e.photos = keep; touched = true; }
+    if (e.image && !e.photos.some((p) => p.image === e.image)) { e.photos.unshift({ image: e.image, caption: '' }); touched = true; }
+    const main = e.photos[0] ? e.photos[0].image : '';
+    if ((e.image || '') !== main) { e.image = main; touched = true; }
+    if ('border' in e || 'borderSite' in e) { delete e.border; delete e.borderSite; touched = true; }
+  }
+  for (const t of data.eventTemplates || []) if (t && 'border' in t) { delete t.border; touched = true; }
+  return touched;
+}
+if (tidyEvents(content.data)) content.set(content.data);
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -807,6 +826,7 @@ app.put('/api/admin/content', admin, json, async (req, res) => {
     return res.status(409).json({ error: 'The website was saved from another device after you opened this editor.', rev: current._rev });
   }
   const next = fillDefaults(c, freshDefaults());
+  tidyEvents(next);
   const changes = describeChanges(current, next);
   if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by: 'owner', note: 'Website before your first save', changes: [] }, current);
   next._rev = current._rev + 1;
@@ -1122,6 +1142,7 @@ async function restoreBackup(buf, by) {
     const next = fillDefaults(saved, freshDefaults());
     markFood(next);
     ensureSections(next);
+    tidyEvents(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);

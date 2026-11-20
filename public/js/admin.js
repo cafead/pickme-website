@@ -67,7 +67,6 @@
     ['marigold', 'Dashain, Tihar, Nepali New Year: marigold garland'], ['diyo', 'Tihar: diyo lamps'], ['flags', 'Losar, Buddha Jayanti: prayer flags'],
     ['balloons', "Birthdays, Children's Day: balloons"], ['sprinkles', 'Celebrations: sprinkles'], ['bunting', "Teachers' Day, parties: bunting"],
   ];
-  const borderOptions = () => BORDERS;
   const MARK_OPTIONS = [['veg', 'Veg'], ['nonveg', 'Non-veg'], ['eggless', 'Eggless'], ['sugarfree', 'Sugar-free'], ['nuts', 'Contains nuts'], ['spicy', 'Spicy']];
   const itemFields = () => [
     f('name', 'Name'), f('desc', 'Short description (optional)'), f('badge', 'Small badge, for example Bestseller (optional)'),
@@ -105,7 +104,7 @@
       f('theme.width', 'Page width in px (900 to 1600)', 'number'), f('theme.heroHeight', 'Height of the top photo area in px (420 to 1100)', 'number'),
       f('theme.radius', 'Corner roundness (0 to 40)', 'number'),
       f('theme.sectionGap', 'Space between sections in px (0 to 200, normal is 56)', 'number'),
-      f('theme.border', 'Everyday photo border (an event can switch it while it shows)', 'border'),
+      f('theme.border', 'Photo border (for example a Christmas border while Christmas is on)', 'border'),
       f('theme.blend', 'Blend photos into the background', 'toggle'), f('theme.animations', 'Animations on', 'toggle'),
     ] },
     { title: 'Section order and visibility', scroll: 'hero', note: 'Use the arrows to move a section up or down the page. Menu, Order a Cake, Gallery and Guest moments can each have their own page (yourwebsite/menu, /cake, /gallery), sit on the home page, or both: open one and choose "Where it shows".', fields: [
@@ -129,24 +128,21 @@
         f('title', 'Title'), f('text', 'Text', 'area'), f('image', 'Photo', 'image'), f('category', 'Opens this menu group', 'select', { options: catOptions }),
       ] }),
     ] },
-    { title: 'Events and specials', scroll: 'events', note: 'Each event shows from its start date for the number of days you set, then disappears on its own. If an event has photos, a message or special items, its button opens its own page where customers can order. Special items also appear first in the menu while the event shows. When no event is showing, the section is hidden by itself.', fields: [
+    { title: 'Events and specials', scroll: 'events', note: 'One event shows at a time. Tick the events you want: each shows from its start date for the number of days you set, then hides itself. If two ticked events are on at the same time, the one higher in the list shows (move events with the arrows), and the other waits until it ends. Its photos change like a slideshow, with each photo\'s title on it. If an event has more photos, a message or special items, its button opens its own page where customers can order. Special items also appear first in the menu while the event shows. The photo border is chosen under "Colours, fonts and sizes".', fields: [
       f('', 'Show the events section', 'section', { id: 'events' }),
-      f('', 'Which events show (each one still only shows between its dates)', 'eventticks'),
-      f('theme.border', 'Everyday photo border (an event can switch it while it shows)', 'border'),
-      f('events.script', 'Handwritten line'), f('events.title', 'Title'), f('events.seconds', 'Seconds per slide', 'number'),
-      f('events.items', 'Edit each event', 'list', { title: (e) => `${e.title} (${e.enabled === false ? 'not shown' : eventStatus(e).toLowerCase()})`, add: 'Add an empty event', blank: () => ({ id: uid('event'), template: '', enabled: true, tag: '', title: 'New event', text: '', image: '', button: 'See the specials', link: '', start: BS.todayAD(), days: 7, border: 'gold', borderSite: false, message: '', menuTitle: '', photos: [], menu: [] }), fields: [
-        f('enabled', 'Show this event on the website (between its dates)', 'toggle'), f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Short description', 'area'), f('image', 'Main photo', 'image'),
+      f('', 'Which events can show (one at a time, each only between its dates)', 'eventticks'),
+      f('events.script', 'Handwritten line'), f('events.title', 'Title'), f('events.seconds', 'Seconds per photo in the slideshow', 'number'),
+      f('events.items', 'Edit each event', 'list', { title: (e) => `${e.title} (${e.enabled === false ? 'not ticked' : eventStatus(e).toLowerCase()})`, add: 'Add an empty event', blank: () => ({ id: uid('event'), template: '', enabled: true, tag: '', title: 'New event', text: '', image: '', button: 'See the specials', link: '', start: BS.todayAD(), days: 7, message: '', menuTitle: '', photos: [], menu: [] }), fields: [
+        f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Short description', 'area'),
+        f('photos', 'Photos (the first is the main photo; the slideshow shows them all)', 'eventphotos'),
         f('start', 'Start showing on', 'date'), f('days', 'Show for how many days', 'number'),
         f('message', 'Message on the event page (for example: Choose your cake and grab it)', 'area'),
         f('button', 'Button text'), f('link', 'Button goes to, if the event has no page of its own (#menu, #cake, #booking or a web link)'),
-        f('border', 'Photo border for this event', 'border'),
-        f('borderSite', 'Use this border on the whole website while the event shows', 'toggle', { def: false }),
-        f('photos', 'Event photos', 'list', { title: (p) => p.caption || 'Photo', add: 'Add photo', blank: () => ({ image: '', caption: '' }), fields: [f('image', 'Photo', 'image'), f('caption', 'A few words under the photo')] }),
         f('menuTitle', 'Name of the special menu (for example Christmas specials)'),
         f('menu', 'Special menu items (customers can order these)', 'list', { title: itemTitle, add: 'Add special item', blank: newItem, fields: itemFields() }),
       ] }),
     ] },
-    { title: 'Event calendar and reminders', scroll: 'events', custom: calendarPanel, note: 'Days that sell themed cakes. You get a reminder at the top of admin before each one (2 weeks by default). Press "Make the event" to start one with the right border, text and dates; then add photos and special items. Days that move every year need this year\'s date typed in.' },
+    { title: 'Event calendar and reminders', scroll: 'events', custom: calendarPanel, note: 'Days that sell themed cakes. You get a reminder at the top of admin before each one (2 weeks by default). Press "Make the event" to start one with the right text and dates; then add photos and special items. Pick a matching photo border under "Colours, fonts and sizes". Days that move every year need this year\'s date typed in.' },
     { title: 'Menu, prices and food photos', scroll: 'menu', note: 'Each group is a tab on the site. Open a group to edit its items.', fields: [
       f('menu.script', 'Handwritten line'), f('menu.title', 'Title'), f('menu.note', 'Note under the title'),
       f('menu.layout', 'How items are shown', 'select', { options: () => [['list', 'Rounded cards with a round photo'], ['cards', 'Tall cards with large photos']] }),
@@ -242,7 +238,7 @@
     clearTimeout(A.timer);
     A.timer = setTimeout(pushPreview, 140);
   }
-  function pushPreview() { tell({ pm: 'content', content: A.content }); }
+  function pushPreview() { tell({ pm: 'content', content: A.content }); if (A.drawEventTicks && document.body.contains(document.querySelector('.ad-evticks'))) A.drawEventTicks(); }
   function status() {
     const dirty = JSON.stringify(A.content) !== A.saved;
     const el = document.getElementById('ad-status');
@@ -370,7 +366,7 @@
     const start = addDays(date, -before) < today ? today : addDays(date, -before);
     const ev = {
       id: uid('event'), template: t.key, enabled: true, tag: t.tag || t.name, title: t.title || t.name, text: t.text || '', image: '',
-      button: 'See the specials', link: '', start, days: daysBetween(start, date) + 1, border: t.border || 'gold', borderSite: true,
+      button: 'See the specials', link: '', start, days: daysBetween(start, date) + 1,
       message: t.message || '', menuTitle: `${t.name} specials`, photos: [], menu: [],
     };
     A.content.events.items.push(ev);
@@ -439,7 +435,7 @@
     })));
     const edit = h('details', { class: 'ad-crop-wrap' }, h('summary', {}, 'Edit the calendar (dates, reminders, default text)'));
     edit.append(buildFields([f('eventTemplates', '', 'list', {
-      title: (t) => t.name, add: 'Add a day', blank: () => ({ key: uid('day'), name: 'New day', rule: 'fixed', md: '01-01', dates: '', usual: '', remind: 14, before: 7, border: 'gold', tag: '', title: '', text: '', message: '' }),
+      title: (t) => t.name, add: 'Add a day', blank: () => ({ key: uid('day'), name: 'New day', rule: 'fixed', md: '01-01', dates: '', usual: '', remind: 14, before: 7, tag: '', title: '', text: '', message: '' }),
       fields: [
         f('name', 'Name'),
         f('rule', 'Date', 'select', { options: () => [['fixed', 'Same English date every year'], ['bs', 'Same Nepali date every year'], ['nth', 'A weekday in a month (for example 2nd Sunday of May)'], ['dates', 'Changes every year: type the dates']] }),
@@ -447,7 +443,6 @@
         f('month', 'Month 1 to 12 (weekday choice)', 'number'), f('weekday', 'Weekday 0 = Sunday ... 6 = Saturday', 'number'), f('n', 'Which one: 1 = first, 2 = second...', 'number'),
         f('dates', 'Dates, YYYY-MM-DD, separated by commas (changes every year)'), f('usual', 'Usually in (shown when no date is set)'),
         f('remind', 'Remind me how many days before', 'number'), f('before', 'Start showing the event how many days before', 'number'),
-        f('border', 'Border theme', 'select', { options: borderOptions }),
         f('tag', 'Small label'), f('title', 'Event title'), f('text', 'Short description', 'area'), f('message', 'Message on the event page', 'area'),
       ],
     })], A.content, () => drawReminders()));
@@ -522,6 +517,10 @@
         frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), eventTicks(done)));
         continue;
       }
+      if (field.type === 'eventphotos') {
+        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), eventPhotos(obj, done)));
+        continue;
+      }
       if (field.type === 'cakephotos') {
         frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), cakePhotos(done)));
         continue;
@@ -591,7 +590,13 @@
     draw();
     return grid;
   }
-  // Every event on one line: tick it to show it on the website. It still only shows between its dates.
+  // Every event on one line: tick it to let it show. Only one shows at a time: the ticked event higher in the list wins.
+  function inDates(e) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.start || '')) return false;
+    const today = BS.todayAD();
+    return today >= e.start && today < addDays(e.start, Math.max(1, Number(e.days) || 1));
+  }
+  const shownEvent = () => (A.content.events.items || []).find((e) => e.enabled !== false && inDates(e));
   function eventStatus(e) {
     const today = BS.todayAD();
     const days = Math.max(1, Number(e.days) || 1);
@@ -600,6 +605,8 @@
     const left = daysBetween(today, end);
     if (today < e.start) { const n = daysBetween(today, e.start); return `Starts ${n === 1 ? 'tomorrow' : `in ${n} days`}`; }
     if (today >= end) return 'Ended';
+    const first = shownEvent();
+    if (e.enabled !== false && first && first !== e) return `Waiting: "${first.title}" shows first`;
     return `Showing now, ${left === 1 ? 'last day today' : `${left} days left`}`;
   }
   const shortDay = (d, year) => { const t = new Date(d + 'T00:00:00'); return Number.isNaN(t.getTime()) ? '?' : t.toLocaleDateString('en-GB', year ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' }); };
@@ -621,6 +628,55 @@
     draw();
     A.drawEventTicks = draw;
     return box;
+  }
+  /* An event's photos: the first is the main photo, and the slideshow shows them all with their titles. */
+  function eventPhotos(e, done) {
+    if (!Array.isArray(e.photos)) e.photos = [];
+    if (e.image && !e.photos.some((p) => p.image === e.image)) e.photos.unshift({ image: e.image, caption: '' });
+    const sync = () => { e.image = (e.photos[0] && e.photos[0].image) || ''; };
+    sync();
+    const box = h('div', { class: 'ad-evphotos' });
+    const note = h('p', { class: 'ad-note ad-progress', role: 'status' });
+    const pick = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async () => {
+      const files = Array.from(pick.files).filter((x) => /^image\//.test(x.type));
+      let n = 0;
+      try {
+        for (const file of files) {
+          n += 1;
+          note.textContent = `Uploading photo ${n} of ${files.length}... keep this page open.`;
+          const small = await shrink(file, 1800, true);
+          const res = await api('POST', '/api/admin/upload', small, small.type || 'image/jpeg');
+          e.photos.push({ image: res.url, caption: '' });
+        }
+        if (n) flash(`${n} photo${n === 1 ? '' : 's'} added. Type a title on each, then press Save.`);
+      } catch (err) { flash(err.message, true); }
+      note.textContent = '';
+      pick.value = '';
+      sync(); done(); draw();
+    } });
+    const draw = () => {
+      const last = e.photos.length - 1;
+      const move = (i, to) => () => { if (to < 0 || to > last) return; e.photos.splice(to, 0, e.photos.splice(i, 1)[0]); sync(); done(); draw(); };
+      box.replaceChildren(...e.photos.map((p, i) => h('div', { class: 'ad-evphoto' + (i === 0 ? ' is-main' : '') },
+        h('img', { src: p.image, alt: '', loading: 'lazy' }),
+        h('div', { class: 'ad-evphoto-body' },
+          h('div', { class: 'ad-evphoto-top' },
+            i === 0 ? h('span', { class: 'ad-tag ad-tag--live' }, 'Main photo')
+              : h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: move(i, 0) }, 'Make main photo'),
+            h('span', { class: 'ad-item-tools' },
+              h('button', { type: 'button', title: 'Move earlier', 'aria-label': 'Move earlier', disabled: i === 0, onclick: move(i, i - 1) }, '↑'),
+              h('button', { type: 'button', title: 'Move later', 'aria-label': 'Move later', disabled: i === last, onclick: move(i, i + 1) }, '↓'),
+              h('button', { type: 'button', title: 'Remove photo', 'aria-label': 'Remove photo', class: 'is-del', onclick: () => {
+                if (!window.confirm(`Remove ${p.caption ? `"${p.caption}"` : 'this photo'} from the event?`)) return;
+                e.photos.splice(i, 1); sync(); done(); draw();
+              } }, TRASH()))),
+          h('label', { class: 'ad-evphoto-title' }, h('span', {}, 'Title on the photo'),
+            h('input', { value: p.caption || '', maxlength: 60, placeholder: i === 0 ? 'For example: White Christmas Cake' : 'For example: Chocolate Yule Log', oninput: (x) => { p.caption = x.target.value; done(); } })),
+          cropControls(() => p.image)))));
+      if (!e.photos.length) box.append(h('p', { class: 'ad-empty' }, 'No photos yet. Add a few: the first one becomes the main photo.'));
+    };
+    draw();
+    return h('div', {}, box, h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => pick.click() }, '+ Add photos')), pick, note);
   }
   // A photo for each cake that can be pre-ordered whole. Order a Cake shows it when a guest picks that cake.
   function cakePhotos(done) {

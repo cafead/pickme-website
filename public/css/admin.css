@@ -231,3 +231,14 @@
 .ad-progress:empty { display: none; }
 .ad-progress { color: #1D5FA8; font-weight: 500; }
 .ad-waiting { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid #E5C77E; border-radius: 10px; background: #FFF6DD; }
+/* event photos: main photo first, a title on each */
+.ad-evphotos { display: grid; gap: 8px; }
+.ad-evphoto { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px; border: 1px solid #E0D6C7; border-radius: 10px; background: #fff; }
+.ad-evphoto.is-main { border-color: #C9A35A; background: #FFFCF5; }
+.ad-evphoto img { width: 92px; height: 92px; object-fit: cover; border-radius: 8px; background: #EEE; }
+.ad-evphoto-body { display: grid; gap: 8px; min-width: 0; }
+.ad-evphoto-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ad-evphoto-top .ad-tag { font-size: .8rem; }
+.ad-evphoto-title { display: grid; gap: 4px; font-size: .85rem; color: #6F5B48; }
+.ad-evphoto-title input { width: 100%; }
+@media (max-width: 480px) { .ad-evphoto { grid-template-columns: 64px minmax(0, 1fr); } .ad-evphoto img { width: 64px; height: 64px; } }

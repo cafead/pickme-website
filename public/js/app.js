@@ -201,11 +201,8 @@
     return k;
   }
   const isOpen = (c) => { const t = nepalTime(); return !closure(c) && t >= c.brand.open && t <= c.brand.close; };
-  // Photo border theme: an event can switch the whole site to its border while it shows.
-  function siteBorder(c) {
-    const ev = activeEvents(c).find(({ e }) => e.borderSite && e.border);
-    return ev ? ev.e.border : (c.theme.border || 'none');
-  }
+  // Photo border theme, chosen under Colours, fonts and sizes.
+  const siteBorder = (c) => c.theme.border || 'none';
   const deco = (html, border, cls) => (border && border !== 'none' ? `<div class="deco deco--${esc(border)} ${cls || ''}">${html}</div>` : html);
   const t12 = (t) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${m < 10 ? '0' : ''}${m} ${h < 12 ? 'AM' : 'PM'}`; };
   function timeOptions(c, chosen) {
@@ -408,19 +405,30 @@
       const end = Date.parse(e.start) + (Number(e.days) || 1) * 864e5;
       const now = Date.parse(today);
       return now >= Date.parse(e.start) && now < end ? { e, i, left: Math.round((end - now) / 864e5) } : null;
-    }).filter(Boolean);
+    }).filter(Boolean).slice(0, 1); // one event shows at a time
   }
-  const hasPage = (e) => Boolean((e.menu || []).some((it) => !it.hidden) || (e.photos || []).some((p) => safeUrl(p.image)) || e.message);
+  // An event's photos: the first one is its main photo. Each can carry a title shown on the photo.
+  function eventPhotos(e) {
+    const list = (e.photos || []).map((p, n) => ({ image: p.image, caption: p.caption || '', n })).filter((p) => safeUrl(p.image));
+    return list.length ? list : (safeUrl(e.image) ? [{ image: e.image, caption: '', n: -1 }] : []);
+  }
+  const hasPage = (e) => Boolean((e.menu || []).some((it) => !it.hidden) || eventPhotos(e).length > 1 || e.message);
   R.events = (c) => {
-    const list = activeEvents(c);
-    if (!list.length) return '';
-    if (S.slide >= list.length) S.slide = 0;
-    const many = list.length > 1;
+    const ev = activeEvents(c)[0];
+    if (!ev) return '';
+    const { e, i, left } = ev;
+    const shots = eventPhotos(e);
+    if (S.slide >= shots.length) S.slide = 0;
+    const many = shots.length > 1;
+    S.groups.event = shots.map((p) => ({ src: p.image, cap: p.caption }));
     return `<section id="events" class="sec"><div class="wrap">
       ${head(c.events, 'events')}
-      <div class="slides rv" data-n="${list.length}" style="--secs:${Math.max(2, Number(c.events.seconds) || 5)}s">
-        ${list.map(({ e, i, left }, n) => `<article class="slide${n === S.slide ? ' is-on' : ''}" aria-hidden="${n !== S.slide}">
-          ${pic(e.image, e.title, 'slide-pic')}
+      <div class="slides rv${shots.length ? '' : ' slides--text'}" data-n="${shots.length}" style="--secs:${Math.max(2, Number(c.events.seconds) || 5)}s">
+        <article class="ev-card">
+          ${shots.length ? `<div class="ev-shots">${shots.map((p, n) => `<figure class="slide${n === S.slide ? ' is-on' : ''}" aria-hidden="${n !== S.slide}">
+            <button type="button" class="ev-shot" data-act="zoom" data-group="event" data-i="${n}" aria-label="Open photo${p.caption ? ': ' + esc(p.caption) : ''}">${pic(p.image, p.caption || e.title, 'slide-pic', n === 0)}</button>
+            ${p.caption ? `<figcaption class="ev-cap"><span${p.n >= 0 ? ed(`events.items.${i}.photos.${p.n}.caption`) : ''}>${esc(p.caption)}</span></figcaption>` : ''}
+          </figure>`).join('')}</div>` : ''}
           <div class="slide-text">
             <p class="slide-tags">${e.tag ? `<span class="tag"${ed(`events.items.${i}.tag`)}>${esc(e.tag)}</span>` : ''}<span class="tag tag--soft">${left} day${left === 1 ? '' : 's'} left</span></p>
             <h3${ed(`events.items.${i}.title`)}>${esc(e.title)}</h3>
@@ -428,13 +436,14 @@
             ${hasPage(e)
               ? `<button type="button" class="btn" data-act="event" data-id="${esc(e.id)}"><span${ed(`events.items.${i}.button`)}>${esc(e.button || 'See the specials')}</span>${ICON.arrow}</button>`
               : (e.button ? btn(e.button, linkFor(c, e.link || '#menu'), '', `events.items.${i}.button`) : '')}
-          </div></article>`).join('')}
+          </div>
+        </article>
         ${many ? `<div class="slide-bar"><i></i></div>
           <div class="slide-ctl">
-            <div class="dots">${list.map(({ e }, n) => `<button type="button" data-act="slide" data-i="${n}" class="${n === S.slide ? 'is-on' : ''}" aria-label="Show ${esc(e.title)}"></button>`).join('')}</div>
-            <div class="row"><button type="button" class="icon-btn" data-act="slide-step" data-d="-1" aria-label="Previous slide">${ICON.left}</button>
+            <div class="dots">${shots.map((p, n) => `<button type="button" data-act="slide" data-i="${n}" class="${n === S.slide ? 'is-on' : ''}" aria-label="Show photo ${n + 1}${p.caption ? ': ' + esc(p.caption) : ''}"></button>`).join('')}</div>
+            <div class="row"><button type="button" class="icon-btn" data-act="slide-step" data-d="-1" aria-label="Previous photo">${ICON.left}</button>
               <button type="button" class="icon-btn" data-act="slide-pause" aria-label="Pause or play the slideshow">${ICON.pause}</button>
-              <button type="button" class="icon-btn" data-act="slide-step" data-d="1" aria-label="Next slide">${ICON.right}</button></div>
+              <button type="button" class="icon-btn" data-act="slide-step" data-d="1" aria-label="Next photo">${ICON.right}</button></div>
           </div>` : ''}
       </div></div></section>`;
   };
@@ -1012,11 +1021,12 @@
     if (i < 0) return;
     const e = c.events.items[i];
     const items = (e.menu || []).map((it, ii) => (it.hidden ? '' : itemHtml(it, `events.items.${i}.menu.${ii}`, true))).join('');
-    const photos = (e.photos || []).filter((p) => safeUrl(p.image)).map((p) => `<figure class="ev-photo">${deco(pic(p.image, p.caption || e.title, 'ev-pic'), e.border, 'deco--ev')}${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ''}</figure>`).join('');
+    const shots = eventPhotos(e);
+    const photos = shots.slice(1).map((p) => `<figure class="ev-photo">${deco(pic(p.image, p.caption || e.title, 'ev-pic'), siteBorder(c), 'deco--ev')}${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ''}</figure>`).join('');
     openLayer(`<div class="shade" data-act="close"></div>
       <div class="modal modal--event" role="dialog" aria-label="${esc(e.title)}">
         <button type="button" class="icon-btn ev-close" data-act="close" aria-label="Close">${ICON.x}</button>
-        <div class="ev-hero">${pic(e.image, e.title, 'ev-hero-pic')}
+        <div class="ev-hero">${shots[0] ? pic(shots[0].image, shots[0].caption || e.title, 'ev-hero-pic') : ''}
           <div class="ev-hero-text">${e.tag ? `<span class="tag">${esc(e.tag)}</span>` : ''}<h2>${esc(e.title)}</h2>${e.text ? `<p>${esc(e.text)}</p>` : ''}</div></div>
         ${e.message ? `<p class="ev-message">${esc(e.message)}</p>` : ''}
         ${photos ? `<div class="ev-photos">${photos}</div>` : ''}
