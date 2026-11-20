@@ -78,7 +78,7 @@
     heroPhoto: { sel: '.hero-media', axes: 'xy', label: 'Top photo' },
     heroCard: { sel: '.hero-card', axes: 'x', label: 'Floating card' },
     arch: { sel: '.arch-pic', axes: 'xy', label: 'Speciality photos' },
-    slides: { sel: '.slide-pic', axes: 'y', label: 'Slideshow' },
+    slides: { sel: '#events .slide', axes: 'y', label: 'Event slideshow' },
     menuPhoto: { sel: '.mi-ring', axes: 'x', label: 'Menu photos (round)' },
     menuCard: { sel: '.mc', axes: 'x', label: 'Menu cards' },
     menuCardPhoto: { sel: '.mc-pic', axes: 'y', label: 'Menu card photos' },
@@ -405,45 +405,60 @@
       const end = Date.parse(e.start) + (Number(e.days) || 1) * 864e5;
       const now = Date.parse(today);
       return now >= Date.parse(e.start) && now < end ? { e, i, left: Math.round((end - now) / 864e5) } : null;
-    }).filter(Boolean).slice(0, 1); // one event shows at a time
+    }).filter(Boolean);
   }
-  // An event's photos: the first one is its main photo. Each can carry a title shown on the photo.
+  // An event's photos: the first one is its main photo. Each has its own heading and description,
+  // shown on the left of the photo (the event's title and text fill in when they are empty).
   function eventPhotos(e) {
-    const list = (e.photos || []).map((p, n) => ({ image: p.image, caption: p.caption || '', n })).filter((p) => safeUrl(p.image));
-    return list.length ? list : (safeUrl(e.image) ? [{ image: e.image, caption: '', n: -1 }] : []);
+    const list = (e.photos || []).map((p, n) => ({ image: p.image, caption: p.caption || '', text: p.text || '', n })).filter((p) => safeUrl(p.image));
+    return list.length ? list : (safeUrl(e.image) ? [{ image: e.image, caption: '', text: '', n: -1 }] : []);
   }
   const hasPage = (e) => Boolean((e.menu || []).some((it) => !it.hidden) || eventPhotos(e).length > 1 || e.message);
+  // Every event that is on right now joins one slideshow: two events with 5 photos each make 10 slides.
+  function eventSlides(c) {
+    return activeEvents(c).flatMap(({ e, i, left }) => {
+      const shots = eventPhotos(e);
+      return (shots.length ? shots : [null]).map((p) => ({ e, i, left, p }));
+    });
+  }
   R.events = (c) => {
-    const ev = activeEvents(c)[0];
-    if (!ev) return '';
-    const { e, i, left } = ev;
-    const shots = eventPhotos(e);
-    if (S.slide >= shots.length) S.slide = 0;
-    const many = shots.length > 1;
-    S.groups.event = shots.map((p) => ({ src: p.image, cap: p.caption }));
+    const slides = eventSlides(c);
+    if (!slides.length) return '';
+    if (S.slide >= slides.length) S.slide = 0;
+    const many = slides.length > 1;
+    const start = Math.max(0, Math.min(70, Number(c.events.photoStart) || 0));
+    const withPhoto = slides.filter((s) => s.p);
+    S.groups.event = withPhoto.map((s) => ({ src: s.p.image, cap: s.p.caption || s.e.title }));
+    const heading = ({ e, i, p }) => (p && p.caption
+      ? `<h3${ed(`events.items.${i}.photos.${p.n}.caption`)}>${esc(p.caption)}</h3>`
+      : `<h3${ed(`events.items.${i}.title`)}>${esc(e.title)}</h3>`);
+    const words = ({ e, i, p }) => (p && p.text
+      ? `<p${ed(`events.items.${i}.photos.${p.n}.text`)}>${esc(p.text)}</p>`
+      : e.text ? `<p${ed(`events.items.${i}.text`)}>${esc(e.text)}</p>` : '');
     return `<section id="events" class="sec"><div class="wrap">
       ${head(c.events, 'events')}
-      <div class="slides rv${shots.length ? '' : ' slides--text'}" data-n="${shots.length}" style="--secs:${Math.max(2, Number(c.events.seconds) || 5)}s">
-        <article class="ev-card">
-          ${shots.length ? `<div class="ev-shots">${shots.map((p, n) => `<figure class="slide${n === S.slide ? ' is-on' : ''}" aria-hidden="${n !== S.slide}">
-            <button type="button" class="ev-shot" data-act="zoom" data-group="event" data-i="${n}" aria-label="Open photo${p.caption ? ': ' + esc(p.caption) : ''}">${pic(p.image, p.caption || e.title, 'slide-pic', n === 0)}</button>
-            ${p.caption ? `<figcaption class="ev-cap"><span${p.n >= 0 ? ed(`events.items.${i}.photos.${p.n}.caption`) : ''}>${esc(p.caption)}</span></figcaption>` : ''}
-          </figure>`).join('')}</div>` : ''}
-          <div class="slide-text">
-            <p class="slide-tags">${e.tag ? `<span class="tag"${ed(`events.items.${i}.tag`)}>${esc(e.tag)}</span>` : ''}<span class="tag tag--soft">${left} day${left === 1 ? '' : 's'} left</span></p>
-            <h3${ed(`events.items.${i}.title`)}>${esc(e.title)}</h3>
-            <p${ed(`events.items.${i}.text`)}>${esc(e.text)}</p>
-            ${hasPage(e)
-              ? `<button type="button" class="btn" data-act="event" data-id="${esc(e.id)}"><span${ed(`events.items.${i}.button`)}>${esc(e.button || 'See the specials')}</span>${ICON.arrow}</button>`
-              : (e.button ? btn(e.button, linkFor(c, e.link || '#menu'), '', `events.items.${i}.button`) : '')}
-          </div>
-        </article>
+      <div class="slides rv" data-n="${slides.length}" style="--secs:${Math.max(2, Number(c.events.seconds) || 5)}s;--ev-start:${start}%;--ev-fade:${start ? 18 : 0}%">
+        <div class="ev-stage">
+        ${slides.map((s, n) => {
+          const { e, i, left, p } = s;
+          return `<article class="slide${p ? '' : ' slide--text'}${n === S.slide ? ' is-on' : ''}" aria-hidden="${n !== S.slide}">
+            ${p ? `<button type="button" class="ev-shot" data-act="zoom" data-group="event" data-i="${withPhoto.indexOf(s)}" aria-label="Open photo${p.caption ? ': ' + esc(p.caption) : ''}" tabindex="${n === S.slide ? 0 : -1}">${pic(p.image, p.caption || e.title, 'slide-pic', n === 0)}</button>` : ''}
+            <div class="slide-text">
+              <p class="slide-tags">${e.tag ? `<span class="tag"${ed(`events.items.${i}.tag`)}>${esc(e.tag)}</span>` : ''}<span class="tag tag--soft">${left} day${left === 1 ? '' : 's'} left</span></p>
+              ${heading(s)}
+              ${words(s)}
+              ${hasPage(e)
+                ? `<button type="button" class="btn" data-act="event" data-id="${esc(e.id)}" tabindex="${n === S.slide ? 0 : -1}"><span${ed(`events.items.${i}.button`)}>${esc(e.button || 'See the specials')}</span>${ICON.arrow}</button>`
+                : (e.button ? btn(e.button, linkFor(c, e.link || '#menu'), '', `events.items.${i}.button`) : '')}
+            </div></article>`;
+        }).join('')}
+        </div>
         ${many ? `<div class="slide-bar"><i></i></div>
           <div class="slide-ctl">
-            <div class="dots">${shots.map((p, n) => `<button type="button" data-act="slide" data-i="${n}" class="${n === S.slide ? 'is-on' : ''}" aria-label="Show photo ${n + 1}${p.caption ? ': ' + esc(p.caption) : ''}"></button>`).join('')}</div>
-            <div class="row"><button type="button" class="icon-btn" data-act="slide-step" data-d="-1" aria-label="Previous photo">${ICON.left}</button>
+            <div class="dots">${slides.map((s, n) => `<button type="button" data-act="slide" data-i="${n}" class="${n === S.slide ? 'is-on' : ''}" aria-label="Show slide ${n + 1}: ${esc((s.p && s.p.caption) || s.e.title)}"></button>`).join('')}</div>
+            <div class="row"><button type="button" class="icon-btn" data-act="slide-step" data-d="-1" aria-label="Previous slide">${ICON.left}</button>
               <button type="button" class="icon-btn" data-act="slide-pause" aria-label="Pause or play the slideshow">${ICON.pause}</button>
-              <button type="button" class="icon-btn" data-act="slide-step" data-d="1" aria-label="Next photo">${ICON.right}</button></div>
+              <button type="button" class="icon-btn" data-act="slide-step" data-d="1" aria-label="Next slide">${ICON.right}</button></div>
           </div>` : ''}
       </div></div></section>`;
   };
@@ -908,6 +923,7 @@
       }), { rootMargin: '0px 0px -8% 0px' });
       $$('.rv').forEach((el) => observer.observe(el));
     }
+    startSlides();
     if (PREVIEW) window.scrollTo(0, y);
     navHeight();
   }
@@ -921,12 +937,37 @@
     const slides = $$('.slide');
     if (!slides.length) return;
     S.slide = (i + slides.length) % slides.length;
-    slides.forEach((s, n) => { s.classList.toggle('is-on', n === S.slide); s.setAttribute('aria-hidden', n !== S.slide); });
+    slides.forEach((s, n) => {
+      s.classList.toggle('is-on', n === S.slide); s.setAttribute('aria-hidden', n !== S.slide);
+      $$('button, a', s).forEach((b) => b.setAttribute('tabindex', n === S.slide ? '0' : '-1'));
+    });
     $$('.dots button').forEach((d, n) => d.classList.toggle('is-on', n === S.slide));
-    const bar = $('.slide-bar i');
-    if (bar) { bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
+    S.slideMs = 0;
+    paintBar();
   }
-  document.addEventListener('animationend', (e) => { if (e.target.matches && e.target.matches('.slide-bar i')) showSlide(S.slide + 1); });
+  // The slideshow runs on a timer, so it also moves on phones with "reduce motion" or battery saver on.
+  // It waits while paused, while the mouse is over it, and while the page is in the background.
+  function paintBar() {
+    const box = $('#events .slides');
+    const bar = box && $('.slide-bar i', box);
+    if (bar) bar.style.width = `${Math.min(100, (S.slideMs / slideLength(box)) * 100)}%`;
+  }
+  const slideLength = (box) => (parseFloat(box.style.getPropertyValue('--secs')) || 5) * 1000;
+  function startSlides() {
+    clearInterval(S.slideTimer);
+    S.slideMs = 0;
+    paintBar();
+    const box = $('#events .slides');
+    if (!box || Number(box.dataset.n) < 2) return;
+    const step = 100;
+    S.slideTimer = setInterval(() => {
+      const b = $('#events .slides');
+      if (!b) { clearInterval(S.slideTimer); return; }
+      if (b.classList.contains('is-paused') || document.hidden || (b.matches(':hover') && matchMedia('(hover: hover)').matches)) return;
+      S.slideMs += step;
+      if (S.slideMs >= slideLength(b)) showSlide(S.slide + 1); else paintBar();
+    }, step);
+  }
 
   /* ---------- photo viewer: swipe or use the arrows; download when the album allows it ---------- */
   function lightboxHtml() {
@@ -1022,7 +1063,7 @@
     const e = c.events.items[i];
     const items = (e.menu || []).map((it, ii) => (it.hidden ? '' : itemHtml(it, `events.items.${i}.menu.${ii}`, true))).join('');
     const shots = eventPhotos(e);
-    const photos = shots.slice(1).map((p) => `<figure class="ev-photo">${deco(pic(p.image, p.caption || e.title, 'ev-pic'), siteBorder(c), 'deco--ev')}${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ''}</figure>`).join('');
+    const photos = shots.slice(1).map((p) => `<figure class="ev-photo">${deco(pic(p.image, p.caption || e.title, 'ev-pic'), siteBorder(c), 'deco--ev')}${p.caption || p.text ? `<figcaption>${p.caption ? `<b>${esc(p.caption)}</b>` : ''}${p.text ? `<small>${esc(p.text)}</small>` : ''}</figcaption>` : ''}</figure>`).join('');
     openLayer(`<div class="shade" data-act="close"></div>
       <div class="modal modal--event" role="dialog" aria-label="${esc(e.title)}">
         <button type="button" class="icon-btn ev-close" data-act="close" aria-label="Close">${ICON.x}</button>

@@ -128,13 +128,14 @@
         f('title', 'Title'), f('text', 'Text', 'area'), f('image', 'Photo', 'image'), f('category', 'Opens this menu group', 'select', { options: catOptions }),
       ] }),
     ] },
-    { title: 'Events and specials', scroll: 'events', note: 'One event shows at a time. Tick the events you want: each shows from its start date for the number of days you set, then hides itself. If two ticked events are on at the same time, the one higher in the list shows (move events with the arrows), and the other waits until it ends. Its photos change like a slideshow, with each photo\'s title on it. If an event has more photos, a message or special items, its button opens its own page where customers can order. Special items also appear first in the menu while the event shows. The photo border is chosen under "Colours, fonts and sizes".', fields: [
+    { title: 'Events and specials', scroll: 'events', note: 'Tick the events you want: each shows from its start date for the number of days you set, then hides itself. The section is one slideshow: every photo of an event is a slide with its own heading and description on the left. Events that are on at the same time join the same slideshow (two events with 5 photos each make 10 slides). If an event has more photos, a message or special items, its button opens its own page where customers can order. Special items also appear first in the menu while the event shows. The photo border is chosen under "Colours, fonts and sizes".', fields: [
       f('', 'Show the events section', 'section', { id: 'events' }),
-      f('', 'Which events can show (one at a time, each only between its dates)', 'eventticks'),
-      f('events.script', 'Handwritten line'), f('events.title', 'Title'), f('events.seconds', 'Seconds per photo in the slideshow', 'number'),
+      f('', 'Which events show (each only between its dates)', 'eventticks'),
+      f('events.script', 'Handwritten line'), f('events.title', 'Title'), f('events.seconds', 'Seconds per slide', 'number'),
+      f('events.photoStart', 'Where the photo starts, from the left edge of the box (on computers). 0% = the photo fills the whole box.', 'range', { min: 0, max: 70, step: 1, unit: '%' }),
       f('events.items', 'Edit each event', 'list', { title: (e) => `${e.title} (${e.enabled === false ? 'not ticked' : eventStatus(e).toLowerCase()})`, add: 'Add an empty event', blank: () => ({ id: uid('event'), template: '', enabled: true, tag: '', title: 'New event', text: '', image: '', button: 'See the specials', link: '', start: BS.todayAD(), days: 7, message: '', menuTitle: '', photos: [], menu: [] }), fields: [
         f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Short description', 'area'),
-        f('photos', 'Photos (the first is the main photo; the slideshow shows them all)', 'eventphotos'),
+        f('photos', 'Slides: one photo each, with its own heading and description (the first photo is the main photo)', 'eventphotos'),
         f('start', 'Start showing on', 'date'), f('days', 'Show for how many days', 'number'),
         f('message', 'Message on the event page (for example: Choose your cake and grab it)', 'area'),
         f('button', 'Button text'), f('link', 'Button goes to, if the event has no page of its own (#menu, #cake, #booking or a web link)'),
@@ -547,6 +548,12 @@
         frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), box));
         continue;
       }
+      if (field.type === 'range') {
+        const shown = h('span', { class: 'ad-crop-val' }, `${Number(val) || 0}${field.unit || ''}`);
+        control = h('input', { type: 'range', id, min: field.min, max: field.max, step: field.step || 1, value: Number(val) || 0, oninput: (e) => { set(obj, field.k, Number(e.target.value)); shown.textContent = `${e.target.value}${field.unit || ''}`; done(); } });
+        frag.append(h('div', { class: 'ad-field' }, h('label', { class: 'ad-label', for: id }, field.l), h('div', { class: 'ad-crop-row ad-range' }, control, shown)));
+        continue;
+      }
       if (field.type === 'toggle') {
         control = h('input', { type: 'checkbox', id, checked: val === undefined ? field.def !== false : Boolean(val), onchange: (e) => { set(obj, field.k, e.target.checked); done(); } });
         frag.append(h('label', { class: 'ad-field ad-check', for: id }, control, h('span', {}, field.l)));
@@ -590,13 +597,7 @@
     draw();
     return grid;
   }
-  // Every event on one line: tick it to let it show. Only one shows at a time: the ticked event higher in the list wins.
-  function inDates(e) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.start || '')) return false;
-    const today = BS.todayAD();
-    return today >= e.start && today < addDays(e.start, Math.max(1, Number(e.days) || 1));
-  }
-  const shownEvent = () => (A.content.events.items || []).find((e) => e.enabled !== false && inDates(e));
+  // Every event on one line: tick it to let it show. It still only shows between its dates.
   function eventStatus(e) {
     const today = BS.todayAD();
     const days = Math.max(1, Number(e.days) || 1);
@@ -605,8 +606,6 @@
     const left = daysBetween(today, end);
     if (today < e.start) { const n = daysBetween(today, e.start); return `Starts ${n === 1 ? 'tomorrow' : `in ${n} days`}`; }
     if (today >= end) return 'Ended';
-    const first = shownEvent();
-    if (e.enabled !== false && first && first !== e) return `Waiting: "${first.title}" shows first`;
     return `Showing now, ${left === 1 ? 'last day today' : `${left} days left`}`;
   }
   const shortDay = (d, year) => { const t = new Date(d + 'T00:00:00'); return Number.isNaN(t.getTime()) ? '?' : t.toLocaleDateString('en-GB', year ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' }); };
@@ -646,7 +645,7 @@
           note.textContent = `Uploading photo ${n} of ${files.length}... keep this page open.`;
           const small = await shrink(file, 1800, true);
           const res = await api('POST', '/api/admin/upload', small, small.type || 'image/jpeg');
-          e.photos.push({ image: res.url, caption: '' });
+          e.photos.push({ image: res.url, caption: '', text: '' });
         }
         if (n) flash(`${n} photo${n === 1 ? '' : 's'} added. Type a title on each, then press Save.`);
       } catch (err) { flash(err.message, true); }
@@ -670,10 +669,13 @@
                 if (!window.confirm(`Remove ${p.caption ? `"${p.caption}"` : 'this photo'} from the event?`)) return;
                 e.photos.splice(i, 1); sync(); done(); draw();
               } }, TRASH()))),
-          h('label', { class: 'ad-evphoto-title' }, h('span', {}, 'Title on the photo'),
-            h('input', { value: p.caption || '', maxlength: 60, placeholder: i === 0 ? 'For example: White Christmas Cake' : 'For example: Chocolate Yule Log', oninput: (x) => { p.caption = x.target.value; done(); } })),
+          h('label', { class: 'ad-evphoto-title' }, h('span', {}, 'Heading'),
+            h('input', { value: p.caption || '', maxlength: 60, placeholder: `Empty = the event title (${e.title || 'Title'})`, oninput: (x) => { p.caption = x.target.value; done(); } })),
+          h('label', { class: 'ad-evphoto-title' }, h('span', {}, 'Description'),
+            h('textarea', { rows: 2, maxlength: 300, value: p.text || '', placeholder: 'Empty = the event description', oninput: (x) => { p.text = x.target.value; done(); } })),
           cropControls(() => p.image)))));
       if (!e.photos.length) box.append(h('p', { class: 'ad-empty' }, 'No photos yet. Add a few: the first one becomes the main photo.'));
+      if (e.photos.length === 1) box.append(h('p', { class: 'ad-note' }, 'Only one photo, so this event is one slide. Add more photos to give it more slides.'));
     };
     draw();
     return h('div', {}, box, h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => pick.click() }, '+ Add photos')), pick, note);

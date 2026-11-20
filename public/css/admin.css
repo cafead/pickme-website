@@ -242,3 +242,5 @@
 .ad-evphoto-title { display: grid; gap: 4px; font-size: .85rem; color: #6F5B48; }
 .ad-evphoto-title input { width: 100%; }
 @media (max-width: 480px) { .ad-evphoto { grid-template-columns: 64px minmax(0, 1fr); } .ad-evphoto img { width: 64px; height: 64px; } }
+.ad-range { grid-template-columns: 1fr 52px; }
+.ad-evphoto-title textarea { width: 100%; resize: vertical; }

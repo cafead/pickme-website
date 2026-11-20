@@ -133,6 +133,8 @@ module.exports = {
     script: 'Happening at Pick Me',
     title: 'Events & specials',
     seconds: 5,
+    // Where the photo starts, in % of the box width from the left edge (computers). 0 = the photo fills the whole box.
+    photoStart: 0,
     items: [
       {
         id: 'christmas-week', template: 'christmas', enabled: true, tag: 'Christmas Week', title: 'Christmas theme cakes',
