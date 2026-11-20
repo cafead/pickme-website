@@ -79,6 +79,22 @@ function markFood(data) {
   return touched;
 }
 if (markFood(content.data)) content.set(content.data);
+// Version 6: new sections (Guest moments) and "where it shows" for menu, cake and gallery.
+const PAGEABLE = { menu: '/menu', cake: '/cake', gallery: '/gallery', moments: '/gallery' };
+function ensureSections(data) {
+  if (!Array.isArray(data.sections)) return false;
+  let touched = false;
+  const defs = freshDefaults().sections;
+  defs.forEach((d, i) => {
+    if (data.sections.some((x) => x.id === d.id)) return;
+    const prev = i > 0 ? data.sections.findIndex((x) => x.id === defs[i - 1].id) : -1;
+    data.sections.splice(prev + 1, 0, Object.assign({}, d));
+    touched = true;
+  });
+  for (const x of data.sections) if (x.id in PAGEABLE && !['page', 'home', 'both'].includes(x.place)) { x.place = 'page'; touched = true; }
+  return touched;
+}
+if (ensureSections(content.data)) content.set(content.data);
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -468,12 +484,24 @@ app.get('/event/:id', (req, res) => {
     url: `${siteBase(req)}/event/${encodeURIComponent(e.id)}`,
   }));
 });
+// Menu, Order a Cake and the galleries have their own pages.
+const PAGES = {
+  menu: { title: 'Menu', description: 'The Pick Me Cafe menu with prices in NPR: coffee, cheesecake, mocktails, cakes, ice cream and snacks. Order for pickup, delivery in Hetauda, or at your table.' },
+  cake: { title: 'Order a Cake', description: 'Pre-order a whole cake from Pick Me Cafe, Hetauda: cheesecakes, black forest, red velvet and more, with a name or message on top.' },
+  gallery: { title: 'Gallery', description: 'Photos from Pick Me Cafe in Sigreni, Hetauda, and our guests.' },
+};
+for (const [key, pg] of Object.entries(PAGES)) {
+  app.get([`/${key}`, `/${key}/`], (req, res) => {
+    const c = content.get();
+    sendPage(res, renderPage(req, { title: `${pg.title} | ${c.brand.name}`, description: pg.description, url: `${siteBase(req)}/${key}`, ...(key === 'cake' && c.cake.image ? { image: c.cake.image } : {}) }));
+  });
+}
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /counter\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
 });
 app.get('/sitemap.xml', (req, res) => {
   const base = siteBase(req);
-  const urls = [`${base}/`, ...liveEvents(content.get(), true).map((e) => `${base}/event/${encodeURIComponent(e.id)}`)];
+  const urls = [`${base}/`, ...Object.keys(PAGES).map((k) => `${base}/${k}`), ...liveEvents(content.get(), true).map((e) => `${base}/event/${encodeURIComponent(e.id)}`)];
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${attr(u)}</loc></url>`).join('\n')}\n</urlset>\n`);
 });
 // Lets people add the website to their phone's home screen like an app.
@@ -786,6 +814,7 @@ app.put('/api/admin/content', admin, json, async (req, res) => {
   const note = str(req.query.note, 80);
   await addHistory({ at: new Date().toISOString(), by: 'owner', note, changes }, next);
   audit('owner', note ? `website-saved (${note})` : 'website-saved');
+  await dropUnusedMomentFiles(next);
   res.json({ ok: true, rev: next._rev });
 });
 app.get('/api/admin/history', admin, (req, res) => {
@@ -828,7 +857,62 @@ app.post('/api/admin/upload', admin, rawImage, async (req, res) => {
   if (!ext) return bad(res, 'Please upload a PNG, JPG, WEBP, GIF or SVG image.');
   const file = `${crypto.randomBytes(10).toString('hex')}.${ext}`;
   await fs.promises.writeFile(path.join(UPLOADS, file), req.body);
+  if (req.query.moment === '1') await noteMomentFile(file);
   res.json({ url: `/uploads/${file}` });
+});
+// Full-quality photos for guest albums (a photographer's photos can be large).
+app.post('/api/admin/upload-full', admin, express.raw({ type: () => true, limit: '40mb' }), async (req, res) => {
+  const ext = sniffImage(req.body, false);
+  if (!ext) return bad(res, 'Please upload a PNG, JPG or WEBP photo.');
+  const file = `${crypto.randomBytes(10).toString('hex')}.${ext}`;
+  await fs.promises.writeFile(path.join(UPLOADS, file), req.body);
+  await noteMomentFile(file);
+  res.json({ url: `/uploads/${file}` });
+});
+// Album photos are deleted from disk once no saved album uses them (after "Delete album" and Save).
+async function noteMomentFile(file) {
+  const m = meta.get();
+  m.momentFiles = (m.momentFiles || []).concat(file).slice(-5000);
+  await meta.set(m);
+}
+async function dropUnusedMomentFiles(data) {
+  const m = meta.get();
+  const list = m.momentFiles || [];
+  if (!list.length) return;
+  const used = JSON.stringify(data);
+  const keep = [];
+  for (const file of list) {
+    if (used.includes(`/uploads/${file}`)) { keep.push(file); continue; }
+    await fs.promises.unlink(path.join(UPLOADS, file)).catch(() => {});
+  }
+  if (keep.length !== list.length) { m.momentFiles = keep; await meta.set(m); }
+}
+const albumLive = (a) => {
+  const today = nepalDate();
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(a.date || '') ? a.date : today;
+  const end = new Date(Date.parse(start) + Math.max(1, Number(a.days) || 1) * 864e5).toISOString().slice(0, 10);
+  return start <= today && today < end;
+};
+// Download a whole album as one .zip (only albums that allow downloads and are showing).
+app.get('/api/moments/:id.zip', limit('zip', 30, 15 * 60e3), (req, res) => {
+  const a = ((content.get().moments || {}).albums || []).find((x) => x.id === req.params.id);
+  if (!a || !a.download || !albumLive(a)) return res.status(404).send('This album is not available to download.');
+  const zip = new AdmZip();
+  let n = 0;
+  for (const ph of a.photos || []) {
+    const u = String(ph.full || ph.image || '');
+    const m = u.match(/^\/uploads\/([a-f0-9]{16,40}\.(?:png|jpe?g|webp|gif))$/);
+    if (!m) continue;
+    const fp = path.join(UPLOADS, m[1]);
+    if (!fs.existsSync(fp)) continue;
+    n += 1;
+    zip.addFile(`Pick-Me-${String(n).padStart(2, '0')}${path.extname(m[1])}`, fs.readFileSync(fp));
+  }
+  if (!n) return res.status(404).send('No photos to download.');
+  const name = String(a.title || 'Pick Me photos').replace(/[^\w -]+/g, '').trim().replace(/\s+/g, '-') || 'Pick-Me-photos';
+  res.set('Content-Type', 'application/zip');
+  res.set('Content-Disposition', `attachment; filename="${name}.zip"`);
+  res.send(zip.toBuffer());
 });
 
 /* owner: security */
@@ -1037,6 +1121,7 @@ async function restoreBackup(buf, by) {
     if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by, note: 'Website before the backup was restored', changes: [] }, current);
     const next = fillDefaults(saved, freshDefaults());
     markFood(next);
+    ensureSections(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);

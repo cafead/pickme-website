@@ -9,6 +9,9 @@
     const t = (new URLSearchParams(location.search).get('table') || '').replace(/[^\w -]/g, '').slice(0, 20);
     try { if (t) sessionStorage.setItem('pm_table', t); return t || sessionStorage.getItem('pm_table') || ''; } catch (e) { return t; }
   })();
+  // Which page this is: the home page, or the menu, cake or gallery page.
+  const PAGE = (() => { const m = location.pathname.match(/^\/(menu|cake|gallery)\/?$/); return m ? m[1] : 'home'; })();
+  const PAGEABLE = { menu: '/menu', cake: '/cake', gallery: '/gallery', moments: '/gallery' };
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -50,12 +53,14 @@
     calendar: svg('<rect x="3.500" y="5" width="17" height="15" rx="2.500"/><path d="M3.500 10h17M8 3v4M16 3v4"/>'),
     chat: svg('<path d="M4 18.500V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8z"/><path d="M8.500 9.500h7M8.500 12.500h4"/>'),
     search: svg('<circle cx="11" cy="11" r="6.500"/><path d="M20 20l-4.200-4.200"/>'),
+    cartSmall: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2.200l2.300 11h10.300l2-8H6.400"/><circle cx="9.500" cy="19" r="1.400"/><circle cx="16.500" cy="19" r="1.400"/></svg>',
+    download: svg('<path d="M12 4v11M7.500 10.500L12 15l4.500-4.500"/><path d="M5 19h14"/>'),
     share: svg('<circle cx="18" cy="5.500" r="2.500"/><circle cx="6" cy="12" r="2.500"/><circle cx="18" cy="18.500" r="2.500"/><path d="M8.200 10.800l7.600-4.100M8.200 13.200l7.600 4.100"/>'),
     google: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#4285F4" d="M21.600 12.200c0-.7-.1-1.300-.2-2H12v3.800h5.400a4.600 4.600 0 0 1-2 3v2.500h3.200c1.900-1.700 3-4.300 3-7.300z"/><path fill="#34A853" d="M12 22c2.700 0 5-.9 6.600-2.400l-3.200-2.500c-.9.600-2 1-3.400 1-2.600 0-4.800-1.800-5.600-4.100H3.100v2.600A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.400 14c-.2-.6-.3-1.300-.3-2s.1-1.400.3-2V7.400H3.100a10 10 0 0 0 0 9.200z"/><path fill="#EA4335" d="M12 6c1.500 0 2.800.5 3.800 1.500l2.900-2.900A10 10 0 0 0 3.100 7.400L6.400 10C7.200 7.700 9.400 6 12 6z"/></svg>',
   };
   ICON.maps = ICON.pin;
 
-  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false, layout: false, q: '', filter: '' };
+  const S = { c: null, reviews: [], tab: null, cart: [], slide: 0, preset: null, inline: false, layout: false, q: '', filter: '', groups: {}, album: 0, lb: null };
   const WIDE = () => matchMedia('(min-width: 821px)').matches;
   // Small marks on menu items. Veg and non-veg use the usual green and brown squares.
   const MARKS = {
@@ -74,13 +79,13 @@
     heroCard: { sel: '.hero-card', axes: 'x', label: 'Floating card' },
     arch: { sel: '.arch-pic', axes: 'xy', label: 'Speciality photos' },
     slides: { sel: '.slide-pic', axes: 'y', label: 'Slideshow' },
-    menuPhoto: { sel: '.mi-pic', axes: 'x', label: 'Menu list photos' },
+    menuPhoto: { sel: '.mi-ring', axes: 'x', label: 'Menu photos (round)' },
     menuCard: { sel: '.mc', axes: 'x', label: 'Menu cards' },
     menuCardPhoto: { sel: '.mc-pic', axes: 'y', label: 'Menu card photos' },
     cakePhoto: { sel: '#cake .fade-pic', axes: 'xy', label: 'Cake section photo' },
     bookingPhoto: { sel: '#booking .fade-pic', axes: 'xy', label: 'Booking section photo' },
     storyPhoto: { sel: '.story-pic', axes: 'xy', label: 'Our story photo' },
-    gallery: { sel: '.gal-item', axes: 'xy', label: 'Gallery photos' },
+    gallery: { sel: '#gallery .sl-item', axes: 'xy', label: 'Gallery photos' },
     reviewCard: { sel: '.rev', axes: 'x', label: 'Review cards' },
     map: { sel: '.map', axes: 'xy', label: 'Map' },
   };
@@ -228,6 +233,26 @@
   const waNumber = (c) => digits(c.brand.whatsapp).replace(/^(?=9\d{9}$)/, '977');
   const waLink = (c, text) => `https://wa.me/${waNumber(c)}?text=${encodeURIComponent(text)}`;
   const visible = (c, id) => c.sections.some((s) => s.id === id && s.show !== false);
+  const placeOf = (c, id) => { const s = c.sections.find((x) => x.id === id); return (s && s.place) || 'page'; };
+  // Where a link to a section goes: its own page, or the section on the home page.
+  function hrefFor(c, id) {
+    if (id in PAGEABLE && placeOf(c, id) !== 'home') {
+      const path = PAGEABLE[id];
+      return `/${PAGE}` === path ? `#${id}` : path;
+    }
+    return PAGE === 'home' ? `#${id}` : `/#${id}`;
+  }
+  // Button links typed in admin, like #menu or #cake, follow the section to its page.
+  const linkFor = (c, link) => { const m = /^#([\w-]+)$/.exec(link || ''); return m && c.sections.some((x) => x.id === m[1]) ? hrefFor(c, m[1]) : link; };
+  // The sections drawn on this page.
+  function pageSections(c) {
+    const on = (s) => s.show !== false && R[s.id];
+    if (PAGE === 'home') return c.sections.filter((s) => on(s) && !(s.id in PAGEABLE && placeOf(c, s.id) === 'page'));
+    const want = PAGE === 'menu' ? ['menu'] : PAGE === 'cake' ? ['cake'] : ['gallery', 'moments'];
+    const list = c.sections.filter((s) => on(s) && want.includes(s.id));
+    if (PAGE === 'menu' && c.menu.showEvents !== false && visible(c, 'events')) list.push({ id: 'events' });
+    return list;
+  }
 
   /* ---------- menu lookups and cart ---------- */
   function findPrice(itemId, label) {
@@ -346,12 +371,12 @@
           <a href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener">${ICON.whatsapp}<span><small>Call or WhatsApp</small>${esc(c.brand.phone)}</span></a>
         </div>
         <div class="row hero-in">
-          ${h.button && visible(c, 'menu') ? btn(h.button, '#menu', '', 'hero.button') : ''}
-          ${h.button2 && visible(c, 'booking') ? btn(h.button2, '#booking', 'btn--ghost', 'hero.button2') : ''}
-          ${h.button3 && visible(c, 'cake') ? btn(h.button3, '#cake', 'btn--ghost', 'hero.button3') : ''}
+          ${h.button && visible(c, 'menu') ? btn(h.button, hrefFor(c, 'menu'), '', 'hero.button') : ''}
+          ${h.button2 && visible(c, 'booking') ? btn(h.button2, hrefFor(c, 'booking'), 'btn--ghost', 'hero.button2') : ''}
+          ${h.button3 && visible(c, 'cake') ? btn(h.button3, hrefFor(c, 'cake'), 'btn--ghost', 'hero.button3') : ''}
         </div>
       </div>
-      ${k.show !== false && k.title && visible(c, 'cake') ? `<a class="hero-card" href="#cake">${pic(k.image, k.title, 'hero-card-pic')}<span><small${ed('hero.card.label')}>${esc(k.label)}</small><strong${ed('hero.card.title')}>${esc(k.title)}</strong><em${ed('hero.card.text')}>${esc(k.text)}</em></span></a>` : ''}
+      ${k.show !== false && k.title && visible(c, 'cake') ? `<a class="hero-card" href="${esc(hrefFor(c, 'cake'))}">${pic(k.image, k.title, 'hero-card-pic')}<span><small${ed('hero.card.label')}>${esc(k.label)}</small><strong${ed('hero.card.title')}>${esc(k.title)}</strong><em${ed('hero.card.text')}>${esc(k.text)}</em></span></a>` : ''}
     </section>
     ${words.length ? `<div class="marquee" aria-hidden="true"><div>${strip}${strip}</div></div>` : ''}`;
   };
@@ -367,7 +392,7 @@
     return `<section id="highlights" class="sec"><div class="wrap">
       ${head(h, 'highlights')}
       <div class="trio">${(h.cards || []).map((k, i) => `
-        <a class="arch rv" style="--d:${i * 90}ms" href="#menu" data-act="cat" data-id="${esc(k.category)}">
+        <a class="arch rv" style="--d:${i * 90}ms" href="${esc(hrefFor(c, 'menu').startsWith('#') ? '#menu' : `${hrefFor(c, 'menu')}#tab-${k.category}`)}" data-act="cat" data-id="${esc(k.category)}">
           ${deco(pic(k.image, k.title, 'arch-pic'), border, 'deco--arch')}
           <h3${ed(`highlights.cards.${i}.title`)}>${esc(k.title)}</h3>
           <p${ed(`highlights.cards.${i}.text`)}>${esc(k.text)}</p>
@@ -402,7 +427,7 @@
             <p${ed(`events.items.${i}.text`)}>${esc(e.text)}</p>
             ${hasPage(e)
               ? `<button type="button" class="btn" data-act="event" data-id="${esc(e.id)}"><span${ed(`events.items.${i}.button`)}>${esc(e.button || 'See the specials')}</span>${ICON.arrow}</button>`
-              : (e.button ? btn(e.button, e.link || '#menu', '', `events.items.${i}.button`) : '')}
+              : (e.button ? btn(e.button, linkFor(c, e.link || '#menu'), '', `events.items.${i}.button`) : '')}
           </div></article>`).join('')}
         ${many ? `<div class="slide-bar"><i></i></div>
           <div class="slide-ctl">
@@ -440,13 +465,14 @@
       ? `<span class="pchip pchip--off">${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b></span>`
       : `<button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
         aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
-        ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">${p.whole ? 'Pre-order' : '+'}</i>
+        ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b>${p.whole ? `<i class="pre" aria-hidden="true">${ICON.cartSmall}Pre-order</i>` : '<i aria-hidden="true">+</i>'}
       </button>`)).join('');
     const when = hrs ? `<p class="mi-time">${later ? 'Served' : 'Today'} ${hoursText(hrs)}</p>` : '';
     const badge = it.badge ? `<span class="badge"${ed(base + '.badge')}>${esc(it.badge)}</span>` : '';
     const text = `<h4><span${ed(base + '.name')}>${esc(it.name)}</span>${marksHtml(it)}${cards ? '' : badge}</h4>${it.desc || PREVIEW ? `<p${ed(base + '.desc')}>${esc(it.desc)}</p>` : ''}${when}`;
     if (cards) return `<article class="mc${off ? ' mi--off' : ''}"><div class="mc-top">${pic(it.image, it.name, 'mc-pic')}${badge}</div><div class="mc-body">${text}<div class="mi-prices">${prices}</div></div></article>`;
-    const photo = safeUrl(it.image) ? pic(it.image, it.name, 'mi-pic') : '';
+    // Rounded card: a round photo whose edge matches the card's rounded end, then the name and prices.
+    const photo = safeUrl(it.image) ? `<div class="mi-ring">${pic(it.image, it.name, 'mi-pic')}</div>` : '';
     return `<article class="mi${off ? ' mi--off' : ''}${photo ? '' : ' mi--plain'}">${photo}<div class="mi-main"><div class="mi-body">${text}</div><div class="mi-prices">${prices}</div></div></article>`;
   }
   // The veg / eggless filter.
@@ -558,13 +584,35 @@
     const hint = $('#cake-notice');
     if (hint) hint.textContent = extra.length ? `${extra.map((o) => o.name).join(' and ')} needs at least ${Math.max(...extra.map((o) => Number(o.notice)))} hours notice, so please choose a later date if needed.` : `We need at least ${base} hours to prepare a whole cake.`;
   }
+  // Order a Cake: the photo changes to the cake the guest picks, with a soft fade.
+  function cakePhotoUrl(id) {
+    const own = ((S.c.cake || {}).photos || {})[id];
+    if (safeUrl(own)) return own;
+    for (const g of S.c.menu.categories || []) for (const it of g.items || []) if (it.id === id && safeUrl(it.image)) return it.image;
+    return S.c.cake.image;
+  }
+  function showCakePhoto(id) {
+    const box = $('.cake-photo');
+    const u = safeUrl(cakePhotoUrl(id));
+    if (!box || !u) return;
+    const old = $('img', box);
+    if (old && old.getAttribute('src') === u) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = `<img src="${esc(u)}" alt="" decoding="async"${cropAttrs(u)}>`;
+    const img = tmp.firstChild;
+    img.classList.add('cake-next');
+    box.classList.remove('pic--empty');
+    box.appendChild(img);
+    const swap = () => { requestAnimationFrame(() => img.classList.add('is-in')); setTimeout(() => { $$('img', box).forEach((x) => { if (x !== img) x.remove(); }); img.classList.remove('cake-next', 'is-in'); }, 650); };
+    if (img.complete) swap(); else { img.onload = swap; img.onerror = () => img.remove(); }
+  }
   R.cake = (c) => {
     const k = c.cake;
     const slot = nextSlot(c, k.noticeHours);
     const cakes = wholeCakes(c);
     const opts = cakeOpts();
     return `<section id="cake" class="sec"><div class="wrap split">
-      <div class="split-pic rv">${deco(pic(k.image, 'Celebration cake', 'fade-pic'), siteBorder(c), 'deco--tall')}</div>
+      <div class="split-pic rv">${deco(pic(k.image, 'Celebration cake', 'fade-pic cake-photo'), siteBorder(c), 'deco--tall')}</div>
       <div class="split-body rv">
         ${head(k, 'cake')}
         <p class="lede"${ed('cake.text')}>${esc(k.text)}</p>
@@ -625,18 +673,55 @@
       </div></section>`;
   };
 
+  /* Photos in one sliding row: the photo in the middle is full size and sharp, the ones near the edges smaller and softer. */
+  function slider(group, photos, label) {
+    S.groups[group] = photos;
+    return `<div class="slider rv" data-group="${esc(group)}">
+      <button type="button" class="sl-arrow sl-prev" data-act="sl-step" data-d="-1" aria-label="Previous photos">${ICON.left}</button>
+      <div class="sl-track" tabindex="0" role="region" aria-label="${esc(label)}">${photos.map((ph, i) => `
+        <button type="button" class="sl-item" data-act="zoom" data-group="${esc(group)}" data-i="${i}" aria-label="Open photo ${i + 1} of ${photos.length}${ph.cap ? `: ${esc(ph.cap)}` : ''}">
+          ${pic(ph.src, ph.cap || label)}
+          ${ph.cap || ph.tag ? `<span class="sl-cap">${ph.tag ? `<small>${esc(ph.tag)}</small>` : ''}${esc(ph.cap)}</span>` : ''}
+        </button>`).join('')}
+      </div>
+      <button type="button" class="sl-arrow sl-next" data-act="sl-step" data-d="1" aria-label="More photos">${ICON.right}</button>
+    </div>`;
+  }
   R.gallery = (c) => {
     const g = c.gallery;
-    if (!(g.images || []).length) return '';
-    const border = siteBorder(c);
+    const photos = (g.images || []).filter((im) => safeUrl(im.image)).map((im) => ({ src: im.image, cap: im.caption, tag: im.tag }));
+    if (!photos.length) return '';
     return `<section id="gallery" class="sec"><div class="wrap">
       ${head(g, 'gallery')}
-      <div class="gal">${g.images.map((im, i) => deco(`
-        <button type="button" class="gal-item rv" style="--d:${i * 70}ms" data-act="zoom" data-src="${esc(safeUrl(im.image))}" data-cap="${esc(im.caption)}" aria-label="Open photo: ${esc(im.caption || 'gallery photo')}">
-          ${pic(im.image, im.caption || 'Gallery photo')}
-          ${im.caption || im.tag ? `<span>${im.tag ? `<small>${esc(im.tag)}</small>` : ''}${esc(im.caption)}</span>` : ''}
-        </button>`, border, 'deco--gal')).join('')}
-      </div></div></section>`;
+      </div>${slider('gallery', photos, 'Gallery')}</section>`;
+  };
+  // Guest moments: albums that show for a few days. The newest album comes first.
+  function liveAlbums(c) {
+    const today = BS.todayAD();
+    return ((c.moments || {}).albums || []).filter((a) => {
+      const start = /^\d{4}-\d{2}-\d{2}$/.test(a.date || '') ? a.date : today;
+      const end = new Date(Date.parse(start) + Math.max(1, Number(a.days) || 1) * 864e5).toISOString().slice(0, 10);
+      return start <= today && today < end && (a.photos || []).some((p) => safeUrl(p.image));
+    }).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }
+  R.moments = (c) => {
+    const m = c.moments || {};
+    const albums = liveAlbums(c);
+    if (!albums.length) return '';
+    if (!albums[S.album]) S.album = 0;
+    const a = albums[S.album];
+    const photos = (a.photos || []).filter((p) => safeUrl(p.image)).map((p, i) => ({ src: p.image, full: a.download ? (p.full || p.image) : '', cap: '', name: `Pick-Me-${String(i + 1).padStart(2, '0')}` }));
+    return `<section id="moments" class="sec sec--tint"><div class="wrap">
+      ${head(m, 'moments')}
+      ${m.text ? `<p class="lede center moments-text"${ed('moments.text')}>${esc(m.text)}</p>` : ''}
+      ${albums.length > 1 ? `<div class="albums" role="tablist" aria-label="Albums">${albums.map((x, i) => `<button type="button" role="tab" aria-selected="${i === S.album}" class="album${i === S.album ? ' is-on' : ''}" data-act="album" data-i="${i}">
+        ${pic(x.photos[0].image, x.title, 'album-pic')}<span><strong>${esc(x.title)}</strong><small>${x.photos.length} photos</small></span></button>`).join('')}</div>` : `<p class="album-name"><strong>${esc(a.title)}</strong> · ${a.photos.length} photo${a.photos.length === 1 ? '' : 's'}</p>`}
+      </div>
+      ${slider('moments', photos, a.title)}
+      <div class="wrap moments-foot">
+        ${a.download ? `<a class="btn btn--ghost" href="/api/moments/${encodeURIComponent(a.id)}.zip" download>${ICON.download}<span>Download all ${a.photos.length} photos</span></a>` : ''}
+        ${m.privacy ? `<p class="muted moments-privacy">${PREVIEW ? `<span${ed('moments.privacy')}>${esc(m.privacy)}</span>` : `<a href="${esc(waLink(c, 'Hello, please remove a photo of me from the Guest moments album: '))}" target="_blank" rel="noopener">${esc(m.privacy)}</a>`}</p>` : ''}
+      </div></section>`;
   };
 
   const stars = (n) => `<span class="stars" role="img" aria-label="${n} out of 5 stars">${ICON.star.repeat(n)}</span>`;
@@ -707,16 +792,17 @@
   };
 
   function nav(c) {
-    const links = c.sections.filter((s) => s.show !== false && s.nav !== false && R[s.id] && s.id !== 'hero').map((s) => `<a href="#${esc(s.id)}">${esc(s.label)}</a>`).join('');
+    const links = c.sections.filter((s) => s.show !== false && s.nav !== false && R[s.id] && s.id !== 'hero')
+      .map((s) => { const href = hrefFor(c, s.id); const here = s.id in PAGEABLE && `/${PAGE}` === PAGEABLE[s.id]; return `<a href="${esc(href)}"${here ? ' aria-current="page"' : ''}>${esc(s.label)}</a>`; }).join('');
     return `<header class="nav" id="top"><div class="nav-in">
-      <a class="brand" href="#hero" aria-label="${esc(c.brand.name)}, home">${logo(c)}<span${ed('brand.name')}>${esc(c.brand.name)}</span></a>
+      <a class="brand" href="${PAGE === 'home' ? '#hero' : '/'}" aria-label="${esc(c.brand.name)}, home">${logo(c)}<span${ed('brand.name')}>${esc(c.brand.name)}</span></a>
       <nav class="nav-links" id="nav-links" aria-label="Sections">${links}</nav>
       <div class="nav-right">
         <button type="button" class="cart-btn" data-act="cart" aria-label="Open cart">${ICON.bag}<span class="cart-count" hidden>0</span></button>
         <button type="button" class="nav-toggle" data-act="nav" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">${ICON.menu}</button>
       </div></div>
       ${closure(c) ? `<p class="closed-bar"><strong${ed('closure.title')}>${esc(c.closure.title)}</strong> <span${ed('closure.text')}>${esc(c.closure.text)}</span></p>` : ''}
-      ${TABLE && !PREVIEW ? `<p class="table-bar">${ICON.bag}<span>Table ${esc(TABLE)}: add what you like from the menu, then tap the bag to send your order. Pay at the counter when you are done.</span></p>` : ''}</header>`;
+      ${TABLE && !PREVIEW ? `<p class="table-bar">${ICON.bag}<span>Table ${esc(TABLE)}: add what you like from the menu, then tap the bag to send your order. Pay at the counter when you are done.</span>${pageSections(c).some((x) => x.id === 'menu') ? '' : `<a href="${esc(hrefFor(c, 'menu'))}">Open the menu</a>`}</p>` : ''}</header>`;
   }
   const SOCIAL_NAMES = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', maps: 'Google Maps', viber: 'Viber', website: 'Website', link: 'Link' };
   function footer(c) {
@@ -727,7 +813,7 @@
     const waIcon = (cls) => `<a class="${cls} ${cls}--whatsapp" href="${esc(waLink(c, 'Hello ' + c.brand.name))}" target="_blank" rel="noopener" aria-label="WhatsApp">${ICON.whatsapp}</a>`;
     const soc = links.map((s) => icon(s, 'sl')).join('');
     return `<footer class="foot"><div class="wrap foot-in">
-      <a class="brand brand--foot" href="#hero">${logo(c)}<span>${esc(c.brand.name)}</span></a>
+      <a class="brand brand--foot" href="${PAGE === 'home' ? '#hero' : '/'}">${logo(c)}<span>${esc(c.brand.name)}</span></a>
       <p>${ICON.pin}<span>${esc(c.brand.address)}</span></p>
       <p>${ICON.clock}<span>${esc(c.brand.hoursText)}</span></p>
       <div class="soc">${soc}${wa ? waIcon('sl') : ''}</div>
@@ -741,7 +827,7 @@
   }
   // Phones: a bar along the bottom with the main actions and the order, always in reach of a thumb.
   function dock(c) {
-    const link = (id, icon, label) => (visible(c, id) ? `<a class="dk" href="#${id}">${ICON[icon]}<span>${label}</span></a>` : '');
+    const link = (id, icon, label) => (visible(c, id) ? `<a class="dk" href="${esc(hrefFor(c, id))}">${ICON[icon]}<span>${label}</span></a>` : '');
     return `<nav class="dock" aria-label="Quick actions">
       ${link('menu', 'book', 'Menu')}${link('cake', 'cake', 'Cake')}${link('booking', 'calendar', 'Book')}
       <button type="button" class="dk" data-act="chat">${ICON.chat}<span>Chat</span></button>
@@ -799,7 +885,9 @@
     document.documentElement.classList.toggle('at-table', Boolean(TABLE && !PREVIEW));
     document.documentElement.classList.toggle('is-closed', Boolean(closure(c)));
     const y = window.scrollY;
-    $('#app').innerHTML = nav(c) + '<main>' + c.sections.filter((s) => s.show !== false && R[s.id]).map((s) => R[s.id](c)).join('') + '</main>' + footer(c);
+    document.documentElement.dataset.page = PAGE;
+    $('#app').innerHTML = nav(c) + `<main class="page page--${PAGE}">` + pageSections(c).map((s) => R[s.id](c)).join('') + '</main>' + footer(c);
+    initSliders();
     $$('[data-bsp]', $('#app')).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: el.dataset.value }));
     saveCart();
     cakeTotal();
@@ -830,6 +918,92 @@
     if (bar) { bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
   }
   document.addEventListener('animationend', (e) => { if (e.target.matches && e.target.matches('.slide-bar i')) showSlide(S.slide + 1); });
+
+  /* ---------- photo viewer: swipe or use the arrows; download when the album allows it ---------- */
+  function lightboxHtml() {
+    const { list, i } = S.lb;
+    const ph = list[i];
+    return `<div class="shade shade--dark" data-act="close"></div><figure class="zoom zoom--lb" role="dialog" aria-label="Photo ${i + 1} of ${list.length}">
+      <img src="${esc(ph.src)}" alt="${esc(ph.cap || 'Photo')}" id="lb-img">
+      <figcaption>${ph.cap ? `<span>${esc(ph.cap)}</span>` : ''}${list.length > 1 ? `<small>${i + 1} / ${list.length}</small>` : ''}
+        ${ph.full ? `<a class="btn btn--small" href="${esc(ph.full)}" download="${esc(ph.name || 'Pick-Me-photo')}">${ICON.download}<span>Download</span></a>` : ''}</figcaption>
+      ${list.length > 1 ? `<button type="button" class="icon-btn lb-prev" data-act="lb-step" data-d="-1" aria-label="Previous photo">${ICON.left}</button>
+      <button type="button" class="icon-btn lb-next" data-act="lb-step" data-d="1" aria-label="Next photo">${ICON.right}</button>` : ''}
+      <button type="button" class="icon-btn lb-close" data-act="close" aria-label="Close photo">${ICON.x}</button></figure>`;
+  }
+  function openLightbox(list, i) { S.lb = { list, i: Math.max(0, Math.min(list.length - 1, i)) }; openLayer(lightboxHtml()); }
+  function stepLightbox(d) {
+    if (!S.lb || !$('.zoom--lb')) return;
+    S.lb.i = (S.lb.i + d + S.lb.list.length) % S.lb.list.length;
+    layer().innerHTML = lightboxHtml();
+  }
+  let swipeX = null;
+  document.addEventListener('touchstart', (e) => { swipeX = e.target.closest && e.target.closest('.zoom--lb') ? e.touches[0].clientX : null; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (swipeX == null) return;
+    const dx = e.changedTouches[0].clientX - swipeX;
+    swipeX = null;
+    if (Math.abs(dx) > 50) stepLightbox(dx < 0 ? 1 : -1);
+  });
+  document.addEventListener('keydown', (e) => { if (!$('.zoom--lb')) return; if (e.key === 'ArrowRight') stepLightbox(1); if (e.key === 'ArrowLeft') stepLightbox(-1); });
+
+  /* ---------- sliding photo rows ---------- */
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function paintSlider(track) {
+    const mid = track.scrollLeft + track.clientWidth / 2;
+    const half = Math.max(1, track.clientWidth / 2);
+    const still = calm();
+    $$('.sl-item', track).forEach((it) => {
+      const d = Math.min(1, Math.abs(it.offsetLeft + it.offsetWidth / 2 - mid) / half);
+      const e = d * d * (3 - 2 * d);
+      it.style.setProperty('--s', still ? 1 : (1 - 0.14 * e).toFixed(3));
+      it.style.setProperty('--o', still ? 1 : (1 - 0.42 * e).toFixed(3));
+      it.style.setProperty('--b', still ? '0px' : `${(1.6 * e).toFixed(2)}px`);
+      it.classList.toggle('is-mid', d < 0.2);
+    });
+    const sl = track.closest('.slider');
+    sl.classList.toggle('at-start', track.scrollLeft < 4);
+    sl.classList.toggle('at-end', track.scrollLeft + track.clientWidth > track.scrollWidth - 4);
+  }
+  function initSliders() {
+    $$('.sl-track').forEach((track) => {
+      if (track.dataset.ready) return;
+      track.dataset.ready = '1';
+      let raf = 0;
+      const paint = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => paintSlider(track)); };
+      track.addEventListener('scroll', paint, { passive: true });
+      window.addEventListener('resize', paint);
+      $$('img', track).forEach((im) => im.addEventListener('load', paint, { once: true }));
+      paint();
+      // Mouse: drag to slide. Wheel: slides sideways until the row ends, then the page scrolls on.
+      let drag = null;
+      track.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.button !== 0) return; drag = { x: e.clientX, left: track.scrollLeft, moved: false }; track.classList.add('is-drag'); });
+      window.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 4) drag.moved = true; track.scrollLeft = drag.left - dx; });
+      window.addEventListener('pointerup', () => {
+        if (!drag) return;
+        const moved = drag.moved;
+        drag = null;
+        track.classList.remove('is-drag');
+        if (moved) { track.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true }); snapNearest(track); }
+      });
+      track.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || S.layout) return;
+        const atStart = track.scrollLeft <= 0 && e.deltaY < 0;
+        const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1 && e.deltaY > 0;
+        if (atStart || atEnd) return;
+        e.preventDefault();
+        track.scrollBy({ left: e.deltaY, behavior: 'auto' });
+        clearTimeout(track.snapT);
+        track.snapT = setTimeout(() => snapNearest(track), 160);
+      }, { passive: false });
+    });
+  }
+  function snapNearest(track) {
+    const mid = track.scrollLeft + track.clientWidth / 2;
+    let best = null;
+    $$('.sl-item', track).forEach((it) => { const d = Math.abs(it.offsetLeft + it.offsetWidth / 2 - mid); if (!best || d < best.d) best = { d, it }; });
+    if (best) track.scrollTo({ left: best.it.offsetLeft + best.it.offsetWidth / 2 - track.clientWidth / 2, behavior: calm() ? 'auto' : 'smooth' });
+  }
 
   /* ---------- event page: photos, message and special menu ---------- */
   function openEvent(id) {
@@ -872,6 +1046,8 @@
   const layer = () => $('#layer');
   function closeLayer() { layer().innerHTML = ''; document.body.classList.remove('lock'); }
   function openLayer(html) {
+    const t = $('#toast');
+    if (t) t.classList.remove('is-on');
     layer().innerHTML = html;
     document.body.classList.add('lock');
     const f = $('[autofocus], button, input', layer());
@@ -917,7 +1093,7 @@
             <button type="button" class="btn" data-act="checkout"><span>Continue to order</span>${ICON.arrow}</button>
             <button type="button" class="btn btn--ghost" data-act="close"><span>Keep browsing</span></button></footer>`
         : `<p class="empty">Your order is empty. Add something from the menu.</p>
-          <footer><a class="btn" href="#menu" data-act="close"><span>See the menu</span>${ICON.arrow}</a></footer>`}
+          <footer><a class="btn" href="${esc(hrefFor(S.c, 'menu'))}" data-act="close"><span>See the menu</span>${ICON.arrow}</a></footer>`}
       </aside>`;
   }
   // Extras for one item: tick what you like, choose how many, add.
@@ -1132,7 +1308,7 @@
     }
   });
   document.addEventListener('change', (e) => {
-    if (e.target.id === 'cake-flavour') $('#cake-sizes').innerHTML = `<legend>Size</legend>${sizeChoices(wholeCakes(S.c).find((x) => x.id === e.target.value))}`;
+    if (e.target.id === 'cake-flavour') { $('#cake-sizes').innerHTML = `<legend>Size</legend>${sizeChoices(wholeCakes(S.c).find((x) => x.id === e.target.value))}`; showCakePhoto(e.target.value); }
     if (e.target.closest('form[data-form=cake]')) cakeTotal();
     const form = e.target.closest('form[data-form=checkout]');
     if (!form) return;
@@ -1200,11 +1376,23 @@
     cake(el) {
       const form = $('form[data-form=cake]');
       const sel = form && form.elements.cakeId;
-      if (!sel || !Array.from(sel.options).some((o) => o.value === el.dataset.item)) { addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout(); }
+      if (!sel || !Array.from(sel.options).some((o) => o.value === el.dataset.item)) {
+        // Order a Cake is on another page: open it with this cake picked.
+        if (!$('#cake') && visible(S.c, 'cake')) {
+          const u = new URL(hrefFor(S.c, 'cake'), location.href);
+          u.searchParams.set('pick', el.dataset.item);
+          u.searchParams.set('size', el.dataset.label);
+          if (PREVIEW) u.searchParams.set('preview', '1');
+          location.href = u.pathname + u.search + (u.hash || '#cake');
+          return;
+        }
+        addToCart(el.dataset.item, el.dataset.label, 1); return openCheckout();
+      }
       closeLayer();
       sel.value = el.dataset.item;
       $('#cake-sizes').innerHTML = `<legend>Size</legend>${sizeChoices(wholeCakes(S.c).find((x) => x.id === sel.value), el.dataset.label)}`;
       cakeTotal();
+      showCakePhoto(sel.value);
       $('#cake').scrollIntoView({ behavior: 'smooth' });
     },
     cart() { openLayer(cartHtml()); },
@@ -1227,12 +1415,25 @@
       el.setAttribute('aria-expanded', open);
     },
     zoom(el) {
-      if (!el.dataset.src) return;
-      openLayer(`<div class="shade shade--dark" data-act="close"></div><figure class="zoom"><img src="${esc(el.dataset.src)}" alt="${esc(el.dataset.cap)}"><figcaption>${esc(el.dataset.cap)}</figcaption><button type="button" class="icon-btn" data-act="close" aria-label="Close photo">${ICON.x}</button></figure>`);
+      const list = S.groups[el.dataset.group] || [{ src: el.dataset.src, cap: el.dataset.cap }];
+      openLightbox(list, Number(el.dataset.i) || 0);
+    },
+    'lb-step'(el) { stepLightbox(Number(el.dataset.d)); },
+    album(el) { S.album = Number(el.dataset.i) || 0; const sec = $('#moments'); if (sec) { sec.outerHTML = R.moments(S.c); initSliders(); $$('#moments .rv').forEach((x) => x.classList.add('in')); } },
+    'sl-step'(el) {
+      const track = $('.sl-track', el.closest('.slider'));
+      const item = $('.sl-item', track);
+      if (track && item) track.scrollBy({ left: Number(el.dataset.d) * (item.offsetWidth + 18), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     },
   };
   document.addEventListener('click', (e) => {
     if (S.inline && e.target.closest('[data-edit]')) { e.preventDefault(); return; }
+    // In the admin preview, links to the other pages stay inside the preview.
+    const pageLink = PREVIEW && e.target.closest('a[href^="/"]');
+    if (pageLink && !/^\/(uploads|api)\//.test(pageLink.getAttribute('href')) && !e.defaultPrevented) {
+      const u = new URL(pageLink.getAttribute('href'), location.href);
+      if (u.pathname !== location.pathname) { e.preventDefault(); u.searchParams.set('preview', '1'); location.href = u.pathname + u.search + u.hash; return; }
+    }
     const step = e.target.closest('[data-step]');
     if (step && $('#x-qty')) { const q = $('#x-qty'); q.textContent = Math.max(1, Math.min(50, (Number(q.textContent) || 1) + Number(step.dataset.step))); extrasTotal(); return; }
     if (S.layout) { if (!e.target.closest('#crop-tools')) e.preventDefault(); return; }
@@ -1427,7 +1628,14 @@
       S.c = c;
       S.reviews = Array.isArray(r) ? r : [];
       render();
-      if (location.hash && location.hash.length > 1 && !PREVIEW) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
+      const q = new URLSearchParams(location.search);
+      if (/^#tab-/.test(location.hash)) {
+        const id = location.hash.slice(5);
+        if (S.c.menu.categories.some((x) => x.id === id)) { S.tab = id; redrawMenu(); }
+        const m = $('#menu'); if (m) m.scrollIntoView();
+      } else if (q.get('pick') && $('#cake')) {
+        ACT.cake({ dataset: { item: q.get('pick'), label: q.get('size') || '' } });
+      } else if (location.hash && location.hash.length > 1) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
       else if (TABLE && !PREVIEW && $('#menu')) $('#menu').scrollIntoView();
       const evPath = location.pathname.match(/^\/event\/([^/]+)/);
       if (evPath && !PREVIEW) openEvent(decodeURIComponent(evPath[1]));
@@ -1443,7 +1651,14 @@
         if (e.data.pm === 'content') { S.c = e.data.content; render(); }
         if (e.data.pm === 'inline') { S.inline = Boolean(e.data.on); setInline(); }
         if (e.data.pm === 'layout') { S.layout = Boolean(e.data.on); markLayout(); }
-        if (e.data.pm === 'scroll') { const t = document.getElementById(e.data.id); if (t) t.scrollIntoView({ behavior: 'smooth' }); }
+        if (e.data.pm === 'scroll') {
+          const t = document.getElementById(e.data.id);
+          if (t) { t.scrollIntoView({ behavior: 'smooth' }); return; }
+          // The section is on another page: show that page in the preview.
+          const id = e.data.id;
+          const path = id in PAGEABLE && placeOf(S.c, id) !== 'home' ? PAGEABLE[id] : '/';
+          if (path !== location.pathname) location.href = `${path}?preview=1#${id}`;
+        }
       });
       window.parent.postMessage({ pm: 'ready' }, location.origin);
     }

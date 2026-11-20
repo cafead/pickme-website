@@ -51,6 +51,10 @@
 
   /* ---------- what can be edited ---------- */
   const f = (k, l, type, extra) => Object.assign({ k, l, type: type || 'text' }, extra || {});
+  const svgEl = (markup) => { const t = document.createElement('template'); t.innerHTML = markup.trim(); return t.content.firstChild; };
+  const TRASH = () => svgEl('<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>');
+  // Sections that can live on their own page, on the home page, or both.
+  const PAGEABLE = { menu: '/menu', cake: '/cake', gallery: '/gallery', moments: '/gallery' };
   const fontOptions = (kind) => Object.keys(FONTS[kind]).map((n) => [n, n]);
   const catOptions = () => A.content.menu.categories.map((c) => [c.id, c.name]);
   const catName = (id) => ((A.content.menu.categories || []).find((c) => c.id === id) || {}).name || 'choose a group';
@@ -101,12 +105,13 @@
       f('theme.width', 'Page width in px (900 to 1600)', 'number'), f('theme.heroHeight', 'Height of the top photo area in px (420 to 1100)', 'number'),
       f('theme.radius', 'Corner roundness (0 to 40)', 'number'),
       f('theme.sectionGap', 'Space between sections in px (0 to 200, normal is 56)', 'number'),
-      f('theme.border', 'Photo border theme (an event can switch it while it shows)', 'select', { options: borderOptions }),
+      f('theme.border', 'Everyday photo border (an event can switch it while it shows)', 'border'),
       f('theme.blend', 'Blend photos into the background', 'toggle'), f('theme.animations', 'Animations on', 'toggle'),
     ] },
-    { title: 'Section order and visibility', scroll: 'hero', note: 'Use the arrows to move a section up or down the page.', fields: [
+    { title: 'Section order and visibility', scroll: 'hero', note: 'Use the arrows to move a section up or down the page. Menu, Order a Cake, Gallery and Guest moments can each have their own page (yourwebsite/menu, /cake, /gallery), sit on the home page, or both: open one and choose "Where it shows".', fields: [
       f('sections', '', 'list', { fixed: true, title: (s) => `${s.label}${s.show === false ? ' (hidden)' : ''}`, fields: [
         f('label', 'Name in the top menu'), f('show', 'Show this section', 'toggle'), f('nav', 'Show in the top menu', 'toggle'),
+        f('place', 'Where it shows', 'select', { when: (s) => s.id in PAGEABLE, options: () => [['page', 'Its own page'], ['home', 'On the home page'], ['both', 'Both: home page and its own page']] }),
       ] }),
     ] },
     { title: 'Top of page (hero)', scroll: 'hero', fields: [
@@ -126,13 +131,15 @@
     ] },
     { title: 'Events and specials', scroll: 'events', note: 'Each event shows from its start date for the number of days you set, then disappears on its own. If an event has photos, a message or special items, its button opens its own page where customers can order. Special items also appear first in the menu while the event shows. When no event is showing, the section is hidden by itself.', fields: [
       f('', 'Show the events section', 'section', { id: 'events' }),
+      f('', 'Which events show (each one still only shows between its dates)', 'eventticks'),
+      f('theme.border', 'Everyday photo border (an event can switch it while it shows)', 'border'),
       f('events.script', 'Handwritten line'), f('events.title', 'Title'), f('events.seconds', 'Seconds per slide', 'number'),
-      f('events.items', 'Events', 'list', { title: (e) => `${e.title} (${eventState(e)})`, add: 'Add an empty event', blank: () => ({ id: uid('event'), template: '', enabled: true, tag: '', title: 'New event', text: '', image: '', button: 'See the specials', link: '', start: BS.todayAD(), days: 7, border: 'gold', borderSite: false, message: '', menuTitle: '', photos: [], menu: [] }), fields: [
-        f('enabled', 'Switched on', 'toggle'), f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Short description', 'area'), f('image', 'Main photo', 'image'),
+      f('events.items', 'Edit each event', 'list', { title: (e) => `${e.title} (${e.enabled === false ? 'not shown' : eventStatus(e).toLowerCase()})`, add: 'Add an empty event', blank: () => ({ id: uid('event'), template: '', enabled: true, tag: '', title: 'New event', text: '', image: '', button: 'See the specials', link: '', start: BS.todayAD(), days: 7, border: 'gold', borderSite: false, message: '', menuTitle: '', photos: [], menu: [] }), fields: [
+        f('enabled', 'Show this event on the website (between its dates)', 'toggle'), f('tag', 'Small label (for example Christmas Week)'), f('title', 'Title'), f('text', 'Short description', 'area'), f('image', 'Main photo', 'image'),
         f('start', 'Start showing on', 'date'), f('days', 'Show for how many days', 'number'),
         f('message', 'Message on the event page (for example: Choose your cake and grab it)', 'area'),
         f('button', 'Button text'), f('link', 'Button goes to, if the event has no page of its own (#menu, #cake, #booking or a web link)'),
-        f('border', 'Photo border theme for this event', 'select', { options: borderOptions }),
+        f('border', 'Photo border for this event', 'border'),
         f('borderSite', 'Use this border on the whole website while the event shows', 'toggle', { def: false }),
         f('photos', 'Event photos', 'list', { title: (p) => p.caption || 'Photo', add: 'Add photo', blank: () => ({ image: '', caption: '' }), fields: [f('image', 'Photo', 'image'), f('caption', 'A few words under the photo')] }),
         f('menuTitle', 'Name of the special menu (for example Christmas specials)'),
@@ -142,8 +149,9 @@
     { title: 'Event calendar and reminders', scroll: 'events', custom: calendarPanel, note: 'Days that sell themed cakes. You get a reminder at the top of admin before each one (2 weeks by default). Press "Make the event" to start one with the right border, text and dates; then add photos and special items. Days that move every year need this year\'s date typed in.' },
     { title: 'Menu, prices and food photos', scroll: 'menu', note: 'Each group is a tab on the site. Open a group to edit its items.', fields: [
       f('menu.script', 'Handwritten line'), f('menu.title', 'Title'), f('menu.note', 'Note under the title'),
-      f('menu.layout', 'How items are shown', 'select', { options: () => [['list', 'Simple list with small photos'], ['cards', 'Cards with large photos']] }),
+      f('menu.layout', 'How items are shown', 'select', { options: () => [['list', 'Rounded cards with a round photo'], ['cards', 'Tall cards with large photos']] }),
       f('menu.search', 'Show the search box above the menu', 'toggle'),
+      f('menu.showEvents', 'On the menu page, show "Happening at Pick Me" (events that are showing) under the menu', 'toggle'),
       f('menu.marks.show', 'Show food marks (veg, non-veg, eggless...) on items', 'toggle'),
       f('menu.marks.filter', 'Show the "Veg only" and "Eggless" filter buttons', 'toggle'),
       f('menu.categories', 'Groups', 'list', { title: (c) => `${c.name} (${(c.items || []).length})${c.hidden ? ' (hidden)' : ''}`, add: 'Add group', blank: () => ({ id: uid('group'), name: 'New group', note: '', hidden: false, items: [] }), fields: [
@@ -175,8 +183,9 @@
       f('closure.allowLater', 'Still take orders and bookings for later days', 'toggle'),
     ] },
     { title: 'Cake pre-order', scroll: 'cake', fields: [
-      f('cake.script', 'Handwritten line'), f('cake.title', 'Title'), f('cake.text', 'Text', 'area'), f('cake.image', 'Photo', 'image'),
+      f('cake.script', 'Handwritten line'), f('cake.title', 'Title'), f('cake.text', 'Text', 'area'), f('cake.image', 'Photo shown before a cake is picked', 'image'),
       f('cake.noticeHours', 'Hours of notice needed', 'number'), f('cake.button', 'Button text'),
+      f('', 'Photo for each cake (changes when a guest picks that cake)', 'cakephotos'),
       f('cake.serveMin', 'One pound of cake serves at least (people)', 'number'), f('cake.serveMax', 'One pound of cake serves at most (people)', 'number'),
       f('cake.options', 'Cake choices (eggless, photo print...)', 'list', { title: (o) => `${o.name}: ${Number(o.price) ? `Rs. ${o.price}${o.perPound ? ' a pound' : ''}` : 'free'}${o.show === false ? ' (hidden)' : ''}`, add: 'Add a choice', blank: () => ({ id: uid('opt'), name: 'New choice', note: '', price: 0, perPound: false, notice: 0, show: true }), fields: [
         f('name', 'Name'), f('note', 'Small note under the name (optional)'), f('price', 'Extra price in NPR (0 for free)', 'number'),
@@ -190,10 +199,11 @@
     { title: 'Our story', scroll: 'story', fields: [
       f('story.script', 'Handwritten line'), f('story.title', 'Title'), f('story.text', 'Text', 'area'), f('story.side', 'Handwritten side note'), f('story.image', 'Photo', 'image'),
     ] },
-    { title: 'Gallery photos', scroll: 'gallery', fields: [
+    { title: 'Gallery photos', scroll: 'gallery', note: 'All photos sit in one row that guests slide through, however many you add.', fields: [
       f('gallery.script', 'Handwritten line'), f('gallery.title', 'Title (optional)'),
       f('gallery.images', 'Photos', 'list', { title: (g) => g.caption || 'Photo', add: 'Add photo', blank: () => ({ image: '', caption: '', tag: '' }), fields: [f('image', 'Photo', 'image'), f('caption', 'Caption'), f('tag', 'Small label above the caption (optional)')] }),
     ] },
+    { title: 'Guest moments (photo albums)', scroll: 'moments', custom: momentsPanel, note: 'Photos of guests: daily photos, or a photographer\'s photos from an event. Each album shows for the number of days you choose, then hides itself. Up to 30 photos per album. Tick "Let guests download" to offer the full-quality photos.' },
     { title: 'Reviews section', scroll: 'reviews', note: 'Choose which reviews show in the Reviews tab above. Fill in your real Google rating and review count to show them; leave them empty to hide.', fields: [
       f('reviews.script', 'Handwritten line'), f('reviews.title', 'Title'), f('reviews.rating', 'Your Google rating, for example 4.8'), f('reviews.count', 'Number of Google reviews, for example 120'),
       f('reviews.formTitle', 'Button text'), f('reviews.thanks', 'Thank-you message', 'area'),
@@ -453,6 +463,14 @@
         h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: !it.hidden, onchange: (e) => { it.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show'))))))));
   }
 
+  // Opening one section closes the one that was open, so only one stays expanded.
+  function closeOthers(d, sel) {
+    const parent = d.parentElement;
+    if (!parent) return;
+    let shifted = false;
+    for (const x of parent.children) if (x !== d && x.matches(sel) && x.open) { x.open = false; shifted = true; }
+    if (shifted) requestAnimationFrame(() => { const r = d.getBoundingClientRect(); if (r.top < 60 || r.top > window.innerHeight - 80) d.scrollIntoView({ block: 'start' }); });
+  }
   function listField(field, obj) {
     const wrap = h('div', { class: 'ad-list' });
     const draw = () => {
@@ -465,18 +483,18 @@
         const tools = h('span', { class: 'ad-item-tools' },
           h('button', { type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, onclick: move(i - 1) }, '↑'),
           h('button', { type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === arr.length - 1, onclick: move(i + 1) }, '↓'),
-          !field.fixed && h('button', { type: 'button', title: 'Delete', class: 'is-del', onclick: (e) => {
+          !field.fixed && h('button', { type: 'button', title: 'Delete', 'aria-label': 'Delete', class: 'is-del', onclick: (e) => {
             e.preventDefault();
             const inside = Array.isArray(item.items) && item.items.length ? ` and the ${item.items.length} items in it` : '';
             if (!window.confirm(`Delete "${field.title(item)}"${inside}? You can bring it back from History if you change your mind after saving.`)) return;
             arr.splice(i, 1); changed(); draw();
-          } }, 'Delete'));
+          } }, TRASH()));
         const body = h('div', { class: 'ad-item-body' });
         let built = false;
         const build = () => { if (!built) { body.append(buildFields(field.fields, item, () => { title.textContent = field.title(item) || '(empty)'; })); built = true; } };
         const d = h('details', { class: 'ad-item' }, h('summary', {}, title, tools), body);
         if (A.open.has(item)) { d.open = true; build(); }
-        d.addEventListener('toggle', () => { if (d.open) { A.open.add(item); build(); } else A.open.delete(item); });
+        d.addEventListener('toggle', () => { if (d.open) { closeOthers(d, '.ad-item'); A.open.add(item); build(); } else A.open.delete(item); });
         wrap.append(d);
       });
       if (!field.fixed) {
@@ -495,6 +513,19 @@
       const id = `adf-${++fieldSeq}`;
       const val = get(obj, field.k);
       let control;
+      if (field.when && !field.when(obj)) continue;
+      if (field.type === 'border') {
+        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), borderPicker(obj, field.k, done)));
+        continue;
+      }
+      if (field.type === 'eventticks') {
+        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), eventTicks(done)));
+        continue;
+      }
+      if (field.type === 'cakephotos') {
+        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), cakePhotos(done)));
+        continue;
+      }
       if (field.type === 'list') {
         frag.append(h('div', { class: 'ad-field' }, field.l && h('span', { class: 'ad-label' }, field.l), listField(field, obj)));
         continue;
@@ -543,6 +574,165 @@
     return frag;
   }
 
+  /* Border themes as small pictures: your own photo with each border around it. */
+  function borderPicker(obj, key, done) {
+    const sample = A.content.cake.image || A.content.hero.image || '';
+    const grid = h('div', { class: 'ad-borders', role: 'radiogroup', 'aria-label': 'Photo border theme' });
+    const draw = () => {
+      const cur = get(obj, key) || 'none';
+      grid.replaceChildren(...BORDERS.map(([v, label]) => {
+        const [main, rest] = label.split(': ');
+        return h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === cur), class: 'ad-border' + (v === cur ? ' is-on' : ''), title: label,
+          onclick: () => { set(obj, key, v); done(); draw(); } },
+        h('span', { class: 'ad-border-zoom' }, h('span', { class: v === 'none' ? 'ad-border-frame' : `ad-border-frame deco deco--${v}` }, h('span', { class: 'ad-border-pic', style: sample ? `background-image:url("${sample.replace(/"/g, '')}")` : '' }))),
+        h('small', {}, rest ? rest : main), rest ? h('em', {}, main) : null);
+      }));
+    };
+    draw();
+    return grid;
+  }
+  // Every event on one line: tick it to show it on the website. It still only shows between its dates.
+  function eventStatus(e) {
+    const today = BS.todayAD();
+    const days = Math.max(1, Number(e.days) || 1);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.start || '')) return 'No start date';
+    const end = addDays(e.start, days);
+    const left = daysBetween(today, end);
+    if (today < e.start) { const n = daysBetween(today, e.start); return `Starts ${n === 1 ? 'tomorrow' : `in ${n} days`}`; }
+    if (today >= end) return 'Ended';
+    return `Showing now, ${left === 1 ? 'last day today' : `${left} days left`}`;
+  }
+  const shortDay = (d, year) => { const t = new Date(d + 'T00:00:00'); return Number.isNaN(t.getTime()) ? '?' : t.toLocaleDateString('en-GB', year ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' }); };
+  const shortRange = (a, b) => (!a ? 'No start date' : !b || b === a ? shortDay(a, true) : `${shortDay(a, a.slice(0, 4) !== b.slice(0, 4))} to ${shortDay(b, true)}`);
+  function eventTicks(done) {
+    const box = h('div', { class: 'ad-evticks' });
+    const draw = () => {
+      const items = A.content.events.items || [];
+      if (!items.length) { box.replaceChildren(h('p', { class: 'ad-empty' }, 'No events yet. Use "Add an empty event" below, or "Make the event" from the calendar.')); return; }
+      box.replaceChildren(...items.map((e) => {
+        const st = eventStatus(e);
+        const last = /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') ? addDays(e.start, Math.max(1, Number(e.days) || 1) - 1) : '';
+        return h('label', { class: 'ad-evtick' + (e.enabled === false ? ' is-off' : '') },
+          h('input', { type: 'checkbox', checked: e.enabled !== false, onchange: (x) => { e.enabled = x.target.checked; done(); draw(); } }),
+          h('span', {}, h('b', {}, e.title || 'Untitled event'), h('small', {}, shortRange(e.start, last))),
+          h('span', { class: 'ad-tag' + (/Showing/.test(st) && e.enabled !== false ? ' ad-tag--live' : '') }, e.enabled === false ? 'Not shown' : st));
+      }));
+    };
+    draw();
+    A.drawEventTicks = draw;
+    return box;
+  }
+  // A photo for each cake that can be pre-ordered whole. Order a Cake shows it when a guest picks that cake.
+  function cakePhotos(done) {
+    const k = A.content.cake;
+    if (!k.photos || typeof k.photos !== 'object' || Array.isArray(k.photos)) k.photos = {};
+    const cakes = [];
+    for (const g of A.content.menu.categories || []) for (const it of g.items || []) if ((it.prices || []).some((p) => p.whole)) cakes.push(it);
+    if (!cakes.length) return h('p', { class: 'ad-empty' }, 'No cakes yet. In the menu, tick "Whole cake: pre-order only" on a price to add one.');
+    return h('div', { class: 'ad-cakephotos' }, cakes.map((it) => h('div', { class: 'ad-cakephoto' },
+      h('b', {}, it.name), imageField(f(it.id, it.name, 'image', { hint: 'If empty, its menu photo is used.' }), k.photos, done))));
+  }
+
+  /* Guest moments: albums of guest photos that show for a set number of days. */
+  const MAX_ALBUM = 30;
+  function albumState(a) {
+    const today = BS.todayAD();
+    const end = addDays(a.date || today, Math.max(1, Number(a.days) || 1));
+    if (today < (a.date || today)) return `starts ${niceDate(a.date)}`;
+    if (today >= end) return 'ended, hidden';
+    const left = daysBetween(today, end);
+    return left === 1 ? 'showing, last day today' : `showing, ${left} days left`;
+  }
+  async function uploadAlbumPhotos(album, files, note) {
+    const room = MAX_ALBUM - album.photos.length;
+    const list = Array.from(files).filter((x) => /^image\//.test(x.type)).slice(0, Math.max(0, room));
+    if (!list.length) { flash(room <= 0 ? `An album holds up to ${MAX_ALBUM} photos.` : 'Choose photos (JPG, PNG or WEBP).', true); return 0; }
+    let n = 0;
+    for (const file of list) {
+      n += 1;
+      note.textContent = `Uploading photo ${n} of ${list.length}... keep this page open.`;
+      const small = await shrink(file, 1800, false);
+      const shown = await api('POST', '/api/admin/upload?moment=1', small, small.type || 'image/jpeg');
+      const photo = { image: shown.url, full: '' };
+      if (album.download && file !== small && file.size <= 40e6) {
+        try { photo.full = (await api('POST', '/api/admin/upload-full', file, file.type || 'image/jpeg')).url; } catch (e) { photo.full = ''; }
+      }
+      album.photos.push(photo);
+    }
+    note.textContent = '';
+    changed();
+    flash(`${list.length} photo${list.length === 1 ? '' : 's'} added. Press Save to put them on the website.${Array.from(files).length > list.length ? ` Only ${list.length} fitted: an album holds up to ${MAX_ALBUM}.` : ''}`);
+    return list.length;
+  }
+  function momentsPanel(body) {
+    const m = A.content.moments;
+    body.append(buildFields([
+      f('', 'Show the Guest moments section', 'section', { id: 'moments' }),
+      f('script', 'Handwritten line'), f('title', 'Title'), f('text', 'Text under the title', 'area'), f('privacy', 'Small line about removing photos', 'area'),
+    ], m));
+    // new album
+    const note = h('p', { class: 'ad-note ad-progress', role: 'status' });
+    const nf = { title: 'At Pick Me today', date: BS.todayAD(), days: 2, download: false };
+    const pick = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async () => {
+      const album = { id: uid('album'), title: nf.title.trim() || 'Guest moments', date: nf.date || BS.todayAD(), days: Math.max(1, Number(nf.days) || 1), download: nf.download, photos: [] };
+      try {
+        const added = await uploadAlbumPhotos(album, pick.files, note);
+        if (added) { m.albums.unshift(album); A.open.add(album); drawAlbums(); }
+      } catch (e) { note.textContent = ''; flash(e.message, true); }
+      pick.value = '';
+    } });
+    const newBox = h('div', { class: 'ad-card ad-newalbum' },
+      h('strong', {}, 'New album'),
+      h('div', { class: 'ad-grid' },
+        h('label', {}, 'Album name', h('input', { value: nf.title, oninput: (e) => { nf.title = e.target.value; } })),
+        h('label', {}, 'First day shown', h('input', { type: 'date', value: nf.date, oninput: (e) => { nf.date = e.target.value; } })),
+        h('label', {}, 'Show for how many days', h('input', { type: 'number', min: 1, max: 365, value: nf.days, oninput: (e) => { nf.days = e.target.value; } }))),
+      h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', onchange: (e) => { nf.download = e.target.checked; } }), h('span', {}, 'Let guests download the full-quality photos (for a photographer\'s event photos)')),
+      h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => pick.click() }, `Choose photos (up to ${MAX_ALBUM})`)), pick, note);
+    body.append(newBox);
+    const list = h('div', { class: 'ad-albums' });
+    const ended = h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => {
+      const gone = m.albums.filter((a) => albumState(a).startsWith('ended'));
+      if (!gone.length) return flash('No albums have ended.');
+      if (!window.confirm(`Delete ${gone.length} album${gone.length === 1 ? '' : 's'} that ended (${gone.reduce((n, a) => n + a.photos.length, 0)} photos)? When you press Save, their photos are deleted from the website for good, to free space.`)) return;
+      m.albums = m.albums.filter((a) => !gone.includes(a));
+      changed(); drawAlbums();
+    } }, 'Delete albums that have ended');
+    function drawAlbums() {
+      list.replaceChildren();
+      if (!m.albums.length) { list.append(h('p', { class: 'ad-empty' }, 'No albums yet.')); return; }
+      m.albums.forEach((a) => {
+        const prog = h('p', { class: 'ad-note ad-progress', role: 'status' });
+        const more = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async () => {
+          try { if (await uploadAlbumPhotos(a, more.files, prog)) drawAlbums(); } catch (e) { prog.textContent = ''; flash(e.message, true); }
+          more.value = '';
+        } });
+        const grid = h('div', { class: 'ad-album-grid' }, a.photos.map((ph, i) => h('figure', {},
+          h('img', { src: ph.image, alt: '', loading: 'lazy' }),
+          h('button', { type: 'button', class: 'ad-album-x', 'aria-label': 'Remove this photo', title: 'Remove this photo', onclick: () => { a.photos.splice(i, 1); changed(); drawAlbums(); } }, '×'))));
+        const title = h('span', { class: 'ad-item-title' }, `${a.title} · ${a.photos.length} photos · ${albumState(a)}`);
+        const d = h('details', { class: 'ad-item' }, h('summary', {}, title, h('span', { class: 'ad-item-tools' },
+          h('button', { type: 'button', class: 'is-del', title: 'Delete album', 'aria-label': 'Delete album', onclick: (e) => {
+            e.preventDefault();
+            if (!window.confirm(`Delete the album "${a.title}" and its ${a.photos.length} photos? When you press Save, the photos are deleted for good.`)) return;
+            m.albums.splice(m.albums.indexOf(a), 1); changed(); drawAlbums();
+          } }, TRASH()))),
+        h('div', { class: 'ad-item-body' },
+          buildFields([f('title', 'Album name'), f('date', 'First day shown', 'date'), f('days', 'Show for how many days', 'number'),
+            f('download', 'Let guests download the full-quality photos', 'toggle', { def: false })], a, () => { title.textContent = `${a.title} · ${a.photos.length} photos · ${albumState(a)}`; }),
+          a.download && a.photos.some((ph) => !ph.full) ? h('p', { class: 'ad-note' }, 'Photos added before downloads were switched on download at website size.') : null,
+          grid,
+          h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn', disabled: a.photos.length >= MAX_ALBUM, onclick: () => more.click() }, a.photos.length >= MAX_ALBUM ? 'Album is full (30 photos)' : 'Add more photos')),
+          more, prog));
+        if (A.open.has(a)) d.open = true;
+        d.addEventListener('toggle', () => { if (d.open) { closeOthers(d, '.ad-item'); A.open.add(a); } else A.open.delete(a); });
+        list.append(d);
+      });
+    }
+    drawAlbums();
+    body.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, 'Albums (newest first)'), list), h('div', { class: 'ad-row' }, ended));
+  }
+
   /* ---------- edit view ---------- */
   function buildPanel() {
     const panel = h('aside', { class: 'ad-panel' }, h('p', { class: 'ad-intro' }, 'Open a part of the website, change it, and watch the preview. Above the preview, "Edit text" lets you type straight onto the page, and "Edit layout" lets you drag edges to resize photos and boxes, or drag a photo to move it in its frame. Nothing goes live until you press Save, and every save can be undone from History.'));
@@ -552,6 +742,7 @@
       const d = h('details', { class: 'ad-group' }, h('summary', {}, p.title), body);
       d.addEventListener('toggle', () => {
         if (!d.open) return;
+        closeOthers(d, '.ad-group');
         if (p.custom) { body.replaceChildren(); if (p.note) body.append(h('p', { class: 'ad-note' }, p.note)); const inner = h('div', { class: 'ad-group-body' }); body.append(inner); p.custom(inner); return; }
         if (!built) { if (p.note) body.append(h('p', { class: 'ad-note' }, p.note)); body.append(buildFields(p.fields, A.content)); built = true; }
         tell({ pm: 'scroll', id: p.scroll });
@@ -588,8 +779,23 @@
     document.querySelectorAll('[data-mobile]').forEach((b) => b.classList.toggle('is-on', b.dataset.mobile === which));
   }
   function editView() {
-    const wrap = h('div', { class: 'ad-frame-wrap' }, h('iframe', { id: 'ad-frame', src: '/?preview=1', title: 'Live preview of the website' }));
-    const size = (cls, label) => h('button', { type: 'button', class: 'ad-btn ad-btn--quiet ad-wide-only', onclick: () => { wrap.className = 'ad-frame-wrap ' + cls; } }, label);
+    const frameEl = h('iframe', { id: 'ad-frame', src: '/?preview=1', title: 'Live preview of the website' });
+    const wrap = h('div', { class: 'ad-frame-wrap is-computer' }, frameEl);
+    // "Computer" shows the page at a real computer width (1280 px), shrunk to fit beside the editor.
+    const fit = () => {
+      if (!wrap.classList.contains('is-computer')) { frameEl.style.cssText = ''; return; }
+      const w = wrap.clientWidth;
+      const hgt = wrap.clientHeight;
+      if (!w || !hgt) return;
+      const sc = Math.min(1, w / 1280);
+      frameEl.style.cssText = `width:1280px;height:${Math.round(hgt / sc)}px;transform:scale(${sc});transform-origin:0 0;`;
+    };
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+    const size = (cls, label) => h('button', { type: 'button', class: 'ad-btn ad-btn--quiet ad-wide-only', 'data-size': cls, onclick: () => {
+      wrap.className = 'ad-frame-wrap ' + cls;
+      document.querySelectorAll('[data-size]').forEach((b) => b.classList.toggle('is-on', b.dataset.size === cls));
+      fit();
+    } }, label);
     A.inline = false;
     A.layout = false;
     const split = h('div', { class: 'ad-split', 'data-show': A.mobile },
@@ -601,7 +807,7 @@
         h('div', { class: 'ad-prev-bar' }, h('strong', { class: 'ad-wide-only' }, 'Live preview'), h('span', { class: 'ad-row' },
           h('button', { type: 'button', id: 'ad-inline', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => setInline(!A.inline) }, 'Edit text'),
           h('button', { type: 'button', id: 'ad-layout', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => setLayout(!A.layout) }, 'Edit layout'),
-          size('', 'Computer'), size('is-phone', 'Phone'))), wrap));
+          size('is-computer', 'Computer'), size('is-phone', 'Phone'))), wrap));
     return split;
   }
 
@@ -619,12 +825,13 @@
   const stepOptions = (list, cur) => list.map((x) => `<option value="${x}"${x === cur ? ' selected' : ''}>${STEP_NAMES[x]}</option>`).join('');
   const clock = (iso) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kathmandu', hour: 'numeric', minute: '2-digit', hour12: true });
   const logList = (x) => (Array.isArray(x.log) && x.log.length ? `<details class="ad-log-mini"><summary>History of this ${x.lines ? 'order' : 'booking'}</summary><ul>${x.log.map((l) => `<li>${clock(l.at)} · ${esc(l.what)} <span>${esc(l.by)}</span></li>`).join('')}</ul></details>` : '');
+  const time12 = (t) => { const [hh, mm] = String(t || '').split(':').map(Number); return Number.isFinite(hh) ? `${hh % 12 || 12}:${String(mm || 0).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}` : String(t || ''); };
   function orderCard(o) {
     const quick = (step, label) => (o.status !== step && o.status !== 'cancelled' ? `<button type="button" class="ad-btn" data-quick="orders" data-id="${esc(o.id)}" data-step="${step}">${label}</button>` : '');
     return `<article class="ad-card is-${esc(o.status)}">
       <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="ad-step ad-step--${esc(o.status)}">${STEP_NAMES[o.status] || esc(o.status)}</span><span class="ad-step ${o.paid ? 'ad-step--paid' : 'ad-step--unpaid'}">${o.paid ? 'Paid' : 'Not paid'}</span><b>${rs(o.total)}</b></header>
       <p>${esc(o.name || 'Guest')}${o.phone ? ` · ${contact(o)}` : ''}</p>
-      <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
+      <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || (/^\d{4}-\d{2}-\d{2}$/.test(o.schedule.date || '') ? BS.label(o.schedule.date) : o.schedule.date))} at ${esc(time12(o.schedule.time))}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}
       <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` <em>+ ${esc(l.extras.join(', '))}</em>` : ''} <span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li>Delivery <span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}</p>
@@ -650,6 +857,14 @@
       ${tile('At the cafe / pickup / delivery', `${count('dinein')} / ${count('pickup')} / ${count('delivery')}`)}
     </div>`;
   }
+  // The Orders badge counts pending orders on every day; say so when some are not on the day shown.
+  function waitingNote(day) {
+    if (A.dayBy === 'todo') return '';
+    const shown = new Set(A.dayOrders.map((o) => o.id));
+    const other = (A.orders || []).filter((o) => o.status === 'pending' && !shown.has(o.id));
+    if (!other.length) return '';
+    return `<p class="ad-waiting">${other.length} pending order${other.length === 1 ? ' is' : 's are'} on other days. <button type="button" class="ad-btn ad-btn--main" data-showtodo="1">Show every order still to do</button></p>`;
+  }
   function listView(kind) {
     const box = h('div', { class: 'ad-page' });
     if (kind === 'orders') {
@@ -667,10 +882,11 @@
           </div>
           <p class="ad-bsday">${bs ? `${bs.d} ${BS.MONTHS[bs.m - 1]} ${bs.y}` : ''} · ${niceDate(day)}</p>
           <div class="ad-row">
-            <label class="ad-inline">Show <select name="by"><option value="placed"${A.dayBy === 'placed' ? ' selected' : ''}>orders placed this day</option><option value="due"${A.dayBy === 'due' ? ' selected' : ''}>orders due this day</option></select></label>
-            <a class="ad-btn" href="/api/desk/day.csv?date=${day}&by=${A.dayBy}">Download this day (opens in Excel)</a>
+            <label class="ad-inline">Show <select name="by"><option value="placed"${A.dayBy === 'placed' ? ' selected' : ''}>orders placed this day</option><option value="due"${A.dayBy === 'due' ? ' selected' : ''}>orders due this day</option><option value="todo"${A.dayBy === 'todo' ? ' selected' : ''}>every order still to do (any day)</option></select></label>
+            ${A.dayBy === 'todo' ? '' : `<a class="ad-btn" href="/api/desk/day.csv?date=${day}&by=${A.dayBy}">Download this day (opens in Excel)</a>`}
           </div>
         </form>
+        ${waitingNote(day)}
         ${daySummary(A.dayOrders)}
         <div class="ad-chips">${chip('all', 'All')}${ORDER_STEPS.map((k) => chip(k, STEP_NAMES[k])).join('')}${chip('unpaid', 'Not paid')}</div>`
         + (list.length ? list.map(orderCard).join('') : '<p class="ad-empty">No orders here.</p>');
@@ -813,6 +1029,7 @@
     }
   }
   async function loadDay() {
+    if (A.dayBy === 'todo') { A.dayOrders = (await api('GET', '/api/desk/orders')).filter((o) => !['done', 'cancelled'].includes(o.status)); return; }
     A.dayOrders = await api('GET', `/api/desk/orders?date=${A.day || BS.todayAD()}&by=${A.dayBy}`);
   }
   async function loadSecurity() {
@@ -920,6 +1137,7 @@
       if (quickPaid) { await api('PATCH', `/api/desk/orders/${quickPaid.dataset.id}`, { paid: quickPaid.dataset.quickpaid === 'true' }); await reload(A.view); flash('Updated.'); return; }
       if (dayBtn) { e.preventDefault(); const n = Number(dayBtn.dataset.day); A.day = n === 0 ? BS.todayAD() : addDays(A.day || BS.todayAD(), n); await reload('orders'); return; }
       if (ofilter) { A.orderFilter = ofilter.dataset.ofilter; show('orders', true); return; }
+      if (e.target.closest('[data-showtodo]')) { A.dayBy = 'todo'; await reload('orders'); return; }
       if (version) {
         if (status() && !window.confirm('You have unsaved changes. Open this older version anyway? Your unsaved changes are lost.')) return;
         const old = await api('GET', `/api/admin/history/${version.dataset.version}`);

@@ -97,11 +97,13 @@ module.exports = {
     { id: 'hero', label: 'Home', show: true, nav: true },
     { id: 'highlights', label: 'Specialities', show: true, nav: false },
     { id: 'events', label: 'Events', show: true, nav: false },
-    { id: 'menu', label: 'Menu', show: true, nav: true },
-    { id: 'cake', label: 'Order a Cake', show: true, nav: true },
+    // place: 'page' = its own page (/menu, /cake, /gallery), 'home' = on the home page, 'both'.
+    { id: 'menu', label: 'Menu', show: true, nav: true, place: 'page' },
+    { id: 'cake', label: 'Order a Cake', show: true, nav: true, place: 'page' },
     { id: 'booking', label: 'Book a Table', show: true, nav: true },
     { id: 'story', label: 'Our Story', show: true, nav: true },
-    { id: 'gallery', label: 'Gallery', show: true, nav: true },
+    { id: 'gallery', label: 'Gallery', show: true, nav: true, place: 'page' },
+    { id: 'moments', label: 'Guest moments', show: true, nav: false, place: 'page' },
     { id: 'reviews', label: 'Reviews', show: true, nav: true },
     { id: 'visit', label: 'Visit', show: true, nav: true },
   ],
@@ -179,6 +181,8 @@ module.exports = {
     layout: 'list',
     // Small marks on items (veg, eggless...) and the search box above the tabs.
     marks: { show: true, filter: true },
+    // On the menu page, show live events ("Happening at Pick Me") under the menu.
+    showEvents: true,
     search: true,
     categories: [
       cat('Hot Coffee', '', [
@@ -285,6 +289,8 @@ module.exports = {
     noticeHours: 8,
     button: 'Continue',
     // How many people one pound of cake serves, for the guide next to each size.
+    // A photo for each cake (menu item id: photo). Empty means the cake's menu photo is used.
+    photos: {},
     serveMin: 4,
     serveMax: 6,
     // Choices on a whole cake. Prices are per pound when "perPound" is on. Extra notice is in hours.
@@ -321,6 +327,14 @@ module.exports = {
       { image: photo('1517248135467-4c7edcad34c4', 900), caption: 'Our space', tag: 'Sigreni' },
       { image: photo('1536935338788-846bb9981813', 900), caption: 'Mocktails', tag: 'Cold bar' },
     ],
+  },
+  // Albums of guest photos. Each shows from its date for a number of days, then hides itself.
+  moments: {
+    script: 'Guest moments',
+    title: 'Smiles at Pick Me',
+    text: 'Our guests, our favourite part of the day. Find yourself here.',
+    privacy: 'Want a photo of you removed? Message us on WhatsApp and we will take it down.',
+    albums: [],
   },
   reviews: {
     script: 'Kind words',

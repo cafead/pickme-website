@@ -132,7 +132,17 @@
 <div id="toast" role="status"></div>
 <div id="slip"></div>
 
+<script src="/js/bs.js"></script>
 <script>
+  // "For" line: Nepali date and 12-hour time, like the rest of the website.
+  function forWhen(o) {
+    if (!o.schedule) return 'as soon as possible';
+    const d = o.schedule.date;
+    const bs = o.schedule.bs || (window.BS && /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? BS.label(d) : d);
+    const [h, m] = String(o.schedule.time || '').split(':').map(Number);
+    const time = Number.isFinite(h) ? `${h % 12 || 12}:${String(m || 0).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` : esc(o.schedule.time || '');
+    return `${esc(bs)} at ${time}`;
+  }
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -179,7 +189,7 @@
     return `<article class="card ${esc(o.status)}">
       <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="step step--${esc(o.status)}">${NAMES[o.status] || esc(o.status)}</span><span class="step ${o.paid ? 'step--done' : ''}">${o.paid ? 'Paid' : 'Not paid'}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
       <p>${contact(o)}</p>
-      <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p>
+      <p><b>For:</b> ${forWhen(o)}</p>
       ${line('Address', o.address)}
       <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` <em>+ ${esc(l.extras.join(', '))}</em>` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
@@ -188,7 +198,7 @@
         ${quick('orders', o, 'acknowledged', 'Acknowledge', o.status === 'pending')}${quick('orders', o, 'done', 'Mark done')}
         ${o.paid ? '' : `<button type="button" class="main" data-paid="${esc(o.id)}">Mark paid</button>`}
         <select data-patch="orders" data-id="${esc(o.id)}" data-key="status" aria-label="Status">${steps(ORDER_STEPS, o.status)}</select>
-        <label><input type="checkbox" data-patch="orders" data-id="${esc(o.id)}" data-key="paid"${o.paid ? ' checked' : ''}> Paid</label>
+        ${o.paid ? `<button type="button" data-unpaid="${esc(o.id)}">Mark not paid</button>` : ''}
       </footer>
       <footer>
         ${picture(o.payment.proof, 'Payment screenshot')}${picture(o.refPhoto, 'Cake design photo')}
@@ -223,7 +233,7 @@
     const day = (iso) => new Date(Date.parse(iso) + 345 * 60e3).toISOString().slice(0, 10);
     const t = S.orders.filter((o) => day(o.createdAt) === todayAD && o.status !== 'cancelled');
     const sum = (arr) => arr.reduce((n, o) => n + Number(o.total || 0), 0);
-    $('today').innerHTML = `<span>Today: <b>${t.length}</b> orders</span><span>Total <b>${rs(sum(t))}</b></span><span>Paid <b>${rs(sum(t.filter((o) => o.paid)))}</b></span><span>Not paid <b>${rs(sum(t.filter((o) => !o.paid)))}</b></span><span>Still to do <b>${t.filter((o) => o.status !== 'done').length}</b></span>`;
+    $('today').innerHTML = `<span>Placed today: <b>${t.length}</b> order${t.length === 1 ? '' : 's'}</span><span>Total <b>${rs(sum(t))}</b></span><span>Paid <b>${rs(sum(t.filter((o) => o.paid)))}</b></span><span>Not paid <b>${rs(sum(t.filter((o) => !o.paid)))}</b></span><span>Still to do <b>${t.filter((o) => o.status !== 'done').length}</b></span>`;
     const q = $('search').value.trim().toLowerCase();
     const f = $('filter').value;
     const rows = all[S.tab].filter((x) => {
@@ -266,7 +276,7 @@
     if (!o) return;
     $('slip').innerHTML = `<p style="text-align:center"><b>${esc(S.cafe.toUpperCase())}</b><br>${esc(o.id)} · ${TYPE[o.type].toUpperCase()}<br>${when(o.createdAt)}</p><hr>
       <p>${esc(o.name || 'Guest')}${o.phone ? `, ${esc(o.phone)}` : ''}${o.address ? `<br>Address: ${esc(o.address)}` : ''}${o.tableNo ? `<br>Table: ${esc(o.tableNo)}` : ''}
-      <br>For: ${o.schedule ? `${esc(o.schedule.bs || o.schedule.date)} at ${esc(o.schedule.time)}` : 'as soon as possible'}</p><hr>
+      <br>For: ${forWhen(o)}</p><hr>
       ${o.lines.map((l) => `<p>${l.qty} x ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` + ${esc(l.extras.join(', '))}` : ''} = ${rs(l.qty * l.price)}</p>`).join('')}
       ${o.deliveryFee ? `<p>Delivery = ${rs(o.deliveryFee)}</p>` : ''}<hr>
       <p><b>TOTAL ${rs(o.total)}</b> · ${o.payment.method === 'later' ? 'pay later' : o.payment.method}${o.paid ? ', payment checked' : ''}</p>
@@ -302,8 +312,10 @@
     if (print) printSlip(print.dataset.print);
     const q = e.target.closest('[data-quick]');
     const paid = e.target.closest('[data-paid]');
-    if (q || paid) {
-      const req = q ? api('PATCH', `/api/desk/${q.dataset.quick}/${q.dataset.id}`, { status: q.dataset.step }) : api('PATCH', `/api/desk/orders/${paid.dataset.paid}`, { paid: true });
+    const unpaid = e.target.closest('[data-unpaid]');
+    if (q || paid || unpaid) {
+      const req = q ? api('PATCH', `/api/desk/${q.dataset.quick}/${q.dataset.id}`, { status: q.dataset.step })
+        : api('PATCH', `/api/desk/orders/${(paid || unpaid).dataset[paid ? 'paid' : 'unpaid']}`, { paid: Boolean(paid) });
       req.then(() => { toast('Updated.'); load(true); }).catch((err) => { if (err.message !== 'login') toast(err.message); });
     }
   });
