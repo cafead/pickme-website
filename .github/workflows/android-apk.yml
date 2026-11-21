@@ -1,0 +1,75 @@
+# Builds the Pick Me Cafe Android app (APK) whenever the app/ folder changes, and puts it on the
+# Releases page. The newest APK is always at:
+# https://github.com/cafead/pickme-website/releases/latest/download/PickMeCafe.apk
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/android-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install
+        run: npm ci
+
+      - name: Make the Android project
+        run: npx expo prebuild --platform android --no-install --clean
+        env:
+          EXPO_NO_TELEMETRY: 1
+
+      - name: Build the APK
+        working-directory: app/android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Name the file
+        run: cp android/app/build/outputs/apk/release/app-release.apk ../PickMeCafe.apk
+
+      - name: Publish on the Releases page
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.run_number }}
+          name: Pick Me Cafe app for Android (build ${{ github.run_number }})
+          make_latest: true
+          files: PickMeCafe.apk
+          body: |
+            Install on an Android phone: open this page on the phone, tap **PickMeCafe.apk**, then open the download and allow installing.
+            A newer build installs over the old one; your orders stay.
+
+      - name: Keep a copy with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: PickMeCafe-apk-${{ github.run_number }}
+          path: PickMeCafe.apk
+          retention-days: 14

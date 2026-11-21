@@ -718,6 +718,9 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   const deliveryFee = type === 'delivery' ? Number(c.payment.deliveryFee) || 0 : 0;
   const order = {
     id: newCode(hasWhole ? 'CAKE' : 'PM'),
+    // A private key lets the customer's phone app follow this order's status.
+    key: crypto.randomBytes(12).toString('hex'),
+    source: str(b.source, 10) === 'app' ? 'app' : 'web',
     createdAt: new Date().toISOString(),
     status: 'pending',
     paid: false,
@@ -736,7 +739,27 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   await orders.set([order, ...orders.get()]);
   audit('public', 'order-placed', order.id);
   notify(`New order ${order.id}: Rs. ${order.total}`, orderText(order));
-  res.json({ ok: true, id: order.id, total: order.total, text: orderText(order) });
+  res.json({ ok: true, id: order.id, key: order.key, total: order.total, text: orderText(order) });
+});
+
+/* public: order and booking status, for the phone app (needs the private key given when it was placed) */
+const sameKey = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && a.length > 0
+  && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+app.get('/api/orders/:id/status', limit('status', 600, 15 * 60e3), (req, res) => {
+  const o = orders.get().find((x) => x.id === req.params.id);
+  if (!o || !sameKey(o.key, str(req.query.key, 40))) return res.status(404).json({ error: 'We could not find that order.' });
+  const last = (o.log || [])[(o.log || []).length - 1];
+  res.json({
+    id: o.id, status: o.status, paid: Boolean(o.paid), type: o.type, total: o.total, createdAt: o.createdAt,
+    updatedAt: last ? last.at : o.createdAt, schedule: o.schedule, hasWhole: Boolean(o.hasWhole),
+    lines: (o.lines || []).map((l) => ({ name: l.name, label: l.label, qty: l.qty, extras: l.extras || [] })),
+  });
+});
+app.get('/api/bookings/:id/status', limit('status', 600, 15 * 60e3), (req, res) => {
+  const b = bookings.get().find((x) => x.id === req.params.id);
+  if (!b || !sameKey(b.key, str(req.query.key, 40))) return res.status(404).json({ error: 'We could not find that booking.' });
+  const last = (b.log || [])[(b.log || []).length - 1];
+  res.json({ id: b.id, status: b.status, people: b.people, date: b.date, time: b.time, bs: b.bs, updatedAt: last ? last.at : b.createdAt });
 });
 
 /* public: table bookings */
@@ -757,6 +780,8 @@ app.post('/api/bookings', limit('booking', 30, 15 * 60e3), json, async (req, res
   if (shut) return bad(res, `${shut} Please choose another day.`);
   const booking = {
     id: newCode('TBL'),
+    key: crypto.randomBytes(12).toString('hex'),
+    source: str(b.source, 10) === 'app' ? 'app' : 'web',
     createdAt: new Date().toISOString(),
     status: 'pending',
     log: [{ at: new Date().toISOString(), by: 'customer', what: 'Booking requested' }],
@@ -771,7 +796,7 @@ app.post('/api/bookings', limit('booking', 30, 15 * 60e3), json, async (req, res
   await bookings.set([booking, ...bookings.get()]);
   audit('public', 'table-booked', booking.id);
   notify(`New table booking ${booking.id}`, bookingText(booking));
-  res.json({ ok: true, id: booking.id, text: bookingText(booking) });
+  res.json({ ok: true, id: booking.id, key: booking.key, text: bookingText(booking) });
 });
 
 /* login: owner (password only) or staff (login ID + password) */

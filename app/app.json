@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Pick Me Cafe",
+    "slug": "pick-me-cafe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "np.com.pickmecafe.app"
+    },
+    "android": {
+      "package": "np.com.pickmecafe.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF6EF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "pickmecafe",
+    "description": "Order, pre-order cakes and book a table at Pick Me Cafe, Hetauda.",
+    "backgroundColor": "#FAF6EF",
+    "primaryColor": "#A8843A",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#A8843A",
+          "defaultChannel": "orders"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 170,
+          "resizeMode": "contain",
+          "backgroundColor": "#FAF6EF"
+        }
+      ]
+    ]
+  }
+}

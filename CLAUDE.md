@@ -22,6 +22,11 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 - Ordering: dine-in needs nothing but the order; pickup, delivery, cake pre-orders and bookings need only a phone number. Pay later is the default; eSewa/Fonepay QR optional. Delivery Hetauda only, Rs 150. Whole cakes need 8 hours' notice.
 - A faint lock in the footer, tapped twice, opens a login: the owner password goes to `/admin`, staff logins (Admin > Security) go to `/counter`.
 
+## Phone app (app/)
+- Expo (React Native) app in `app/`, see `app/README.md`. It reads `/api/content` and places orders and bookings through the same API as the website, with `source: 'app'`.
+- Every push that changes `app/` builds an Android APK with GitHub Actions and publishes it on the Releases page (latest: /releases/latest/download/PickMeCafe.apk). Railway ignores changes in `app/` and `.github/`.
+- The owner plans to publish on the App Store through Arpana Thapa Magar's individual Apple developer account (she is the registered proprietor) and later on Google Play.
+
 ## Code
 - Node 20 + Express, no build step. `server/server.js`, defaults in `server/default-content.js` (fresh install only), content in `DATA_DIR/content.json`.
 - `fillDefaults()` adds new object keys only; arrays are never merged, so per-item changes need a migration (`markFood`, `ensureSections`, `tidyEvents`), which also run after a backup restore.
