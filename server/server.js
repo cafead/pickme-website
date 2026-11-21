@@ -1217,6 +1217,11 @@ app.post('/api/admin/seed', admin, json, async (req, res) => {
 });
 
 /* files */
+// The phone app's web version (built from app/ by app/scripts/web-preview.sh), for testing on iPhone in Safari.
+app.get(['/app-preview', '/app-preview/'], (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(ROOT, 'public', 'app-preview', 'index.html'), (e) => { if (e && !res.headersSent) res.sendStatus(404); });
+});
 app.use('/uploads', express.static(UPLOADS, {
   maxAge: '30d',
   setHeaders: (res) => res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'"),

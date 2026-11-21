@@ -1,6 +1,10 @@
 // Talks to the Pick Me Cafe website server. Menu, prices, events and cakes all come from the
 // website admin, so the app never needs an update when the owner changes them.
-export const BASE = 'https://pickmeclaude-production.up.railway.app';
+// The web preview (/app-preview) is served by the website itself, so it uses whatever address it was opened from.
+const SERVER = 'https://pickmeclaude-production.up.railway.app';
+export const BASE = typeof window !== 'undefined' && window.location && /^https?:$/.test(window.location.protocol)
+  ? window.location.origin
+  : SERVER;
 
 export const imageUrl = (u) => {
   if (!u || typeof u !== 'string') return null;
