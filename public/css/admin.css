@@ -20,6 +20,8 @@
 .ad-tabs button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: none; display: inline-flex; align-items: center; gap: 8px; }
 .ad-tabs button:hover { background: #F3EADB; }
 .ad-tabs button.is-on { background: #2B2118; color: #fff; }
+.ad-tablink { min-height: 40px; padding: 0 14px; border-radius: 9px; display: inline-flex; align-items: center; color: #5E4417; text-decoration: none; font-weight: 500; }
+.ad-tablink:hover { background: #F3EADB; }
 .ad-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #B3371F; color: #fff; font-size: .75rem; line-height: 20px; font-weight: 600; }
 .ad-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ad-status { font-size: .88rem; color: #5F5243; }

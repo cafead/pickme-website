@@ -429,4 +429,33 @@ module.exports = {
   // Sizes set by dragging in admin ("Edit layout"), and photo positions and zoom.
   sizes: { map: { h: 240 } },
   crops: {},
+  // The printable paper menu (Admin > Print menu). One A4 page. Items and prices come from the
+  // website menu above (linked); this keeps only the paper's layout and looks.
+  // Font sizes are in points (pt), spaces in millimetres (mm). Sections are filled in on first start.
+  printMenu: {
+    made: false,
+    page: {
+      paper: '#FFFFFF', top: 8, bottom: 7, left: 14, right: 12, gap: 9, split: 50,
+      border: { show: false, width: 0.8, color: '#231F20', style: 'solid', inset: 6, radius: 0 },
+      dots: { show: true, color: '#C9C9C9', size: 54, dot: 0.68, step: 1.9, tl: true, br: true },
+      section: 4, afterHeading: 1, row: 0.55, priceWidth: 17, priceAlign: 'left', labelGap: 0.6, lineUp: true,
+      headingLine: { show: false, width: 0.5, color: '#231F20', gap: 1 },
+      rowLine: { show: false, width: 0.3, color: '#D9D4CC', style: 'dotted' },
+      scale: 100,
+    },
+    logo: { show: true, src: '/img/print-logo.png', width: 35, color: '#231F20', gap: 5 },
+    note: { text: '', show: false },
+    styles: {
+      big: { font: 'Rokkitt', weight: 800, size: 30, color: '#231F20', italic: false, upper: true, spacing: -1, line: 0.92 },
+      bigSub: { font: 'Rokkitt', weight: 800, size: 9.5, color: '#231F20', italic: false, upper: true, spacing: 0, line: 1 },
+      tagline: { font: 'Rokkitt', weight: 300, size: 13, color: '#231F20', italic: false, upper: true, spacing: 12, line: 1.1 },
+      small: { font: 'Rokkitt', weight: 800, size: 11.5, color: '#231F20', italic: false, upper: true, spacing: 0, line: 1.1 },
+      label: { font: 'Jost', weight: 400, size: 7.6, color: '#231F20', italic: false, upper: true, spacing: 0, line: 1.2 },
+      item: { font: 'Jost', weight: 400, size: 8.2, color: '#231F20', italic: false, upper: true, spacing: 0, line: 1.25 },
+      price: { font: 'Jost', weight: 400, size: 8.2, color: '#231F20', italic: false, upper: true, spacing: 0, line: 1.25 },
+      note: { font: 'Jost', weight: 400, size: 7.5, color: '#231F20', italic: false, upper: false, spacing: 0, line: 1.3 },
+    },
+    over: {},
+    sections: [],
+  },
 };

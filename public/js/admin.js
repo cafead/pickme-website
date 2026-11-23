@@ -1121,7 +1121,8 @@
     root.replaceChildren(
       h('header', { class: 'ad-top' },
         h('strong', { class: 'ad-name' }, 'Pick Me Cafe admin'),
-        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security')),
+        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
+          h('a', { class: 'ad-tablink', href: '/admin/print-menu', onclick: (e) => { if (A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) e.preventDefault(); } }, 'Print menu')),
         h('span', { class: 'ad-right' },
           h('span', { id: 'ad-status', class: 'ad-status' }, 'All changes saved'),
           h('button', { type: 'button', id: 'ad-save', class: 'ad-btn ad-btn--main', disabled: true, onclick: save }, 'Save'),

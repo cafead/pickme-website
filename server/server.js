@@ -17,7 +17,9 @@ const UPLOADS = path.join(DATA_DIR, 'uploads');
 const PROOFS = path.join(DATA_DIR, 'proofs');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.log');
 const HISTORY = path.join(DATA_DIR, 'history');
-for (const d of [DATA_DIR, UPLOADS, PROOFS, HISTORY]) fs.mkdirSync(d, { recursive: true });
+// Pictures of the paper menu, made with Save on the Print menu page (A4 at 300 dpi). Not part of backups.
+const PRINTS = path.join(DATA_DIR, 'print-menus');
+for (const d of [DATA_DIR, UPLOADS, PROOFS, HISTORY, PRINTS]) fs.mkdirSync(d, { recursive: true });
 const QRCode = require('qrcode');
 const AdmZip = require('adm-zip');
 const SEED_DIR = path.join(ROOT, 'seed');
@@ -114,6 +116,80 @@ function tidyEvents(data) {
   return touched;
 }
 if (tidyEvents(content.data)) content.set(content.data);
+// Version 9: the printable paper menu. On first start its sections are made from the designer's
+// November 2026 menu, linked to the website menu groups (found by id or by name). Hookah is paper only.
+function ensurePrintMenu(data) {
+  const pm = data.printMenu;
+  if (!pm || typeof pm !== 'object') return false;
+  let touched = false;
+  if (!Array.isArray(pm.sections)) { pm.sections = []; touched = true; }
+  if (!pm.over || typeof pm.over !== 'object' || Array.isArray(pm.over)) { pm.over = {}; touched = true; }
+  if (pm.made) return touched;
+  const cats = (data.menu && data.menu.categories) || [];
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const group = (...names) => {
+    for (const n of names) {
+      const g = cats.find((c) => norm(c.id) === norm(n) || norm(c.name) === norm(n));
+      if (g) return g.id;
+    }
+    return null;
+  };
+  const findItem = (gid, name) => {
+    const g = cats.find((c) => c.id === gid);
+    return g ? (g.items || []).find((it) => norm(it.name) === norm(name)) : null;
+  };
+  let n = 0;
+  const rid = () => `pr${Date.now().toString(36)}${(n++).toString(36)}`;
+  const reg = ['Regular', 'Single', ''];
+  const large = ['Large', 'Double'];
+  const sec = (id, title, column, groups, more) => Object.assign({
+    id, title, sub: '', look: 'small', subStyle: 'none', column, show: true,
+    groups: groups.filter(Boolean), cols: [{ label: '', from: reg }], rows: [], gap: 0,
+  }, more);
+  const hot = group('hot-coffee', 'Hot Coffee', 'Hot');
+  const iced = group('iced-coffee', 'Iced Coffee', 'Ice / Cold', 'Cold Coffee');
+  const ramen = group('ramen');
+  const cheese = group('cheesecake', 'Cheese Cake');
+  const cakes = group('cakes-pastries', 'Cakes & Pastries', 'Pastries', 'Cakes');
+  const ramenRows = [['Veg Ramen', 'Plain'], ['Egg Ramen', 'Egg'], ['Sausage Ramen', 'Sausage'], ['Mix Ramen', 'Mix Ramen']]
+    .map(([web, paper]) => { const it = findItem(ramen, web); return it ? { id: rid(), item: it.id, name: paper, prices: [], from: [], hide: false } : null; })
+    .filter(Boolean);
+  const halfRows = ['Black Forest Cake', 'White Forest Cake'].map((name) => {
+    const it = findItem(cakes, name) || findItem(cheese, name);
+    return it && (it.prices || []).some((p) => /half/i.test(p.label || ''))
+      ? { id: rid(), item: it.id, name: `${name} (1/2 P)`, prices: [], from: [(it.prices.find((p) => /half/i.test(p.label || ''))).label, ''], hide: false, extra: true }
+      : null;
+  }).filter(Boolean);
+  const hookah = [['Lady Killer', '650'], ['Dejuva', '650'], ['Mix Hookah', '750'], ['Iced Coconut', '']]
+    .map(([name, price]) => ({ id: rid(), item: null, name, prices: [price], from: [], hide: false }));
+  pm.sections = [
+    sec('p-hot', 'Hot Coffee', 'left', [hot], { cols: [{ label: 'Regular / Single', from: reg }, { label: 'Large / Double', from: large }] }),
+    sec('p-iced', 'Ice / Cold', 'left', [iced], { cols: [{ label: 'Regular / Single', from: reg }, { label: 'Large / Double', from: large }] }),
+    sec('p-tea', 'Tea', 'left', [group('tea')]),
+    sec('p-mock', 'Mock', 'left', [group('mocktails', 'Mocktail')], { look: 'big', sub: 'Tail', subStyle: 'side' }),
+    sec('p-non', 'Non', 'left', [group('shakes-lattes', 'Non-Coffee', 'Shakes & Lattes')], { look: 'big', sub: 'Coffee', subStyle: 'dash' }),
+    sec('p-snacks', 'Snacks', 'left', [group('snacks')]),
+    sec('p-ramen', 'Ramen', 'right', [ramen], { rows: ramenRows }),
+    sec('p-cakes', 'Pastries & Cakes', 'right', [cheese, cakes], { rows: halfRows, cols: [{ label: 'Pastry / Slice', from: ['Slice', 'Pastry', ''] }, { label: '1 Pound', from: ['1 Pound', 'Pound'] }] }),
+    sec('p-ice', 'Ice Cream', 'right', [group('ice-cream', 'Icecream')], { look: 'big', cols: [{ label: 'Regular / Single', from: reg }, { label: 'Double', from: ['Double'] }] }),
+    sec('p-hookah', 'Hookah', 'right', [], { rows: hookah }),
+  ];
+  // Every item of the linked groups gets a line, in website order; special lines (renamed ramen, half pounds) keep their place or go last.
+  for (const s of pm.sections) {
+    if (!s.groups.length) continue;
+    const special = s.rows;
+    const lines = [];
+    for (const gid of s.groups) {
+      for (const it of (cats.find((c) => c.id === gid) || {}).items || []) {
+        lines.push(special.find((r) => r.item === it.id && !r.extra) || { id: rid(), item: it.id, name: '', prices: [], from: [], hide: false });
+      }
+    }
+    s.rows = lines.concat(special.filter((r) => r.extra));
+  }
+  pm.made = true;
+  return true;
+}
+if (ensurePrintMenu(content.data)) content.set(content.data);
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -153,7 +229,7 @@ const SECTION_NAMES = {
   reviews: 'Reviews section', visit: 'Map and messages', social: 'Social links', payment: 'Payment', footer: 'Footer',
   sizes: 'Sizes', crops: 'Photo positions', categories: '', items: '', prices: '', cards: '', images: '',
   extras: 'Drink extras', upsell: 'Goes well with', seo: 'Google and link previews', closure: 'Closed notice', socialBar: 'Social buttons',
-  groups: '', options: '', pairs: '',
+  groups: '', options: '', pairs: '', printMenu: 'Paper menu',
 };
 const isPhoto = (v) => typeof v === 'string' && /^(https?:\/\/|\/uploads\/)/.test(v);
 function shortValue(v) {
@@ -186,6 +262,7 @@ function describeChanges(a, b) {
     if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x) && !Array.isArray(y)) {
       if (trail.length === 1 && trail[0] === SECTION_NAMES.crops) { out.push('Photo positions changed'); return; }
       if (trail.length === 1 && trail[0] === SECTION_NAMES.sizes) { out.push('Sizes changed'); return; }
+      if (trail.length === 1 && trail[0] === SECTION_NAMES.printMenu) { out.push('Paper menu design changed'); return; }
       for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (k === '_rev' || k === 'id') continue;
         walk(x[k], y[k], trail.concat(k in SECTION_NAMES ? SECTION_NAMES[k] : k));
@@ -491,6 +568,12 @@ const sendPage = (res, html) => { res.set('Cache-Control', 'no-cache'); res.type
 app.get(['/', '/index.html'], (req, res) => sendPage(res, renderPage(req)));
 // /admin is an easier address to type and share than /#admin. Both open the editor.
 app.get(['/admin', '/admin/'], (req, res) => sendPage(res, renderPage(req, { noindex: true, title: 'Admin | ' + content.get().brand.name })));
+// The paper menu editor (owner only; the page asks for the password when needed).
+app.get(['/admin/print-menu', '/admin/print-menu/'], (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  res.sendFile(path.join(ROOT, 'public', 'print-menu.html'));
+});
 // Each event has its own address, so a shared link shows the event's photo and title.
 app.get('/event/:id', (req, res) => {
   const c = content.get();
@@ -852,6 +935,7 @@ app.put('/api/admin/content', admin, json, async (req, res) => {
   }
   const next = fillDefaults(c, freshDefaults());
   tidyEvents(next);
+  ensurePrintMenu(next);
   const changes = describeChanges(current, next);
   if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by: 'owner', note: 'Website before your first save', changes: [] }, current);
   next._rev = current._rev + 1;
@@ -1175,6 +1259,7 @@ async function restoreBackup(buf, by) {
     markFood(next);
     ensureSections(next);
     tidyEvents(next);
+    ensurePrintMenu(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);
@@ -1214,6 +1299,58 @@ app.post('/api/admin/seed', admin, json, async (req, res) => {
   await meta.set(m);
   if (req.body.use === false) return res.json({ ok: true, skipped: true });
   try { res.json({ ok: true, ...(await restoreBackup(fs.readFileSync(path.join(SEED_DIR, file)), 'owner')) }); } catch (e) { bad(res, e.message); }
+});
+
+/* owner: saved pictures of the paper menu */
+const PRINT_ID = /^\d{13}-[a-f0-9]{6}$/;
+const printList = () => (meta.get().printMenus || []).filter((x) => x && PRINT_ID.test(x.id));
+app.get('/api/admin/print-defaults', admin, (req, res) => res.json(freshDefaults().printMenu));
+app.get('/api/admin/print-menus', admin, (req, res) => res.json(printList()));
+app.post('/api/admin/print-menus', admin, express.raw({ type: () => true, limit: '40mb' }), async (req, res) => {
+  if (sniffImage(req.body, false) !== 'png') return bad(res, 'The menu picture could not be made. Please try again.');
+  const id = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  await fs.promises.writeFile(path.join(PRINTS, `${id}.png`), req.body);
+  const w = req.body.readUInt32BE(16);
+  const h = req.body.readUInt32BE(20);
+  const m = meta.get();
+  const list = [{ id, at: new Date().toISOString(), w, h, bytes: req.body.length, note: str(req.query.note, 80) }].concat(printList());
+  // Keep the 60 newest pictures.
+  for (const old of list.slice(60)) {
+    fs.unlink(path.join(PRINTS, `${old.id}.png`), () => {});
+    fs.unlink(path.join(PRINTS, `${old.id}-thumb.jpg`), () => {});
+  }
+  m.printMenus = list.slice(0, 60);
+  await meta.set(m);
+  audit('owner', 'paper-menu-picture-saved', id);
+  res.json({ ok: true, id, w, h });
+});
+app.post('/api/admin/print-menus/:id/thumb', admin, rawImage, async (req, res) => {
+  if (!PRINT_ID.test(req.params.id) || !printList().some((x) => x.id === req.params.id)) return res.sendStatus(404);
+  if (sniffImage(req.body, false) !== 'jpg') return bad(res, 'Please send a JPG.');
+  await fs.promises.writeFile(path.join(PRINTS, `${req.params.id}-thumb.jpg`), req.body);
+  res.json({ ok: true });
+});
+app.get('/api/admin/print-menus/:file', admin, (req, res) => {
+  const m = /^(\d{13}-[a-f0-9]{6})(-thumb)?\.(png|jpg)$/.exec(req.params.file);
+  if (!m || (m[2] ? m[3] !== 'jpg' : m[3] !== 'png')) return res.sendStatus(404);
+  const item = printList().find((x) => x.id === m[1]);
+  if (!item) return res.sendStatus(404);
+  if (req.query.download === '1') {
+    const day = String(item.at).slice(0, 10);
+    res.set('Content-Disposition', `attachment; filename="pick-me-menu-${day}-${m[1].slice(-6)}.png"`);
+  }
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.sendFile(path.join(PRINTS, req.params.file), (e) => { if (e && !res.headersSent) res.sendStatus(404); });
+});
+app.delete('/api/admin/print-menus/:id', admin, async (req, res) => {
+  if (!PRINT_ID.test(req.params.id)) return res.sendStatus(404);
+  const m = meta.get();
+  m.printMenus = printList().filter((x) => x.id !== req.params.id);
+  await meta.set(m);
+  fs.unlink(path.join(PRINTS, `${req.params.id}.png`), () => {});
+  fs.unlink(path.join(PRINTS, `${req.params.id}-thumb.jpg`), () => {});
+  audit('owner', 'paper-menu-picture-deleted', req.params.id);
+  res.json({ ok: true });
 });
 
 /* files */

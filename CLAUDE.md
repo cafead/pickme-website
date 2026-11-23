@@ -22,6 +22,12 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 - Ordering: dine-in needs nothing but the order; pickup, delivery, cake pre-orders and bookings need only a phone number. Pay later is the default; eSewa/Fonepay QR optional. Delivery Hetauda only, Rs 150. Whole cakes need 8 hours' notice.
 - A faint lock in the footer, tapped twice, opens a login: the owner password goes to `/admin`, staff logins (Admin > Security) go to `/counter`.
 
+## Print menu (paper menu)
+- `/admin/print-menu` (owner only; link "Print menu" in the admin tabs): `public/print-menu.html`, `public/js/print-menu.js`, `public/css/print-menu.css`. A4 preview on the left third, settings on the right; on phones the paper sits on top.
+- Items and prices are the website menu's own (`content.menu`), so editing them there changes the website. Layout and looks are in `content.printMenu` (`page`, `logo`, `styles` per kind of text, `over` = per-text changes keyed `s:<section>:title|sub|c<i>` and `r:<line>:n|p<i>`, `sections[]` with `groups`, `cols[].from` = website size names, `rows[]` with `item` (null = paper only, like Hookah), `name` (paper-only name), `from[]` (size per column, `__none` = empty), `extra` (second line for the same item, like half pounds)). `ensurePrintMenu()` builds the sections once (`made`).
+- Look by default = the owner's previous paper menu (Rokkitt for Equitan Slab, Jost for Futura; free fonts self-hosted in `public/fonts/print`), content = the designer's November 2026 menu. Never more than one A4: a too-long menu is shrunk evenly to fit.
+- Save = save the content + a 2480 × 3508 PNG (A4, 300 dpi, made in the browser with `public/vendor/modern-screenshot.js`) kept in `DATA_DIR/print-menus` (60 newest, not in backups, listed in `meta.printMenus`) and downloaded to the device. Print = the browser's print of the A4 sheet.
+
 ## Phone app (app/)
 - Expo (React Native) app in `app/`, see `app/README.md`. It reads `/api/content` and places orders and bookings through the same API as the website, with `source: 'app'`.
 - Every push that changes `app/` builds an Android APK with GitHub Actions and publishes it on the Releases page (latest: /releases/latest/download/PickMeCafe.apk). Railway ignores changes in `app/` and `.github/`.
