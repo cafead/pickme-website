@@ -1,0 +1,58 @@
+# App Store screenshots of the phone app (its web version at /app-preview, with the live menu).
+# Run by hand from the Actions tab. Makes 1320 x 2868 PNGs (6.9-inch iPhone) as a downloadable artifact.
+name: Store screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: Website address
+        default: https://pickmecafe.com.np
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Take screenshots
+        env:
+          SITE: ${{ inputs.site }}
+        run: |
+          mkdir shots work && cd work
+          npm init -y >/dev/null
+          npm i puppeteer@24 >/dev/null
+          cat > shoot.js <<'EOF'
+          const puppeteer = require('puppeteer');
+          const site = process.env.SITE.replace(/\/+$/, '');
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          (async () => {
+            const b = await puppeteer.launch({ args: ['--no-sandbox'] });
+            const p = await b.newPage();
+            await p.setViewport({ width: 440, height: 956, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+            await p.goto(site + '/app-preview/', { waitUntil: 'networkidle0', timeout: 60000 });
+            await sleep(4000);
+            const tab = async (label) => {
+              await p.evaluate((l) => { const t = [...document.querySelectorAll('[role=tab]')].find((x) => x.getAttribute('aria-label') === l); if (t) t.click(); }, label);
+              await p.waitForNetworkIdle({ idleTime: 800, timeout: 20000 }).catch(() => {});
+              await sleep(2500);
+            };
+            let n = 1;
+            const shot = async (name) => { await p.screenshot({ path: `../shots/${n++}-${name}.png` }); console.log('shot', name); };
+            await shot('home');
+            await tab('Menu'); await shot('menu');
+            await tab('Cakes'); await shot('cakes');
+            await tab('Book'); await shot('book');
+            await tab('Home');
+            await p.evaluate(() => window.scrollTo(0, 0));
+            await b.close();
+          })().catch((e) => { console.error(e); process.exit(1); });
+          EOF
+          node shoot.js
+          file ../shots/*.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: store-screenshots
+          path: shots/*.png
