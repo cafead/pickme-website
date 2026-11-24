@@ -1,5 +1,5 @@
 # App Store screenshots of the phone app (its web version at /app-preview, with the live menu).
-# Run by hand from the Actions tab. Makes 1320 x 2868 PNGs (6.9-inch iPhone) as a downloadable artifact.
+# Run by hand from the Actions tab. Makes 1206 x 2622 PNGs (6.3-inch iPhone, the slot App Store Connect requires) as a downloadable artifact.
 name: Store screenshots
 
 on:
@@ -34,7 +34,7 @@ jobs:
           (async () => {
             const b = await puppeteer.launch({ args: ['--no-sandbox'] });
             const p = await b.newPage();
-            await p.setViewport({ width: 440, height: 956, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+            await p.setViewport({ width: 402, height: 874, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
             await p.goto(site + '/app-preview/', { waitUntil: 'networkidle0', timeout: 60000 });
             await sleep(4000);
             const tab = async (label) => {
