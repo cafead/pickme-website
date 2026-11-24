@@ -34,7 +34,7 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 - Save = save the content + a 2480 × 3508 PNG (A4, 300 dpi, made in the browser with `public/vendor/modern-screenshot.js`) kept in `DATA_DIR/print-menus` (60 newest, not in backups, listed in `meta.printMenus`) and downloaded to the device. Print = the browser's print of the A4 sheet.
 
 ## Phone app (app/)
-- Expo (React Native) app in `app/`, see `app/README.md`. It reads `/api/content` and places orders and bookings through the same API as the website, with `source: 'app'`.
+- Expo (React Native) app in `app/`, see `app/README.md`. It talks to https://pickmecafe.com.np (`SERVER` in `app/src/api.js`; the domain is on Cloudflare DNS pointing to Railway, so a hosting move only needs the DNS changed), reads `/api/content` and places orders and bookings through the same API as the website, with `source: 'app'`.
 - Every push that changes `app/` builds an Android APK with GitHub Actions and publishes it on the Releases page (latest: /releases/latest/download/PickMeCafe.apk). Railway ignores changes in `app/` and `.github/`.
 - iPhone testing before the App Store: the website serves the app's web version at `/app-preview` (open in Safari, Share > Add to Home Screen). It is a built copy in `public/app-preview`: after app changes, rebuild it with `sh app/scripts/web-preview.sh` (from `app/`, after `npm ci`) and commit it. No notifications on the web version.
 - App Store builds use EAS (`app/eas.json`, production profile). First build from the owner's Mac: `cd app && npx eas-cli build -p ios --profile production --auto-submit` (signs in to Expo and Apple once). Export compliance is set (no non-exempt encryption).

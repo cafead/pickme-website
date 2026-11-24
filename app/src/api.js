@@ -1,7 +1,8 @@
 // Talks to the Pick Me Cafe website server. Menu, prices, events and cakes all come from the
 // website admin, so the app never needs an update when the owner changes them.
 // The web preview (/app-preview) is served by the website itself, so it uses whatever address it was opened from.
-const SERVER = 'https://pickmeclaude-production.up.railway.app';
+// The cafe's own domain (Cloudflare DNS -> Railway). If hosting moves, point the domain at the new service: no app update needed.
+const SERVER = 'https://pickmecafe.com.np';
 export const BASE = typeof window !== 'undefined' && window.location && /^https?:$/.test(window.location.protocol)
   ? window.location.origin
   : SERVER;
