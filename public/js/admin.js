@@ -290,10 +290,21 @@
         const input = h('input', { type: 'range', id, min, max, step, value: k[key], oninput: (e) => { k[key] = Number(e.target.value); out.textContent = fmt(k[key]); commit(); } });
         return h('div', { class: 'ad-crop-row' }, h('label', { for: id }, label), input, out);
       };
+      // The sliders move the photo the way you pull: left moves it left, up moves it up.
+      // (Stored x / y are the photo's object-position, which runs the other way, so they are flipped here.)
+      const flip = (label, key, cls, fmt) => {
+        const out = h('span', { class: 'ad-crop-val' }, fmt(k[key]));
+        const id = `adf-${++fieldSeq}`;
+        const input = h('input', { type: 'range', id, class: cls, min: 0, max: 100, step: 1, value: key === 'y' ? k[key] : 100 - k[key], oninput: (e) => { const v = Number(e.target.value); k[key] = key === 'y' ? v : 100 - v; out.textContent = fmt(k[key]); commit(); } });
+        return h('div', { class: `ad-crop-row ${cls}-row` }, h('label', { for: id }, label), input, out);
+      };
+      const side = (v) => (v === 50 ? 'middle' : v < 50 ? `${50 - v} right` : `${v - 50} left`);
+      const updown = (v) => (v === 50 ? 'middle' : v < 50 ? `${50 - v} down` : `${v - 50} up`);
       box.append(
-        slider('Left / right', 'x', 0, 100, 1, (v) => `${v}%`),
-        slider('Up / down', 'y', 0, 100, 1, (v) => `${v}%`),
-        slider('Zoom', 'z', 1, 4, 0.05, (v) => `${Math.round(v * 100)}%`),
+        flip('Left / right', 'x', 'ad-slide-x', side),
+        flip('Up / down', 'y', 'ad-slide-y', updown),
+        slider('Zoom', 'z', 0.3, 4, 0.05, (v) => `${Math.round(v * 100)}%`),
+        h('p', { class: 'ad-note' }, 'Zoom below 100% to see more of the photo; the empty part of the frame is filled with a soft blend of the same photo.'),
         h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: k.fit === 'contain', onchange: (e) => { k.fit = e.target.checked ? 'contain' : 'cover'; commit(); } }), h('span', {}, 'Show the whole photo (no cropping)')),
         h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { delete A.content.crops[u]; changed(); draw(); } }, 'Reset position'));
     };
@@ -887,7 +898,7 @@
   function orderCard(o) {
     const quick = (step, label) => (o.status !== step && o.status !== 'cancelled' ? `<button type="button" class="ad-btn" data-quick="orders" data-id="${esc(o.id)}" data-step="${step}">${label}</button>` : '');
     return `<article class="ad-card is-${esc(o.status)}">
-      <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="ad-step ad-step--${esc(o.status)}">${STEP_NAMES[o.status] || esc(o.status)}</span><span class="ad-step ${o.paid ? 'ad-step--paid' : 'ad-step--unpaid'}">${o.paid ? 'Paid' : 'Not paid'}</span><b>${rs(o.total)}</b></header>
+      <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="ad-step ad-step--${esc(o.status)}">${STEP_NAMES[o.status] || esc(o.status)}</span><span class="ad-step ${o.paid ? 'ad-step--paid' : 'ad-step--unpaid'}">${o.paid ? 'Paid' : 'Not paid'}</span>${!o.paid && o.payment && o.payment.method !== 'later' && !['done', 'cancelled'].includes(o.status) ? '<span class="ad-step ad-step--pending">Payment to check: call the guest</span>' : ''}<b>${rs(o.total)}</b></header>
       <p>${esc(o.name || 'Guest')}${o.phone ? ` · ${contact(o)}` : ''}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || (/^\d{4}-\d{2}-\d{2}$/.test(o.schedule.date || '') ? BS.label(o.schedule.date) : o.schedule.date))} at ${esc(time12(o.schedule.time))}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}
@@ -1276,7 +1287,7 @@
     if (e.data.pm === 'crop' && typeof e.data.url === 'string' && e.data.crop) {
       const k = e.data.crop;
       A.content.crops = A.content.crops || {};
-      A.content.crops[e.data.url] = { x: Number(k.x) || 0, y: Number(k.y) || 0, z: Number(k.z) || 1, fit: k.fit === 'contain' ? 'contain' : 'cover' };
+      A.content.crops[e.data.url] = { x: Number(k.x) || 0, y: Number(k.y) || 0, z: Math.max(0.3, Number(k.z) || 1), fit: k.fit === 'contain' ? 'contain' : 'cover' };
       status();
     }
     if (e.data.pm === 'edit' && typeof e.data.path === 'string' && /^[\w.]+$/.test(e.data.path) && !/__proto__|constructor|prototype/.test(e.data.path)) { set(A.content, e.data.path, String(e.data.value)); status(); }

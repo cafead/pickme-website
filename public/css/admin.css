@@ -105,6 +105,9 @@
 .ad-crop { display: grid; gap: 8px; padding: 8px 0 2px; }
 .ad-crop-row { display: grid; grid-template-columns: 90px 1fr 46px; align-items: center; gap: 8px; font-size: .85rem; }
 .ad-crop-row input { width: 100%; accent-color: #7A5A22; }
+/* Up / down stands upright: pull it up and the photo moves up. */
+.ad-slide-y-row { align-items: center; }
+#admin .ad-crop-row input.ad-slide-y { writing-mode: vertical-lr; direction: rtl; width: 34px; min-height: 0; height: 130px; padding: 0; border: 0; background: none; justify-self: center; }
 .ad-crop-val { text-align: right; font-variant-numeric: tabular-nums; color: #5F5243; }
 .ad-sizes { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .ad-sizes li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid #E0D6C7; border-radius: 9px; background: #FDFBF8; }

@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, useWindowDimensions } from 'react-native';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import { placeOrder } from './api';
 import { askPermission } from './notify';
 import { rs, openState, servedNow } from './logic';
+import { imageUrl } from './api';
 import { Sheet, Button, Chip, Field, DatePick, TimePick, Note, Small, Body, Photo } from './ui';
 
 // The cart, then the order details: dine-in, pickup or delivery, when, contact and payment.
 export default function Checkout({ open, onClose, onPlaced, startAt }) {
   const { content: c, cart, setQty, clearCart, profile, setProfile, addOrder } = useApp();
   const [step, setStep] = useState(startAt || 'cart');
-  const [type, setType] = useState('pickup');
+  // Every order starts as: at the cafe, now, pay later.
+  const [type, setType] = useState('dinein');
   const [when, setWhen] = useState('now');
   const [day, setDay] = useState(null);
   const [time, setTime] = useState('');
@@ -25,6 +27,8 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
   const [method, setMethod] = useState('later');
   const [txn, setTxn] = useState('');
   const [busy, setBusy] = useState(false);
+  const [big, setBig] = useState(false);
+  const { width, height } = useWindowDimensions();
   const [err, setErr] = useState('');
 
   const pay = c.payment || {};
@@ -36,12 +40,15 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
   const total = subtotal + fee;
   const online = ['esewa', 'fonepay'].filter((m) => pay[m] && pay[m].enabled !== false && pay[m].qr);
   const st = openState(c);
+  // A whole-cake pre-order is picked up later, as on the website.
+  useEffect(() => { if (open && hasWhole) setType((t) => (t === 'dinein' ? 'pickup' : t)); }, [open, hasWhole]);
 
   const close = () => { setErr(''); onClose(); setTimeout(() => setStep('cart'), 300); };
 
   const send = async () => {
     setErr('');
     if (type !== 'dinein' && !/^\+?\d[\d\s-]{6,17}$/.test(phone.trim())) return setErr('Please enter your phone number so we can reach you.');
+    if (method !== 'later' && !/^\+?\d[\d\s-]{6,17}$/.test(phone.trim())) return setErr('Please enter your phone number: we call you to confirm the payment.');
     if (type === 'delivery' && address.trim().length < 5) return setErr('Please enter the delivery address.');
     if (later && (!day || !time)) return setErr(hasWhole ? 'Please choose when you want the cake.' : 'Please choose a day and a time.');
     if (hasWhole && !cakeMessage.trim() && !occasion.trim()) { /* the name on the cake is optional */ }
@@ -62,7 +69,7 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
       });
       clearCart();
       askPermission();
-      setStep('cart'); setNotes(''); setCakeMessage(''); setOccasion(''); setTxn(''); setDay(null); setTime(''); setWhen('now');
+      setStep('cart'); setNotes(''); setCakeMessage(''); setOccasion(''); setTxn(''); setDay(null); setTime(''); setWhen('now'); setMethod('later'); setType('dinein');
       onPlaced(r.id);
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -135,7 +142,7 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
 
       <View style={{ marginTop: 16 }}>
         <Field label="Your name" value={name} onChangeText={setName} placeholder="Optional" maxLength={80} />
-        <Field label={type === 'dinein' ? 'Phone (optional)' : 'Phone'} value={phone} onChangeText={setPhone} placeholder="98XXXXXXXX" keyboardType="phone-pad" maxLength={20} />
+        <Field label={method !== 'later' ? 'Phone (we call to confirm the payment)' : type === 'dinein' ? 'Phone (optional)' : 'Phone'} value={phone} onChangeText={setPhone} placeholder="98XXXXXXXX" keyboardType="phone-pad" maxLength={20} />
         {type === 'delivery' ? <Field label="Delivery address" value={address} onChangeText={setAddress} placeholder="Tole, landmark, ward" multiline maxLength={300} /> : null}
         <Field label="Note for the cafe (optional)" value={notes} onChangeText={setNotes} placeholder="Less spicy, extra napkins…" multiline maxLength={500} />
       </View>
@@ -147,19 +154,45 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
       </View>
       {method !== 'later' ? (
         <View style={{ marginTop: 12, alignItems: 'center' }}>
-          <Photo uri={pay[method].qr} style={{ width: 220, height: 220, borderRadius: 12 }} />
+          <Pressable onPress={() => setBig(true)} accessibilityRole="button" accessibilityLabel="Show the QR code full screen" style={{ alignItems: 'center' }}>
+            <Photo uri={pay[method].qr} style={{ width: 220, height: 220, borderRadius: 12 }} />
+            <Small style={{ marginTop: 6, color: C.goldDark, textDecorationLine: 'underline' }}>Tap the QR to make it big</Small>
+          </Pressable>
           {pay[method].account ? <Small style={{ marginTop: 6 }}>{pay[method].account}</Small> : null}
-          <Small style={{ marginTop: 6, textAlign: 'center' }}>Pay {rs(total)}, then enter the transaction code below. You can also take a screenshot and show it at the counter.</Small>
-          <View style={{ alignSelf: 'stretch', marginTop: 10 }}><Field label="Transaction code" value={txn} onChangeText={setTxn} maxLength={60} autoCapitalize="characters" /></View>
+          <PaySteps total={total} />
+          <View style={{ alignSelf: 'stretch', marginTop: 10 }}><Field label="Transaction code (optional)" value={txn} onChangeText={setTxn} maxLength={60} autoCapitalize="characters" /></View>
         </View>
       ) : null}
+      <Modal visible={big && method !== 'later'} animationType="fade" onRequestClose={() => setBig(false)} statusBarTranslucent>
+        <ScrollView style={{ flex: 1, backgroundColor: '#fff' }} contentContainerStyle={{ alignItems: 'center', padding: 18, paddingTop: 50 }}>
+          <Text style={s.bigName}>{(pay[method] || {}).name || 'Pay'}{(pay[method] || {}).account ? ` · ${pay[method].account}` : ''}</Text>
+          {method !== 'later' && imageUrl(pay[method].qr) ? <Image source={{ uri: imageUrl(pay[method].qr) }} style={{ width: Math.min(width - 36, height * 0.62, 520), height: Math.min(width - 36, height * 0.62, 520), marginVertical: 12 }} resizeMode="contain" accessibilityLabel="Payment QR code" /> : null}
+          <Small>Amount to pay</Small>
+          <Text style={s.bigAmount}>{rs(total)}</Text>
+          <PaySteps total={total} />
+          <View style={{ alignSelf: 'stretch', marginTop: 16 }}><Button title="Back to my order" onPress={() => setBig(false)} /></View>
+        </ScrollView>
+      </Modal>
 
       {err ? <View style={{ marginTop: 12 }}><Note kind="bad">{err}</Note></View> : null}
     </Sheet>
   );
 }
 
+// What to do with the QR, the same words as on the website.
+function PaySteps({ total }) {
+  const steps = ['Take a screenshot of this QR.', 'Open eSewa, Fonepay or your bank app and scan the QR from your screenshot.', `Pay ${rs(total)}.`, 'Come back to this app and place your order.'];
+  return (
+    <View style={{ alignSelf: 'stretch', marginTop: 10, gap: 4 }}>
+      {steps.map((t, i) => <Body key={i}>{i + 1}. {t}</Body>)}
+      <Small style={{ marginTop: 4 }}>We will call you on your phone number to confirm the payment.</Small>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  bigName: { color: C.brown, fontSize: 16, fontWeight: '600' },
+  bigAmount: { fontFamily: SERIF, fontSize: 30, color: C.brown, marginBottom: 6 },
   line: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line },
   lineName: { color: C.brown, fontSize: 15, fontWeight: '600' },
   linePrice: { color: C.goldDark, marginTop: 2 },

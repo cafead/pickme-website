@@ -116,6 +116,35 @@ function tidyEvents(data) {
   return touched;
 }
 if (tidyEvents(content.data)) content.set(content.data);
+// Version 10: every whole cheesecake is 1½ pounds. Their "1 Pound" size is renamed once (the price stays),
+// and the paper menu's columns and lines that took "1 Pound" for a cheesecake follow the new name.
+const CHEESE_SIZE = '1½ Pound';
+function cheesecakePounds(data) {
+  data.fixes = data.fixes && typeof data.fixes === 'object' && !Array.isArray(data.fixes) ? data.fixes : {};
+  if (data.fixes.cheese15) return false;
+  const renamed = new Set();
+  for (const g of (data.menu && data.menu.categories) || []) {
+    const group = /cheese/i.test(`${g.id} ${g.name}`);
+    for (const it of g.items || []) {
+      if (!group && !/cheese\s*cake/i.test(it.name || '')) continue;
+      for (const p of it.prices || []) {
+        if (p && p.whole && /^\s*(1|one)\s*(pound|lb|lbs|p)\.?\s*$/i.test(p.label || '')) { p.label = CHEESE_SIZE; renamed.add(it.id); }
+      }
+    }
+  }
+  const pm = data.printMenu;
+  if (renamed.size && pm && Array.isArray(pm.sections)) {
+    for (const sec of pm.sections) {
+      const touches = (sec.rows || []).some((r) => renamed.has(r.item));
+      if (!touches) continue;
+      for (const col of sec.cols || []) if (Array.isArray(col.from) && col.from.some((x) => /^1 pound$/i.test(x)) && !col.from.includes(CHEESE_SIZE)) col.from.push(CHEESE_SIZE);
+      for (const r of sec.rows || []) if (renamed.has(r.item) && Array.isArray(r.from)) r.from = r.from.map((x) => (typeof x === 'string' && /^1 pound$/i.test(x) ? CHEESE_SIZE : x));
+    }
+  }
+  data.fixes.cheese15 = true;
+  return true;
+}
+if (cheesecakePounds(content.data)) { content.data._rev = (content.data._rev || 1) + 1; content.set(content.data); }
 // Version 9: the printable paper menu. On first start its sections are made from the designer's
 // November 2026 menu, linked to the website menu groups (found by id or by name). Hookah is paper only.
 function ensurePrintMenu(data) {
@@ -170,7 +199,7 @@ function ensurePrintMenu(data) {
     sec('p-non', 'Non', 'left', [group('shakes-lattes', 'Non-Coffee', 'Shakes & Lattes')], { look: 'big', sub: 'Coffee', subStyle: 'dash' }),
     sec('p-snacks', 'Snacks', 'left', [group('snacks')]),
     sec('p-ramen', 'Ramen', 'right', [ramen], { rows: ramenRows }),
-    sec('p-cakes', 'Pastries & Cakes', 'right', [cheese, cakes], { rows: halfRows, cols: [{ label: 'Pastry / Slice', from: ['Slice', 'Pastry', ''] }, { label: '1 Pound', from: ['1 Pound', 'Pound'] }] }),
+    sec('p-cakes', 'Pastries & Cakes', 'right', [cheese, cakes], { rows: halfRows, cols: [{ label: 'Pastry / Slice', from: ['Slice', 'Pastry', ''] }, { label: '1 Pound', from: ['1 Pound', 'Pound', '1½ Pound'] }] }),
     sec('p-ice', 'Ice Cream', 'right', [group('ice-cream', 'Icecream')], { look: 'big', cols: [{ label: 'Regular / Single', from: reg }, { label: 'Double', from: ['Double'] }] }),
     sec('p-hookah', 'Hookah', 'right', [], { rows: hookah }),
   ];
@@ -227,7 +256,7 @@ const SECTION_NAMES = {
   brand: 'Cafe details', theme: 'Colours and fonts', sections: 'Sections', hero: 'Top of page', highlights: 'Specialities',
   events: 'Events', menu: 'Menu', cake: 'Cake pre-order', booking: 'Table booking', story: 'Our story', gallery: 'Gallery',
   reviews: 'Reviews section', visit: 'Map and messages', social: 'Social links', payment: 'Payment', footer: 'Footer',
-  sizes: 'Sizes', crops: 'Photo positions', categories: '', items: '', prices: '', cards: '', images: '',
+  sizes: 'Sizes', crops: 'Photo positions', fixes: '', categories: '', items: '', prices: '', cards: '', images: '',
   extras: 'Drink extras', upsell: 'Goes well with', seo: 'Google and link previews', closure: 'Closed notice', socialBar: 'Social buttons',
   groups: '', options: '', pairs: '', printMenu: 'Paper menu',
 };
@@ -574,6 +603,23 @@ app.get(['/admin/print-menu', '/admin/print-menu/'], (req, res) => {
   res.set('X-Robots-Tag', 'noindex, nofollow');
   res.sendFile(path.join(ROOT, 'public', 'print-menu.html'));
 });
+// Privacy policy, for the website and the phone app (the App Store asks for one). Names and numbers come from Cafe details.
+app.get(['/privacy', '/privacy/'], (req, res) => {
+  const b = content.get().brand;
+  const phone = attr(b.phone || '');
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy | ${attr(b.name)}</title><link rel="icon" href="/img/logo.png">
+<style>body{margin:0;background:#FBF6EE;color:#3B2A1A;font:16px/1.65 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}main{width:min(720px,100% - 32px);margin:40px auto 60px}h1{font:500 2rem Georgia,serif;margin:0 0 4px}h2{font:500 1.2rem Georgia,serif;margin:26px 0 6px}p,li{color:#4E3D2C}a{color:#7A5A22}small{color:#6F5B48}</style></head>
+<body><main><p><a href="/">${attr(b.name)}</a></p><h1>Privacy</h1><small>For the ${attr(b.name)} website and phone app. Last updated 24 November 2026.</small>
+<h2>What we collect</h2><p>Only what you type when you order, pre-order a cake, book a table, leave a review or send us a message: your name (optional), phone number, delivery address for deliveries, table number, your order and notes, and a payment screenshot or transaction code if you choose to pay by eSewa or Fonepay. A cake design photo, if you add one.</p>
+<h2>Why</h2><p>To make and deliver your order, confirm payments and bookings, and call or message you about them. The phone app also keeps your order numbers on your phone so it can show their status and notify you.</p>
+<h2>What we do not do</h2><ul><li>We do not sell or share your details with advertisers.</li><li>We do not use tracking or advertising cookies. The website only uses a small sign-in cookie for cafe staff.</li><li>We never see your eSewa, Fonepay or bank login. Payments happen in those apps.</li></ul>
+<h2>Who sees it</h2><p>Only the cafe owner and staff, on the cafe's order screen. The website is hosted by a cloud provider that stores the data for us.</p>
+<h2>How long</h2><p>Orders and bookings are kept for the cafe's records. Ask us and we will delete your details.</p>
+<h2>Contact</h2><p>${attr(b.name)}, ${attr(b.address || '')}.${phone ? ` Phone or WhatsApp: <a href="tel:${phone}">${phone}</a>.` : ''}</p>
+</main></body></html>`);
+});
 // Each event has its own address, so a shared link shows the event's photo and title.
 app.get('/event/:id', (req, res) => {
   const c = content.get();
@@ -685,7 +731,7 @@ function extrasFor(groupId) {
 }
 // How many pounds a cake size is, read from its name ("Half Pound", "1 Pound", "2 lb", "1 kg").
 function pounds(label) {
-  const t = String(label || '').toLowerCase();
+  const t = String(label || '').toLowerCase().replace(/(\d)\s*(?:½|1\/2|and a half|and half|& half)/, '$1.5').replace(/½/, '0.5').replace(/(^|\D)1\/2/, (m, a) => `${a}0.5`);
   if (/half/.test(t)) return 0.5;
   const m = t.match(/(\d+(?:\.\d+)?)\s*(pound|lb|kg)/);
   if (!m) return 1;
@@ -793,6 +839,8 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   // Paying online is optional. Without it the order is "pay later" (at the counter or on delivery).
   let method = str(b.method, 20);
   if (!['esewa', 'fonepay'].includes(method) || !c.payment[method] || c.payment[method].enabled === false) method = 'later';
+  // Staff call the guest to confirm every online payment, so paying now needs a phone number.
+  if (method !== 'later' && !PHONE.test(phone)) return bad(res, 'Please enter your phone number: we call you to confirm the payment.');
   const proof = method !== 'later' && proofExists(str(b.proof, 40)) ? str(b.proof, 40) : '';
   const txn = method !== 'later' ? str(b.txn, 60) : '';
   const refPhoto = hasWhole && proofExists(str(b.refPhoto, 40)) ? str(b.refPhoto, 40) : '';
@@ -934,6 +982,7 @@ app.put('/api/admin/content', admin, json, async (req, res) => {
     return res.status(409).json({ error: 'The website was saved from another device after you opened this editor.', rev: current._rev });
   }
   const next = fillDefaults(c, freshDefaults());
+  next.fixes = Object.assign({}, current.fixes, next.fixes);
   tidyEvents(next);
   ensurePrintMenu(next);
   const changes = describeChanges(current, next);
@@ -1260,6 +1309,7 @@ async function restoreBackup(buf, by) {
     ensureSections(next);
     tidyEvents(next);
     ensurePrintMenu(next);
+    cheesecakePounds(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);

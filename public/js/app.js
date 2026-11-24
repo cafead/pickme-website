@@ -181,14 +181,27 @@
   /* ---------- small builders ---------- */
   const clampN = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
   // Photo position and zoom set in admin. Kept per photo address.
+  // Zoom can go below 100%; then (and for "show the whole photo") the empty part of the frame
+  // is filled with a soft, blurred copy of the same photo, so it blends in.
+  const ZMIN = 0.3;
+  const needsFill = (k) => Boolean(k && (k.fit === 'contain' || clampN(k.z, ZMIN, 4, 1) < 1));
+  const fillUrl = (u) => `url('${String(u).replace(/['\\()\s]/g, (ch) => '%' + ch.charCodeAt(0).toString(16).padStart(2, '0'))}')`;
   function cropAttrs(url) {
     const k = S.c && S.c.crops && S.c.crops[url];
     if (!k) return '';
-    return ` style="--ox:${clampN(k.x, 0, 100, 50)}%;--oy:${clampN(k.y, 0, 100, 50)}%;--z:${clampN(k.z, 1, 4, 1)}"${k.fit === 'contain' ? ' data-fit="contain"' : ''}`;
+    return ` style="--ox:${clampN(k.x, 0, 100, 50)}%;--oy:${clampN(k.y, 0, 100, 50)}%;--z:${clampN(k.z, ZMIN, 4, 1)}"${k.fit === 'contain' ? ' data-fit="contain"' : ''}`;
+  }
+  function fillAttrs(url) {
+    const k = S.c && S.c.crops && S.c.crops[url];
+    return needsFill(k) ? ` data-fill style="--fill:${esc(fillUrl(url))}"` : '';
+  }
+  function setFill(box, url, k) {
+    if (!box) return;
+    if (needsFill(k)) { box.setAttribute('data-fill', ''); box.style.setProperty('--fill', fillUrl(url)); } else { box.removeAttribute('data-fill'); box.style.removeProperty('--fill'); }
   }
   const pic = (url, alt, cls, eager) => {
     const u = safeUrl(url);
-    return `<div class="pic ${cls || ''}" data-alt="${esc(alt)}">${u ? `<img src="${esc(u)}" alt="${esc(alt)}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async"${cropAttrs(u)}>` : ''}</div>`;
+    return `<div class="pic ${cls || ''}" data-alt="${esc(alt)}"${u ? fillAttrs(u) : ''}>${u ? `<img src="${esc(u)}" alt="${esc(alt)}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async"${cropAttrs(u)}>` : ''}</div>`;
   };
   const head = (o, path, extra) => `<header class="head rv">${o.script || PREVIEW ? `<p class="script"${ed(path + '.script')}>${esc(o.script)}</p>` : ''}${o.title || PREVIEW ? `<h2${ed(path + '.title')}>${esc(o.title)}</h2>` : ''}${extra || ''}</header>`;
   const btn = (label, href, cls, path) => `<a class="btn ${cls || ''}" href="${esc(safeUrl(href) || '#')}"><span${path ? ed(path) : ''}>${esc(label)}</span>${ICON.arrow}</a>`;
@@ -288,7 +301,7 @@
   }
   const cakeOpts = () => ((S.c.cake || {}).options || []).filter((o) => o.show !== false && o.id && o.name);
   function pounds(label) {
-    const t = String(label || '').toLowerCase();
+    const t = String(label || '').toLowerCase().replace(/(\d)\s*(?:½|1\/2|and a half|and half|& half)/, '$1.5').replace(/½/, '0.5').replace(/(^|\D)1\/2/, (m, a) => `${a}0.5`);
     if (/half/.test(t)) return 0.5;
     const m = t.match(/(\d+(?:\.\d+)?)\s*(pound|lb|kg)/);
     if (!m) return 1;
@@ -558,7 +571,28 @@
     </div>`;
   }
   const menuBody = (c) => `${menuTools(c)}<div id="menu-panel">${menuPanel(c)}</div>`;
-  function redrawMenu() { const p = $('#menu-panel'); if (p) { p.innerHTML = menuPanel(S.c); if (PREVIEW) setInline(); } }
+  function redrawMenu() {
+    const p = $('#menu-panel');
+    if (!p) return;
+    const before = $('.tabs', p);
+    const left = before ? before.scrollLeft : 0;
+    p.innerHTML = menuPanel(S.c);
+    if (PREVIEW) setInline();
+    centreTab(left);
+  }
+  // On phones the tabs scroll sideways: the chosen one slides to the middle, so the next group shows beside it.
+  function centreTab(from) {
+    const bar = $('#menu-panel .tabs');
+    const on = bar && $('.tab.is-on', bar);
+    if (!on || bar.scrollWidth <= bar.clientWidth + 1) return;
+    bar.scrollLeft = from || 0;
+    const r = on.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    const target = bar.scrollLeft + (r.left - b.left) - (bar.clientWidth - r.width) / 2;
+    const to = Math.max(0, Math.min(bar.scrollWidth - bar.clientWidth, target));
+    const smooth = document.documentElement.classList.contains('anim') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => { try { bar.scrollTo({ left: to, behavior: smooth ? 'smooth' : 'auto' }); } catch (e) { bar.scrollLeft = to; } });
+  }
   R.menu = (c) => `<section id="menu" class="sec sec--tint"><div class="wrap">
       ${head(c.menu, 'menu', c.menu.note ? `<p class="lede"${ed('menu.note')}>${esc(c.menu.note)}</p>` : '')}
       <div id="menu-body" class="rv">${menuBody(c)}</div>
@@ -626,6 +660,7 @@
     const img = tmp.firstChild;
     img.classList.add('cake-next');
     box.classList.remove('pic--empty');
+    setFill(box, u, S.c.crops && S.c.crops[u]);
     box.appendChild(img);
     const swap = () => { requestAnimationFrame(() => img.classList.add('is-in')); setTimeout(() => { $$('img', box).forEach((x) => { if (x !== img) x.remove(); }); img.classList.remove('cake-next', 'is-in'); }, 650); };
     if (img.complete) swap(); else { img.onload = swap; img.onerror = () => img.remove(); }
@@ -1083,19 +1118,32 @@
       </div>`);
   }
   // Staff and owner login, opened by tapping the little lock in the footer twice.
-  function openStaffLogin() {
-    openLayer(`<div class="shade" data-act="close"></div>
+  // First a choice (Staff / counter or Admin), then the matching form: Admin asks for the password only.
+  function openStaffLogin(kind) {
+    const head = `<div class="shade" data-act="close"></div>
       <div class="modal modal--login" role="dialog" aria-label="Staff login">
         <button type="button" class="icon-btn ev-close" data-act="close" aria-label="Close">${ICON.x}</button>
-        <span class="login-badge">${ICON.lock}</span>
-        <h2>Staff login</h2>
-        <p class="hint">Owner: your password only. Staff: your login ID and password.</p>
+        <span class="login-badge">${ICON.lock}</span>`;
+    if (!kind) {
+      openLayer(`${head}
+        <h2>Who is signing in?</h2>
+        <div class="login-pick">
+          <button type="button" class="btn btn--ghost" data-act="loginkind" data-id="staff"><span>Staff / counter</span></button>
+          <button type="button" class="btn btn--ghost" data-act="loginkind" data-id="admin"><span>Admin</span></button>
+        </div>
+      </div>`);
+      return;
+    }
+    const staff = kind === 'staff';
+    openLayer(`${head}
+        <h2>${staff ? 'Staff / counter' : 'Admin'}</h2>
         <form data-form="login" class="login-form">
-          <label class="f"><span>Login ID <small>(staff only)</small></span><input name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40"></label>
-          <label class="f"><span>Password</span><input name="password" type="password" required autocomplete="current-password" autofocus></label>
+          ${staff ? '<label class="f"><span>Login ID</span><input name="username" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" autofocus></label>' : ''}
+          <label class="f"><span>Password</span><input name="password" type="password" required autocomplete="current-password"${staff ? '' : ' autofocus'}></label>
           <label class="login-keep"><input type="checkbox" name="remember" checked><span>Keep me signed in on this device</span></label>
           <p class="form-msg" role="status"></p>
           <button type="submit" class="btn">${ICON.lock}<span>Log in</span></button>
+          <button type="button" class="link-btn login-back" data-act="loginkind" data-id=""><span>Back</span></button>
         </form>
       </div>`);
   }
@@ -1114,7 +1162,7 @@
 
   /* ---------- cart drawer and checkout ---------- */
   const layer = () => $('#layer');
-  function closeLayer() { layer().innerHTML = ''; document.body.classList.remove('lock'); }
+  function closeLayer() { if ($('form[data-form=checkout]', layer())) saveDraft(false); closeQrFull(); layer().innerHTML = ''; document.body.classList.remove('lock'); }
   function openLayer(html) {
     const t = $('#toast');
     if (t) t.classList.remove('is-on');
@@ -1203,18 +1251,72 @@
       ${fee ? `<li><div><strong>Delivery</strong></div><b>${rs(fee)}</b></li>` : ''}</ul>
       <p class="sum sum--big"><span>Total to pay</span><b id="co-total">${rs(sub + fee)}</b></p>`;
   }
+  // The QR in checkout. A tap makes it fill the screen, with the steps and the amount under it.
   function qrHtml(method) {
     const p = S.c.payment[method] || {};
-    return `${safeUrl(p.qr) ? `<img class="qr" src="${esc(safeUrl(p.qr))}" alt="${esc(p.name)} QR code">` : `<div class="qr qr--empty">The ${esc(p.name)} QR code has not been added yet.</div>`}
+    return `${safeUrl(p.qr) ? `<button type="button" class="qr-btn" data-act="qrbig" data-id="${esc(method)}" aria-label="Show the ${esc(p.name)} QR code full screen"><img class="qr" src="${esc(safeUrl(p.qr))}" alt="${esc(p.name)} QR code"><span>Tap the QR to make it big</span></button>` : `<div class="qr qr--empty">The ${esc(p.name)} QR code has not been added yet.</div>`}
       ${p.account ? `<p class="hint">${esc(p.account)}</p>` : ''}`;
+  }
+  const payTotal = () => { const t = $('#co-total'); return t ? t.textContent.trim() : ''; };
+  const paySteps = (name, amount) => `<ol class="pay-steps">
+      <li>Take a screenshot of this QR.</li>
+      <li>Open ${name ? `${esc(name)}, ` : ''}eSewa, Fonepay or your bank app and scan the QR from your screenshot.</li>
+      <li>Pay <b>${esc(amount)}</b>.</li>
+      <li>Come back to this page with the payment screenshot and send your order.</li>
+    </ol>
+    <p class="pay-call">Whether you add the screenshot or not, we will call you on your phone number to confirm the payment.</p>`;
+  function openQrFull(method) {
+    const p = S.c.payment[method] || {};
+    if (!safeUrl(p.qr)) return;
+    closeQrFull();
+    const box = document.createElement('div');
+    box.id = 'qr-full';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', `${p.name || 'Payment'} QR code`);
+    box.innerHTML = `<div class="qrf-in">
+        <p class="qrf-name">${esc(p.name || 'Pay')}${p.account ? ` · ${esc(p.account)}` : ''}</p>
+        <img src="${esc(safeUrl(p.qr))}" alt="${esc(p.name)} QR code">
+        <p class="qrf-amount">Amount to pay <b>${esc(payTotal())}</b></p>
+        ${paySteps('', payTotal())}
+        <button type="button" class="btn" data-act="qrclose"><span>Back to my order</span></button>
+      </div>`;
+    document.body.appendChild(box);
+    $('button', box).focus();
+  }
+  function closeQrFull() { const b = $('#qr-full'); if (b) b.remove(); }
+  // What the guest typed at checkout is kept for this visit, so it survives a trip to the payment app
+  // (phones often reload the page on the way back).
+  const DRAFT = 'pm_checkout';
+  const DRAFT_KEYS = ['type', 'phone', 'name', 'address', 'tableNo', 'notes', 'method', 'txn', 'when'];
+  function saveDraft(open) {
+    const f = $('form[data-form=checkout]');
+    try {
+      if (!f) { if (open === false) sessionStorage.removeItem(DRAFT); return; }
+      const d = { open: open !== false };
+      for (const k of DRAFT_KEYS) { const el = f.elements[k]; if (el) d[k] = el.value; }
+      for (const k of ['type', 'method', 'when']) { const on = $(`input[name=${k}]:checked`, f); if (on) d[k] = on.value; }
+      sessionStorage.setItem(DRAFT, JSON.stringify(d));
+    } catch (e) { /* no storage */ }
+  }
+  function readDraft() { try { return JSON.parse(sessionStorage.getItem(DRAFT) || 'null'); } catch (e) { return null; } }
+  function dropDraft() { try { sessionStorage.removeItem(DRAFT); } catch (e) { /* no storage */ } }
+  function restoreDraft(d) {
+    const f = $('form[data-form=checkout]');
+    if (!f || !d) return;
+    for (const k of ['type', 'when', 'method']) {
+      const el = d[k] && $(`input[name=${k}][value="${String(d[k]).replace(/"/g, '')}"]`, f);
+      if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    for (const k of ['phone', 'name', 'address', 'tableNo', 'notes', 'txn']) { const el = f.elements[k]; if (el && d[k] && !(k === 'tableNo' && TABLE)) el.value = d[k]; }
   }
   function checkoutHtml() {
     const c = S.c;
     const lines = cartLines();
     const hasWhole = lines.some((l) => l.whole);
     const pre = S.preset || {};
-    const type = TABLE ? 'dinein' : (pre.type || 'pickup');
-    const later = hasWhole || pre.when === 'later' || !isOpen(c);
+    // Every order starts as: at the cafe, now, pay later (a cake pre-order keeps its own choices).
+    const type = TABLE ? 'dinein' : (pre.type || 'dinein');
+    const later = hasWhole || (!TABLE && pre.when === 'later') || !isOpen(c);
     const notice = Math.max(Number(c.cake.noticeHours) || 0, ...lines.map((l) => l.notice || 0));
     const wantsPhoto = lines.some((l) => l.photo);
     const slot = pre.date ? { date: pre.date, time: pre.time } : nextSlot(c, hasWhole ? notice : 0.5);
@@ -1230,7 +1332,7 @@
             <input type="radio" name="type" id="co-pickup" value="pickup"${type === 'pickup' ? ' checked' : ''}><label for="co-pickup">Pickup</label>
             <input type="radio" name="type" id="co-delivery" value="delivery"${type === 'delivery' ? ' checked' : ''}><label for="co-delivery">Delivery +${rs(c.payment.deliveryFee)}</label>
           </fieldset>
-          <label class="f" id="co-table"${type === 'dinein' ? '' : ' hidden'}><span>Table number (optional)</span><input name="tableNo" id="co-tableno" maxlength="20" value="${esc(TABLE)}" inputmode="numeric"></label>
+          <label class="f" id="co-table"${type === 'dinein' ? '' : ' hidden'}><span>${TABLE ? 'Table number <small>(from the QR on your table)</small>' : 'Table number (optional)'}</span><input name="tableNo" id="co-tableno" maxlength="20" value="${esc(TABLE)}" inputmode="numeric"${TABLE ? ' class="is-table"' : ''}></label>
           <label class="f"><span id="co-phone-label">${phoneNeeded ? 'Phone' : 'Phone (optional)'}</span><input name="phone" id="co-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"${phoneNeeded ? ' required' : ''}></label>
           <label class="f"><span>Your name (optional)</span><input name="name" id="co-name" autocomplete="name" maxlength="80"></label>
           <label class="f f--wide" id="co-addr"${type === 'delivery' ? '' : ' hidden'}><span>Delivery address (optional, we will call if it is missing)</span><textarea name="address" id="co-address" rows="2" maxlength="300" placeholder="Tole, landmark, ward"></textarea><small class="hint">${esc(c.payment.deliveryNote)}</small></label>
@@ -1254,8 +1356,8 @@
           <p class="hint f--wide" id="co-later-note">Pay at the counter, or when your order arrives.</p>
           <div class="f--wide pay" id="co-pay" hidden>
             <div id="co-qr"></div>
-            <div><p>${esc(c.payment.instructions)}</p>
-              <label class="f"><span>Payment screenshot (optional)</span><input type="file" name="proof" id="co-proof" accept="image/png,image/jpeg,image/webp"></label>
+            <div><div id="co-steps"></div>
+              <label class="f"><span>Payment screenshot</span><input type="file" name="proof" id="co-proof" accept="image/png,image/jpeg,image/webp"></label>
               <label class="f"><span>Or the transaction code (optional)</span><input name="txn" id="co-txn" maxlength="60" placeholder="e.g. 000ABC9"></label></div>
           </div>
           <p class="form-msg f--wide" role="alert"></p>
@@ -1268,6 +1370,8 @@
     openLayer(checkoutHtml());
     const pre = S.preset || {};
     $$('[data-bsp]', layer()).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: pre.date || el.dataset.value }));
+    restoreDraft(readDraft());
+    saveDraft(true);
   }
   function doneHtml(title, lines, text) {
     return `<div class="shade" data-act="close"></div>
@@ -1294,7 +1398,7 @@
   }
   const FORMS = {
     async login(d) {
-      const r = await post('/api/auth/login', { username: d.username || '', password: d.password || '', remember: Boolean(d.remember) });
+      const r = await post('/api/auth/login', { username: (d.username || '').trim(), password: d.password || '', remember: Boolean(d.remember) });
       location.href = r.role === 'staff' ? '/counter' : '/admin';
       return 'Signed in. Opening...';
     },
@@ -1340,6 +1444,7 @@
       const payNow = d.method && d.method !== 'later';
       const file = payNow ? form.elements.proof.files[0] : null;
       if (d.type !== 'dinein' && !String(d.phone || '').trim()) throw new Error('Please enter your phone number so we can reach you.');
+      if (payNow && !String(d.phone || '').trim()) { const ph = $('#co-phone'); if (ph) ph.focus(); throw new Error('Please enter your phone number: we call you to confirm the payment.'); }
       if (d.when === 'later' && (!d.date || !d.time)) throw new Error('Please choose a date and time.');
       const cartSnapshot = cartLines();
       const proof = await sendPicture(file);
@@ -1352,12 +1457,13 @@
       S.cart = [];
       S.preset = null;
       saveCart();
+      dropDraft();
       try { localStorage.setItem('pm_last_order', JSON.stringify({ id: res.id, at: Date.now(), item: (cartSnapshot[0] || {}).name || '' })); } catch (e) { /* no storage */ }
       reviewLater();
       const atCafe = d.type === 'dinein';
       openLayer(doneHtml(atCafe ? 'Your order is in' : 'Order received', [
         `Your order number is ${res.id}. Total ${rs(res.total)}.`,
-        atCafe ? 'We are preparing it and will bring it to you.' : (payNow ? 'We will check your payment and call you if anything is unclear.' : 'We will call you if anything is unclear. You can pay later.'),
+        payNow ? `We will call you on ${d.phone} to confirm your payment, then ${atCafe ? 'bring your order to you' : 'start your order'}.` : (atCafe ? 'We are preparing it and will bring it to you.' : 'We will call you if anything is unclear. You can pay later.'),
       ], atCafe ? '' : res.text));
     },
   };
@@ -1392,22 +1498,34 @@
       $('#co-sum').innerHTML = sumHtml(t);
       $('#co-addr').hidden = t !== 'delivery';
       $('#co-table').hidden = t !== 'dinein';
-      $('#co-phone').required = t !== 'dinein';
-      $('#co-phone-label').textContent = t === 'dinein' ? 'Phone (optional)' : 'Phone';
+      phoneRule(form);
+      const m = $('input[name=method]:checked', form);
+      if (m && m.value !== 'later') $('#co-steps').innerHTML = paySteps('', payTotal());
     }
     if (e.target.name === 'when') $('#co-when').hidden = e.target.value !== 'later';
     if (e.target.name === 'method') {
       const now = e.target.value !== 'later';
       $('#co-pay').hidden = !now;
       $('#co-later-note').hidden = now;
-      if (now) $('#co-qr').innerHTML = qrHtml(e.target.value);
+      if (now) { $('#co-qr').innerHTML = qrHtml(e.target.value); $('#co-steps').innerHTML = paySteps('', payTotal()); }
+      phoneRule(form);
     }
+    saveDraft(true);
   });
+  // A phone number is needed for pickup and delivery, and whenever the guest pays now (we call to confirm).
+  function phoneRule(form) {
+    const t = ($('input[name=type]:checked', form) || {}).value;
+    const m = ($('input[name=method]:checked', form) || {}).value;
+    const need = t !== 'dinein' || (m && m !== 'later');
+    $('#co-phone').required = need;
+    $('#co-phone-label').textContent = need ? (m && m !== 'later' ? 'Phone (we call to confirm the payment)' : 'Phone') : 'Phone (optional)';
+  }
   let searchTimer = null;
   document.addEventListener('input', (e) => {
     if (e.target.id === 'cake-qty') cakeTotal();
     if (e.target.id === 'menu-q') { S.q = e.target.value; clearTimeout(searchTimer); searchTimer = setTimeout(redrawMenu, 120); }
     if (e.target.name === 'x') extrasTotal();
+    if (e.target.closest && e.target.closest('form[data-form=checkout]')) saveDraft(true);
     const el = S.inline && e.target.closest && e.target.closest('[data-edit]');
     if (el) window.parent.postMessage({ pm: 'edit', path: el.dataset.edit, value: el.textContent.replace(/\s*\n\s*/g, ' ').trim() }, location.origin);
   });
@@ -1419,6 +1537,9 @@
       const now = Date.now();
       if (now - (S.lockTap || 0) < 450) { S.lockTap = 0; openStaffLogin(); } else S.lockTap = now;
     },
+    loginkind(el) { openStaffLogin(el.dataset.id || ''); },
+    qrbig(el) { openQrFull(el.dataset.id); },
+    qrclose() { closeQrFull(); },
     tab(el) {
       S.tab = el.dataset.id;
       const swap = () => redrawMenu();
@@ -1540,7 +1661,8 @@
   document.addEventListener('touchend', letGo, { passive: true });
   document.addEventListener('touchcancel', letGo, { passive: true });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && layer().innerHTML) closeLayer();
+    if (e.key === 'Escape' && $('#qr-full')) closeQrFull();
+    else if (e.key === 'Escape' && layer().innerHTML) closeLayer();
     if (e.key === 'Enter' && S.inline && e.target.closest && e.target.closest('[data-edit]')) { e.preventDefault(); e.target.blur(); }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd' && !PREVIEW) { e.preventDefault(); location.hash = '#admin'; }
   });
@@ -1603,6 +1725,7 @@
       im.style.setProperty('--oy', k.y + '%');
       im.style.setProperty('--z', k.z);
       if (k.fit === 'contain') im.dataset.fit = 'contain'; else delete im.dataset.fit;
+      if (im.parentElement && im.parentElement.classList.contains('pic')) setFill(im.parentElement, url, k);
     });
   }
   function sendCrop(url, k) {
@@ -1625,7 +1748,7 @@
         e.stopPropagation();
         const k = cropOf(toolsUrl);
         if (b.dataset.crop === 'in') k.z = Math.min(4, Math.round((k.z + 0.1) * 10) / 10);
-        if (b.dataset.crop === 'out') k.z = Math.max(1, Math.round((k.z - 0.1) * 10) / 10);
+        if (b.dataset.crop === 'out') k.z = Math.max(ZMIN, Math.round((k.z - 0.1) * 10) / 10);
         if (b.dataset.crop === 'fit') k.fit = k.fit === 'contain' ? 'cover' : 'contain';
         if (b.dataset.crop === 'reset') Object.assign(k, { x: 50, y: 50, z: 1, fit: 'cover' });
         paintCrop(toolsUrl, k);
@@ -1735,6 +1858,7 @@
       const evPath = location.pathname.match(/^\/event\/([^/]+)/);
       if (evPath && !PREVIEW) openEvent(decodeURIComponent(evPath[1]));
       else if (/^#event-/.test(location.hash) && !PREVIEW) openEvent(location.hash.slice(7));
+      else if (!PREVIEW && (readDraft() || {}).open && cartLines().length) openCheckout(); // back from the payment app
       else showClosedNotice();
       reviewLater();
     } catch (err) {

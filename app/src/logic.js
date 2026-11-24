@@ -83,7 +83,7 @@ export function wholeCakes(c) {
 }
 export const cakeOptions = (c) => (((c.cake || {}).options) || []).filter((o) => o.show !== false && o.id && o.name);
 export function pounds(label) {
-  const t = String(label || '').toLowerCase();
+  const t = String(label || '').toLowerCase().replace(/(\d)\s*(?:½|1\/2|and a half|and half|& half)/, '$1.5').replace(/½/, '0.5').replace(/(^|\D)1\/2/, (m, a) => `${a}0.5`);
   if (/half/.test(t)) return 0.5;
   const m = t.match(/(\d+(?:\.\d+)?)\s*(pound|lb|kg)/);
   if (!m) return 1;

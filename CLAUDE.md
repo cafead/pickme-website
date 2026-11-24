@@ -19,8 +19,13 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 - The slideshow runs on a JS timer (`startSlides()`), never on CSS `animationend`: phones with reduce motion or battery saver turn animations off.
 - Photo borders are chosen only under Colours, fonts and sizes (`theme.border`).
 - Admin editor: one section open at a time.
-- Ordering: dine-in needs nothing but the order; pickup, delivery, cake pre-orders and bookings need only a phone number. Pay later is the default; eSewa/Fonepay QR optional. Delivery Hetauda only, Rs 150. Whole cakes need 8 hours' notice.
-- A faint lock in the footer, tapped twice, opens a login: the owner password goes to `/admin`, staff logins (Admin > Security) go to `/counter`.
+- Ordering: every order starts as At the cafe, Now, Pay later (table QR guests get their table number filled in; cake pre-orders start as pickup). Dine-in needs nothing but the order; pickup, delivery, cake pre-orders, bookings and every pay-now order need a phone number. Delivery Hetauda only, Rs 150. Whole cakes need 8 hours' notice.
+- Pay now (eSewa/Fonepay QR): a tap on the QR shows it full screen with the amount and steps (screenshot the QR, pay in eSewa/Fonepay/bank app, come back with the payment screenshot). Checkout is kept in sessionStorage (`pm_checkout`) and reopens when the guest comes back. Staff always call to confirm: the counter shows "Payment to check" with Call and "Payment confirmed, send the order" (marks paid + acknowledged).
+- Every whole cheesecake is 1½ Pound (`cheesecakePounds()` renamed old "1 Pound" cheesecake sizes once, flag `content.fixes.cheese15`). `pounds()` reads ½.
+- Photo crops: zoom 30% to 400%. Below 100% or "show the whole photo", `.pic[data-fill]` fills the frame with a blurred copy of the photo. Admin sliders move the photo the way you pull (x slider flipped; up/down slider stands upright).
+- Menu tabs on phones: the chosen tab scrolls to the middle (`centreTab()`); the app's group chips do the same.
+- Privacy policy at `/privacy` (for the App Store).
+- A faint lock in the footer, tapped twice, asks "Staff / counter" or "Admin". Admin shows only a password box and opens `/admin`; staff enter login ID and password and go to `/counter`.
 
 ## Print menu (paper menu)
 - `/admin/print-menu` (owner only; link "Print menu" in the admin tabs): `public/print-menu.html`, `public/js/print-menu.js`, `public/css/print-menu.css`. A4 preview on the left third, settings on the right; on phones the paper sits on top.
@@ -32,6 +37,7 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 - Expo (React Native) app in `app/`, see `app/README.md`. It reads `/api/content` and places orders and bookings through the same API as the website, with `source: 'app'`.
 - Every push that changes `app/` builds an Android APK with GitHub Actions and publishes it on the Releases page (latest: /releases/latest/download/PickMeCafe.apk). Railway ignores changes in `app/` and `.github/`.
 - iPhone testing before the App Store: the website serves the app's web version at `/app-preview` (open in Safari, Share > Add to Home Screen). It is a built copy in `public/app-preview`: after app changes, rebuild it with `sh app/scripts/web-preview.sh` (from `app/`, after `npm ci`) and commit it. No notifications on the web version.
+- App Store builds use EAS (`app/eas.json`, production profile). First build from the owner's Mac: `cd app && npx eas-cli build -p ios --profile production --auto-submit` (signs in to Expo and Apple once). Export compliance is set (no non-exempt encryption).
 - The owner plans to publish on the App Store through Arpana Thapa Magar's individual Apple developer account (she is the registered proprietor) and later on Google Play.
 
 ## Code

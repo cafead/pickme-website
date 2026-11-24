@@ -53,6 +53,12 @@
   .card header small { color: var(--soft); }
   .card header b { margin-left: auto; font-size: 1.05rem; }
   .tag { padding: 1px 10px; border-radius: 999px; background: #F3EADB; font-size: .82rem; }
+  .paycheck { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #FFF3D6; border: 1px solid #E6C77A; }
+  .paycheck p { font-weight: 600; color: #6A4A0C; }
+  .paycheck div { display: flex; flex-wrap: wrap; gap: 8px; }
+  .card.to-check { border-left-color: #D49A17; }
+  .alert { display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 12px; background: #FFF3D6; border: 1px solid #E6C77A; color: #6A4A0C; font-weight: 600; cursor: pointer; }
+  .alert.on { display: block; }
   .card ul { display: grid; gap: 3px; padding: 8px 0; border-block: 1px dashed var(--line); }
   .card li { display: flex; justify-content: space-between; gap: 12px; }
   .card footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -118,12 +124,14 @@
       <select id="filter" aria-label="Show">
         <option value="active">Active only</option>
         <option value="pending">Pending only</option>
+        <option value="check">Payment to check</option>
         <option value="unpaid">Not paid</option>
         <option value="all">Everything</option>
         <option value="closed">Finished or cancelled</option>
       </select>
     </div>
   </div>
+  <p class="alert" id="to-check" role="status"></p>
   <p class="today" id="today"></p>
   <div class="grid" id="grid"></div>
 </main>
@@ -185,9 +193,21 @@
   const picture = (file, label) => (file ? `<button type="button" data-pic="${esc(file)}">${label}</button>` : '');
   const waBtn = (x, text) => !x.phone ? '' : `<a class="btn" href="https://wa.me/${esc(wa(x.phone))}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp customer</a>`;
 
+  // Paid online (eSewa / Fonepay QR) and not checked yet: staff call the guest, then confirm.
+  const toCheck = (o) => o.lines && o.payment && o.payment.method !== 'later' && !o.paid && !CLOSED.includes(o.status);
+  const PAY = { esewa: 'eSewa', fonepay: 'Fonepay' };
+  function checkBox(o) {
+    if (!toCheck(o)) return '';
+    return `<div class="paycheck">
+        <p>Payment to check: paid now by ${esc(PAY[o.payment.method] || o.payment.method)}, ${rs(o.total)}${o.payment.proof ? ', screenshot sent' : ', no screenshot'}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}. Call the guest to confirm.</p>
+        <div>${o.phone ? `<a class="btn" href="tel:${esc(o.phone)}">Call ${esc(o.phone)}</a>` : ''}${picture(o.payment.proof, 'See screenshot')}
+          <button type="button" class="main" data-confirm="${esc(o.id)}">Payment confirmed, send the order</button></div>
+      </div>`;
+  }
   function orderCard(o) {
-    return `<article class="card ${esc(o.status)}">
+    return `<article class="card ${esc(o.status)}${toCheck(o) ? ' to-check' : ''}">
       <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="step step--${esc(o.status)}">${NAMES[o.status] || esc(o.status)}</span><span class="step ${o.paid ? 'step--done' : ''}">${o.paid ? 'Paid' : 'Not paid'}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
+      ${checkBox(o)}
       <p>${contact(o)}</p>
       <p><b>For:</b> ${forWhen(o)}</p>
       ${line('Address', o.address)}
@@ -234,10 +254,14 @@
     const t = S.orders.filter((o) => day(o.createdAt) === todayAD && o.status !== 'cancelled');
     const sum = (arr) => arr.reduce((n, o) => n + Number(o.total || 0), 0);
     $('today').innerHTML = `<span>Placed today: <b>${t.length}</b> order${t.length === 1 ? '' : 's'}</span><span>Total <b>${rs(sum(t))}</b></span><span>Paid <b>${rs(sum(t.filter((o) => o.paid)))}</b></span><span>Not paid <b>${rs(sum(t.filter((o) => !o.paid)))}</b></span><span>Still to do <b>${t.filter((o) => o.status !== 'done').length}</b></span>`;
+    const checks = S.orders.filter(toCheck);
+    $('to-check').classList.toggle('on', checks.length > 0);
+    $('to-check').textContent = checks.length ? `${checks.length} online payment${checks.length === 1 ? '' : 's'} to check: ${checks.map((o) => o.id).join(', ')}. Tap to see.` : '';
     const q = $('search').value.trim().toLowerCase();
     const f = $('filter').value;
     const rows = all[S.tab].filter((x) => {
       const closed = CLOSED.includes(x.status);
+      if (f === 'check' && !toCheck(x)) return false;
       if ((f === 'active' && closed) || (f === 'closed' && !closed) || (f === 'pending' && x.status !== 'pending') || (f === 'unpaid' && (x.paid || !x.lines || x.status === 'cancelled'))) return false;
       return !q || [x.id, x.name, x.phone, x.address, x.cakeMessage, x.bs].some((v) => String(v || '').toLowerCase().includes(q));
     });
@@ -310,6 +334,15 @@
     if (pic) { $('viewer-img').src = '/api/desk/proof/' + pic.dataset.pic; $('viewer').hidden = false; }
     const print = e.target.closest('[data-print]');
     if (print) printSlip(print.dataset.print);
+    if (e.target.closest('#to-check')) { $('filter').value = 'check'; const first = S.orders.find(toCheck); S.tab = first && first.hasWhole ? 'cakes' : 'orders'; document.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === S.tab)); return draw(); }
+    const confirm = e.target.closest('[data-confirm]');
+    if (confirm) {
+      const o = S.orders.find((x) => x.id === confirm.dataset.confirm);
+      const body = { paid: true };
+      if (o && o.status === 'pending') body.status = 'acknowledged';
+      api('PATCH', `/api/desk/orders/${confirm.dataset.confirm}`, body).then(() => { toast('Payment confirmed. The order is on its way to the kitchen.'); load(true); }).catch((err) => { if (err.message !== 'login') toast(err.message); });
+      return;
+    }
     const q = e.target.closest('[data-quick]');
     const paid = e.target.closest('[data-paid]');
     const unpaid = e.target.closest('[data-unpaid]');

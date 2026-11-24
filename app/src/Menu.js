@@ -14,6 +14,29 @@ export default function Menu({ go, pickItem }) {
   const [busy, setBusy] = useState(false);
   const scroll = useRef(null);
   const pos = useRef({});
+  // The group chips: the chosen one slides to the middle, so the next group shows beside it.
+  const bar = useRef(null);
+  const chipAt = useRef({});
+  const barW = useRef(0);
+  const quietUntil = useRef(0);
+  const [sel, setSel] = useState(null);
+  const centre = (id) => {
+    const k = chipAt.current[id];
+    if (!k || !bar.current) return;
+    bar.current.scrollTo({ x: Math.max(0, k.x - (barW.current - k.w) / 2), animated: true });
+  };
+  const choose = (id) => {
+    setSel(id);
+    centre(id);
+    quietUntil.current = Date.now() + 700;
+    if (scroll.current) scroll.current.scrollTo({ y: (pos.current[id] || 0) - 4, animated: true });
+  };
+  const follow = (y) => {
+    if (Date.now() < quietUntil.current) return;
+    let cur = null;
+    for (const g of groups) if ((pos.current[g.id] ?? Infinity) <= y + 40) cur = g.id;
+    if (cur && cur !== sel) { setSel(cur); centre(cur); }
+  };
   const term = q.trim().toLowerCase();
 
   const shown = term
@@ -28,13 +51,17 @@ export default function Menu({ go, pickItem }) {
         <TextInput value={q} onChangeText={setQ} placeholder="Search the menu (latte, cheesecake…)" placeholderTextColor="#B3A593" style={st.search} />
       </View>
       {!term ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 10 }}>
+        <ScrollView ref={bar} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 10 }}
+          onLayout={(e) => { barW.current = e.nativeEvent.layout.width; }}>
           {groups.map((g) => (
-            <Chip key={g.id} text={(g.special ? '✦ ' : '') + g.name} onPress={() => scroll.current && scroll.current.scrollTo({ y: (pos.current[g.id] || 0) - 4, animated: true })} />
+            <View key={g.id} onLayout={(e) => { const l = e.nativeEvent.layout; chipAt.current[g.id] = { x: l.x, w: l.width }; }}>
+              <Chip text={(g.special ? '✦ ' : '') + g.name} on={sel === g.id} onPress={() => choose(g.id)} />
+            </View>
           ))}
         </ScrollView>
       ) : null}
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 150 }}
+        scrollEventThrottle={100} onScroll={term ? undefined : (e) => follow(e.nativeEvent.contentOffset.y)}
         refreshControl={<RefreshControl refreshing={busy} onRefresh={async () => { setBusy(true); await refresh(); setBusy(false); }} colors={[C.gold]} />}>
         {shown.map((g) => (
           <View key={g.id} onLayout={(e) => { pos.current[g.id] = e.nativeEvent.layout.y; }} style={{ marginTop: 14 }}>

@@ -53,11 +53,13 @@ function cat(name, note, rows) {
 }
 const one = (p) => [{ label: '', price: p }];
 const two = (a, b, la = 'Regular', lb = 'Large') => [{ label: la, price: a }, { label: lb, price: b }];
-const cake = (slice, pound, half) => [
+const cake = (slice, pound, half, size = '1 Pound') => [
   { label: 'Slice', price: slice },
   ...(half ? [{ label: 'Half Pound', price: half, whole: true }] : []),
-  { label: '1 Pound', price: pound, whole: true },
+  { label: size, price: pound, whole: true },
 ];
+// Every whole cheesecake is one and a half pounds.
+const cheese = (slice, price) => cake(slice, price, 0, '1½ Pound');
 
 module.exports = {
   brand: {
@@ -202,11 +204,11 @@ module.exports = {
         ['Pick Me Double Shot on Ice', two(230, 270), { badge: 'House special' }],
       ]),
       cat('Cheesecake', 'Whole cheesecakes need 8 hours notice.', [
-        ['Blueberry Cheese Cake', cake(270, 2600)],
-        ['Strawberry Cheese Cake', cake(270, 2600)],
-        ['Chocolate Cheese Cake', cake(280, 2600)],
-        ['Coconut Snow White Cheese Cake', cake(290, 2900)],
-        ['Original Cheese Cake', cake(250, 2500)],
+        ['Blueberry Cheese Cake', cheese(270, 2600)],
+        ['Strawberry Cheese Cake', cheese(270, 2600)],
+        ['Chocolate Cheese Cake', cheese(280, 2600)],
+        ['Coconut Snow White Cheese Cake', cheese(290, 2900)],
+        ['Original Cheese Cake', cheese(250, 2500)],
       ]),
       cat('Mocktails', '', [
         ['Virgin Mojito', one(300)],
