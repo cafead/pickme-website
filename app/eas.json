@@ -19,5 +19,13 @@
         "buildType": "apk"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6838835257",
+        "appleTeamId": "Z2244DTV8M"
+      }
+    }
   }
 }
