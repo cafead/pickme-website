@@ -9,6 +9,9 @@ on:
         description: Website address
         default: https://pickmecafe.com.np
 
+permissions:
+  contents: write
+
 jobs:
   shots:
     runs-on: ubuntu-latest
@@ -56,3 +59,11 @@ jobs:
         with:
           name: store-screenshots
           path: shots/*.png
+      # Also kept on the store-screenshots branch (never deployed), so they can be fetched with git.
+      - name: Save on the store-screenshots branch
+        run: |
+          cd shots
+          git init -q -b store-screenshots
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          git add . && git commit -qm "App Store screenshots ($(date -u +%F))"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" store-screenshots
