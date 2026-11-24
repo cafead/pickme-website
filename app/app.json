@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Pick Me Cafe",
-    "slug": "pick-me-cafe",
+    "slug": "pickmecafe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -51,6 +51,12 @@
           "backgroundColor": "#FAF6EF"
         }
       ]
-    ]
+    ],
+    "owner": "pick-me-cafe",
+    "extra": {
+      "eas": {
+        "projectId": "65c356fa-9c37-43fa-967e-fdd35d474e56"
+      }
+    }
   }
 }
