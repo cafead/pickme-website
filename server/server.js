@@ -943,7 +943,8 @@ app.get('/api/orders/:id/status', limit('status', 600, 15 * 60e3), (req, res) =>
     id: o.id, status: o.status, paid: Boolean(o.paid), type: o.type, total: o.total, createdAt: o.createdAt,
     updatedAt: last ? last.at : o.createdAt, schedule: o.schedule, hasWhole: Boolean(o.hasWhole), tableNo: o.tableNo || '',
     points: o.points ? { used: o.points.used || 0, asked: o.points.asked || 0, approved: o.points.approved } : null, pointsEarned: o.pointsEarned || 0,
-    lines: (o.lines || []).map((l) => ({ name: l.name, label: l.label, qty: l.qty, extras: l.extras || [] })),
+    subtotal: o.subtotal, deliveryFee: o.deliveryFee || 0,
+    lines: (o.lines || []).map((l) => ({ itemId: l.itemId, name: l.name, label: l.label, qty: l.qty, price: l.price, extras: l.extras || [], extraIds: l.extraIds || [], whole: Boolean(l.whole) })),
   });
 });
 app.get('/api/bookings/:id/status', limit('status', 600, 15 * 60e3), (req, res) => {

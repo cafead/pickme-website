@@ -498,7 +498,7 @@
     const hrs = hoursOf(it, g);
     const later = hrs && !servedNow(hrs);
     const off = it.available === false;
-    const prices = off ? '<span class="mi-off">Not available today</span>' : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => (later && !p.whole
+    const prices = off ? `<span class="mi-off">${it.soldOut ? 'Sold out today' : 'Not available today'}</span>` : (it.prices || []).filter((p) => Number(p.price) > 0).map((p) => (later && !p.whole
       ? `<span class="pchip pchip--off">${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b></span>`
       : `<button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
         aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
@@ -847,7 +847,7 @@
             <button class="btn" type="submit">${ICON.whatsapp}<span>Send on WhatsApp</span></button>
           </form>
         </div>
-      </div></div></section>`;
+      </div>${appCardHtml(c)}</div></section>`;
   };
 
   function nav(c) {
@@ -857,11 +857,12 @@
       <a class="brand" href="${PAGE === 'home' ? '#hero' : '/'}" aria-label="${esc(c.brand.name)}, home">${logo(c)}<span${ed('brand.name')}>${esc(c.brand.name)}</span></a>
       <nav class="nav-links" id="nav-links" aria-label="Sections">${links}</nav>
       <div class="nav-right">
+        <button type="button" class="acct-btn" data-act="account" aria-label="Your orders, points and settings">${ICON.user}</button>
         <button type="button" class="cart-btn" data-act="cart" aria-label="Open cart">${ICON.bag}<span class="cart-count" hidden>0</span></button>
         <button type="button" class="nav-toggle" data-act="nav" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">${ICON.menu}</button>
       </div></div>
       ${closure(c) ? `<p class="closed-bar"><strong${ed('closure.title')}>${esc(c.closure.title)}</strong> <span${ed('closure.text')}>${esc(c.closure.text)}</span></p>` : ''}
-      ${TABLE && !PREVIEW ? `<p class="table-bar">${ICON.bag}<span>Table ${esc(TABLE)}: add what you like from the menu, then tap the bag to send your order. Pay at the counter when you are done.</span>${pageSections(c).some((x) => x.id === 'menu') ? '' : `<a href="${esc(hrefFor(c, 'menu'))}">Open the menu</a>`}</p>` : ''}</header>`;
+      ${TABLE && !PREVIEW ? `<p class="table-bar">${ICON.bag}<span>Table ${esc(TABLE)}: add what you like from the menu, then tap the bag to send your order. Pay at the counter when you are done.</span>${pageSections(c).some((x) => x.id === 'menu') ? '' : `<a href="${esc(hrefFor(c, 'menu'))}">Open the menu</a>`}</p>${tableHelpHtml(c)}` : ''}</header>`;
   }
   const SOCIAL_NAMES = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', maps: 'Google Maps', viber: 'Viber', website: 'Website', link: 'Link' };
   function footer(c) {
@@ -920,7 +921,13 @@
     const wait = 25 * 60e3;
     if (age > 14 * 864e5) return;
     if (age < wait) { reviewLater.t = setTimeout(reviewLater, wait - age + 1000); return; }
-    if ($('#g-ask')) return;
+    showGoogleAsk();
+  }
+  // Also shown as soon as the guest's order is marked done (version 11).
+  function showGoogleAsk() {
+    let asked = 0;
+    try { asked = Number(localStorage.getItem('pm_review_asked')) || 0; } catch (e) { return; }
+    if (PREVIEW || !googleReviewUrl() || Date.now() - asked < 7 * 864e5 || $('#g-ask')) return;
     const r = S.c.reviews || {};
     const box = document.createElement('aside');
     box.id = 'g-ask';
@@ -1248,8 +1255,9 @@
     const sub = lines.reduce((s, l) => s + l.price * l.qty, 0);
     const fee = type === 'delivery' ? Number(S.c.payment.deliveryFee) || 0 : 0;
     return `<ul class="lines lines--mini">${lines.map((l) => `<li><div><strong>${l.qty} × ${esc(l.name)}</strong>${l.label || l.extraNames.length ? `<small>${esc(l.label)}${l.label && l.extraNames.length ? ' · ' : ''}${l.extraNames.map(esc).join(', ')}</small>` : ''}</div><b>${rs(l.price * l.qty)}</b></li>`).join('')}
-      ${fee ? `<li><div><strong>Delivery</strong></div><b>${rs(fee)}</b></li>` : ''}</ul>
-      <p class="sum sum--big"><span>Total to pay</span><b id="co-total">${rs(sub + fee)}</b></p>`;
+      ${fee ? `<li><div><strong>Delivery</strong></div><b>${rs(fee)}</b></li>` : ''}
+      ${S.coPts ? `<li><div><strong>Points</strong></div><b>−${rs(S.coPts)}</b></li>` : ''}</ul>
+      <p class="sum sum--big"><span>Total to pay</span><b id="co-total">${rs(Math.max(0, sub + fee - (S.coPts || 0)))}</b></p>`;
   }
   // The QR in checkout. A tap makes it fill the screen, with the steps and the amount under it.
   function qrHtml(method) {
@@ -1349,6 +1357,7 @@
             <label class="f"><span>Occasion (optional)</span><input name="occasion" id="co-occasion" maxlength="80" value="${esc(pre.occasion || '')}"></label>
             <label class="f f--wide"><span>${wantsPhoto ? 'Photo to print on the cake' : 'Photo of the cake design you want (optional)'}</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
           <label class="f f--wide"><span>Notes for us (optional)</span><textarea name="notes" id="co-notes" rows="2" maxlength="500" placeholder="Less sugar, extra ice"></textarea></label>
+          <div class="f--wide" id="co-points"></div>
           <fieldset class="f f--wide seg"><legend>Payment</legend>
             <input type="radio" name="method" id="co-later-pay" value="later" checked><label for="co-later-pay">Pay later</label>
             ${methods.map((m) => `<input type="radio" name="method" id="co-${m}" value="${m}"><label for="co-${m}">Pay now with ${esc(c.payment[m].name)}</label>`).join('')}
@@ -1371,13 +1380,15 @@
     const pre = S.preset || {};
     $$('[data-bsp]', layer()).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: pre.date || el.dataset.value }));
     restoreDraft(readDraft());
+    fillKnown();
     saveDraft(true);
   }
   function doneHtml(title, lines, text) {
     return `<div class="shade" data-act="close"></div>
       <div class="modal modal--done" role="dialog" aria-label="${esc(title)}">
         <p class="script">Thank you</p><h2>${esc(title)}</h2>
-        ${lines.map((l) => `<p>${esc(l)}</p>`).join('')}
+        ${lines.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('')}
+        ${myOrders().length && FEATURE('liveStatus') && !PREVIEW ? `<button type="button" class="btn" data-act="account" data-id="orders"><span>Follow my order</span>${ICON.arrow}</button>` : ''}
         ${text ? `<a class="btn" href="${esc(waLink(S.c, text))}" target="_blank" rel="noopener">${ICON.whatsapp}<span>Also send it to us on WhatsApp</span></a>` : ''}
         <button type="button" class="btn btn--ghost" data-act="close"><span>Close</span></button>
       </div>`;
@@ -1452,6 +1463,7 @@
       const res = await post('/api/orders', {
         name: d.name, phone: d.phone, type: d.type, address: d.address, tableNo: d.tableNo, when: d.when, date: d.date, dateBs: d.dateBs, time: d.time,
         cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto, notes: d.notes, method: d.method, proof, txn: payNow ? d.txn : '',
+        device: DEVICE, usePoints: form.elements.usePoints && form.elements.usePoints.checked ? Number(form.elements.usePoints.value) || 0 : 0,
         lines: cartLines().map((l) => ({ itemId: l.itemId, label: l.label, qty: l.qty, extras: l.extras })),
       });
       S.cart = [];
@@ -1459,10 +1471,19 @@
       saveCart();
       dropDraft();
       try { localStorage.setItem('pm_last_order', JSON.stringify({ id: res.id, at: Date.now(), item: (cartSnapshot[0] || {}).name || '' })); } catch (e) { /* no storage */ }
+      rememberOrder(res);
+      if (normPhone(d.phone)) store.set('pm_phone', normPhone(d.phone));
+      S.coPts = 0;
+      startLive();
+      if (signedIn()) loadAccount();
       reviewLater();
       const atCafe = d.type === 'dinein';
+      const L = LY();
+      const earn = pointsOn() && normPhone(d.phone) ? Math.floor((cartSnapshot.reduce((s, l) => s + l.price * l.qty, 0) - ((res.points && res.points.used) || 0)) * (Number(L.percent) || 0) / 100 / (Number(L.rupeesPerPoint) || 1)) : 0;
       openLayer(doneHtml(atCafe ? 'Your order is in' : 'Order received', [
         `Your order number is ${res.id}. Total ${rs(res.total)}.`,
+        res.points && res.points.asked && !res.points.used ? `Staff will take your ${res.points.asked} points off at the counter.` : '',
+        earn > 0 ? `You get ${earn} points when it is done.` : '',
         payNow ? `We will call you on ${d.phone} to confirm your payment, then ${atCafe ? 'bring your order to you' : 'start your order'}.` : (atCafe ? 'We are preparing it and will bring it to you.' : 'We will call you if anything is unclear. You can pay later.'),
       ], atCafe ? '' : res.text));
     },
@@ -1827,6 +1848,502 @@
   });
   document.addEventListener('dragstart', (e) => { if (S.layout) e.preventDefault(); });
 
+  /* ---------- version 11: your orders, points, account and settings ----------
+     Nobody needs an account. Orders placed on this phone or computer are kept here (pm_orders, with their
+     private keys) and followed live. A phone number shows its orders placed from this device, and its points.
+     An account (optional) shows every order on any device. */
+  const FEATURE = (k) => ((S.c && S.c.features) || {})[k] !== false;
+  const DEVICE = (() => {
+    const make = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+    try { let d = localStorage.getItem('pm_device'); if (!/^[a-f0-9]{32}$/.test(d || '')) { d = make(); localStorage.setItem('pm_device', d); } return d; } catch (e) { return make(); }
+  })();
+  const store = {
+    get(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* no storage */ } },
+  };
+  const myOrders = () => (store.get('pm_orders', []) || []).filter((o) => o && o.id && o.key);
+  function rememberOrder(res) {
+    store.set('pm_orders', [{ id: res.id, key: res.key, at: Date.now() }, ...myOrders().filter((o) => o.id !== res.id)].slice(0, 30));
+  }
+  const normPhone = (p) => { let d = digits(p); if (d.length === 13 && d.startsWith('977')) d = d.slice(3); return d.length >= 7 ? d : ''; };
+  async function call(method, url, body) {
+    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+    return data;
+  }
+  Object.assign(ICON, {
+    user: svg('<circle cx="12" cy="8.5" r="3.800"/><path d="M4.500 20.500c.9-4 4-6 7.500-6s6.600 2 7.500 6"/>'),
+    gift: svg('<rect x="3.500" y="9" width="17" height="11.500" rx="1.500"/><path d="M3.500 13h17M12 9v11.500"/><path d="M12 9c-1.500-3.500-5.500-3.500-5.500-1.200C6.500 9 9 9 12 9zm0 0c1.500-3.500 5.500-3.500 5.500-1.200C17.500 9 15 9 12 9z"/>'),
+    bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.500 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
+    receipt: svg('<path d="M6 3h12v18l-2-1.300-2 1.300-2-1.300-2 1.300-2-1.300L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/>'),
+    drop: svg('<path d="M12 3.500s6 6.500 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z"/>'),
+    wifi: svg('<path d="M3 9.500a13 13 0 0 1 18 0M6 13a8.500 8.500 0 0 1 12 0M9 16.500a4 4 0 0 1 6 0"/><circle cx="12" cy="19.500" r=".9" fill="currentColor"/>'),
+    gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.400 15a1.700 1.700 0 0 0 .3 1.800l.1.1a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-1.800-.3 1.700 1.700 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.700 1.700 0 0 0-1.100-1.500 1.700 1.700 0 0 0-1.800.3l-.1.1a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0 .3-1.800 1.700 1.700 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.700 1.700 0 0 0 1.500-1.100 1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.1a1.700 1.700 0 0 0 1.800.3H9a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.1a1.700 1.700 0 0 0-.3 1.800V9a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/>'),
+  });
+  const A = { cfg: null, me: null, look: null, live: {}, view: 'orders', su: {}, timer: null };
+  const signedIn = () => Boolean(A.me && A.me.me);
+  const pointsOn = () => Boolean(A.cfg && A.cfg.points && FEATURE('points'));
+  const LY = () => Object.assign({ percent: 5, rupeesPerPoint: 1, minSpend: 50, expiryMonths: 12 }, (S.c && S.c.loyalty) || {});
+  const codesOn = () => Boolean(A.cfg && A.cfg.on && (A.cfg.email || A.cfg.sms));
+  async function loadAccount() {
+    try {
+      const [cfg, me] = await Promise.all([call('GET', '/api/account/config'), call('GET', `/api/account/me?device=${DEVICE}`)]);
+      A.cfg = cfg;
+      A.me = me && me.me ? me : null;
+    } catch (e) { /* offline */ }
+    paintAccountBtn();
+  }
+  function paintAccountBtn() {
+    $$('.acct-btn').forEach((b) => {
+      const n = signedIn() ? (A.me.me.name || A.me.me.username || A.me.me.email || '').trim() : '';
+      b.classList.toggle('is-in', signedIn());
+      b.innerHTML = n ? `<span class="acct-initial">${esc(n.slice(0, 1).toUpperCase())}</span>` : ICON.user;
+      b.setAttribute('aria-label', signedIn() ? 'Your account, orders and points' : 'Your orders, points and settings');
+    });
+  }
+
+  /* order status, live */
+  const STEP_TEXT = { pending: 'Received', acknowledged: 'Seen by our staff', preparing: 'Being made', ready: 'Ready', done: 'Done', cancelled: 'Cancelled' };
+  const FLOW = ['pending', 'acknowledged', 'preparing', 'ready', 'done'];
+  const finished = (s) => s === 'done' || s === 'cancelled';
+  async function refreshLive() {
+    const list = myOrders().slice(0, 12);
+    await Promise.all(list.map(async (o) => {
+      const old = A.live[o.id];
+      if (old && finished(old.status) && Date.now() - (old.seen || 0) < 30 * 60e3) return;
+      try {
+        const s = await call('GET', `/api/orders/${encodeURIComponent(o.id)}/status?key=${encodeURIComponent(o.key)}`);
+        s.key = o.key;
+        s.seen = Date.now();
+        if (old && old.status !== s.status) statusChanged(s);
+        A.live[o.id] = s;
+      } catch (e) { if (/find/.test(e.message)) store.set('pm_orders', myOrders().filter((x) => x.id !== o.id)); }
+    }));
+    paintLivePill();
+    if ($('.modal--acct') && A.view === 'orders') paintAccount();
+  }
+  function statusChanged(s) {
+    if (s.status === 'ready') toast(`Your order ${s.id} is ready${s.type === 'dinein' ? '' : ' for you'}.`);
+    else if (s.status === 'acknowledged' || s.status === 'preparing') toast(`Order ${s.id}: ${STEP_TEXT[s.status].toLowerCase()}.`);
+    if (s.status === 'done' && FEATURE('liveStatus')) {
+      if (s.pointsEarned) toast(`${s.pointsEarned} points added to your phone number. Thank you!`);
+      showGoogleAsk();
+    }
+  }
+  // A small bar under the top bar while an order is on its way: "Order PM-...: Being made".
+  function paintLivePill() {
+    let pill = $('#os-pill');
+    const live = Object.values(A.live).filter((s) => !finished(s.status) && Date.now() - Date.parse(s.createdAt) < 12 * 3600e3)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    if (!FEATURE('liveStatus') || !live.length || PREVIEW) { if (pill) pill.remove(); return; }
+    if (!pill) { pill = document.createElement('button'); pill.type = 'button'; pill.id = 'os-pill'; pill.className = 'os-pill'; pill.dataset.act = 'account'; pill.dataset.id = 'orders'; document.body.appendChild(pill); }
+    const s = live[0];
+    const i = Math.max(0, FLOW.indexOf(s.status));
+    pill.innerHTML = `<span class="os-dots" aria-hidden="true">${FLOW.slice(0, 4).map((x, n) => `<i class="${n <= i ? 'on' : ''}"></i>`).join('')}</span><span>Order ${esc(s.id)}: <b>${esc(STEP_TEXT[s.status] || s.status)}</b>${live.length > 1 ? ` · +${live.length - 1} more` : ''}</span>`;
+  }
+  function startLive() {
+    clearInterval(A.timer);
+    if (!myOrders().length || PREVIEW) return;
+    refreshLive();
+    A.timer = setInterval(() => { if (!document.hidden) refreshLive(); }, 15000);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && myOrders().length) refreshLive(); });
+
+  /* the account sheet: Orders, Points, Settings (and Sign in / Create account) */
+  function openAccount(view) {
+    A.view = view || A.view || 'orders';
+    if (['signin', 'signup', 'reset'].includes(A.view) && !codesOn() && A.view !== 'signin') A.view = 'orders';
+    openLayer(`<div class="shade" data-act="close"></div><div class="modal modal--sheet modal--acct" role="dialog" aria-label="Your orders and account"><div id="acct-body"></div></div>`);
+    paintAccount();
+    refreshAccount();
+  }
+  async function refreshAccount() {
+    const ph = store.get('pm_phone', '');
+    try {
+      const jobs = [refreshLive()];
+      if (!A.cfg) jobs.push(loadAccount());
+      else jobs.push(call('GET', `/api/account/me?device=${DEVICE}`).then((me) => { A.me = me && me.me ? me : null; paintAccountBtn(); }));
+      await Promise.all(jobs);
+      if (!signedIn() && ph) A.look = await call('POST', '/api/lookup', { phone: ph, device: DEVICE });
+    } catch (e) { /* keep what we have */ }
+    if ($('.modal--acct')) paintAccount();
+  }
+  function allOrders() {
+    const map = new Map();
+    for (const o of Object.values(A.live)) map.set(o.id, o);
+    const server = signedIn() ? A.me.orders : (A.look && A.look.orders) || [];
+    for (const o of server) map.set(o.id, Object.assign({}, map.get(o.id) || {}, o));
+    return [...map.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  }
+  const dateText = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kathmandu', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+  const TYPE_TEXT = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
+  function orderCardHtml(o) {
+    const i = FLOW.indexOf(o.status);
+    const again = FEATURE('orderAgain') && (o.lines || []).some((l) => l.itemId && !l.whole);
+    const pts = o.points && o.points.used ? `<p class="hint">${o.points.used} points used (${rs(o.points.used * (Number(LY().rupeesPerPoint) || 1))} off)</p>` : o.points && o.points.asked && o.points.approved === null ? `<p class="hint">${o.points.asked} points to be taken off at the counter</p>` : '';
+    return `<article class="ocard${finished(o.status) ? ' is-old' : ''}">
+      <header><strong>${esc(o.id)}</strong><span>${esc(dateText(o.createdAt))}</span><b>${rs(o.total)}</b></header>
+      <p class="ocard-type">${esc(TYPE_TEXT[o.type] || '')}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}${o.paid ? ' · paid' : ''}</p>
+      ${o.status === 'cancelled' ? '<p class="ocard-step is-cancel">Cancelled</p>' : `<ol class="steps" aria-label="Order status: ${esc(STEP_TEXT[o.status] || o.status)}">${FLOW.map((x, n) => `<li class="${n < i ? 'was' : n === i ? 'now' : ''}"><i></i><span>${STEP_TEXT[x]}</span></li>`).join('')}</ol>`}
+      <ul class="ocard-lines">${(o.lines || []).map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` <small>(${esc(l.label)})</small>` : ''}${l.extras && l.extras.length ? ` <small>+ ${esc(l.extras.join(', '))}</small>` : ''}</li>`).join('')}</ul>
+      ${pts}${o.pointsEarned ? `<p class="hint ocard-earned">${ICON.gift}<span>${o.pointsEarned} points earned</span></p>` : ''}
+      <div class="row">
+        ${again ? `<button type="button" class="btn btn--small" data-act="again" data-id="${esc(o.id)}"><span>Order again</span></button>` : ''}
+        ${o.status === 'done' && googleReviewUrl() ? `<a class="btn btn--small btn--ghost" href="${esc(googleReviewUrl())}" target="_blank" rel="noopener">${ICON.google}<span>Review us</span></a>` : ''}
+      </div>
+    </article>`;
+  }
+  function pointsCardHtml(p, canSpend) {
+    if (!pointsOn()) return '';
+    const L = LY();
+    const head = `<div class="pts-card"><span class="pts-ic">${ICON.gift}</span><div><p class="pts-t">${esc(L.title || 'Pick Me points')}</p>`;
+    if (!p) return `${head}<p class="hint">${esc(L.text || '')}</p></div></div>`;
+    const value = p.balance * (Number(L.rupeesPerPoint) || 1);
+    return `${head}<p class="pts-n"><b>${p.balance}</b> points <small>= ${rs(value)} off</small></p>
+      ${p.next && p.balance ? `<p class="hint">${p.next.amount} of them run out on ${esc(new Date(p.next.exp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}.</p>` : ''}
+      <p class="hint">${p.balance >= (Number(L.minSpend) || 0) ? (canSpend ? 'Use them at checkout.' : 'Use them at checkout: staff take them off at the counter.') : `You can use them from ${Number(L.minSpend) || 0} points.`}</p>
+      </div></div>`;
+  }
+  function tabsHtml() {
+    const t = (id, label) => `<button type="button" class="${A.view === id ? 'is-on' : ''}" data-act="account" data-id="${id}" aria-pressed="${A.view === id}">${label}</button>`;
+    return `<nav class="acct-tabs" aria-label="Your account">${t('orders', 'Orders')}${pointsOn() ? t('points', 'Points') : ''}${t('settings', 'Settings')}</nav>`;
+  }
+  function paintAccount() {
+    const box = $('#acct-body');
+    if (!box) return;
+    const me = signedIn() ? A.me.me : null;
+    const title = me ? `Hi${me.name ? ' ' + esc(me.name.split(' ')[0]) : ''}` : 'Your orders';
+    const top = `<header><h2>${['signin', 'signup', 'reset'].includes(A.view) ? ({ signin: 'Sign in', signup: 'Create an account', reset: 'Forgot password' })[A.view] : title}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>`;
+    let body = '';
+    if (A.view === 'signin') body = signinHtml();
+    else if (A.view === 'signup') body = signupHtml();
+    else if (A.view === 'reset') body = resetHtml();
+    else if (A.view === 'points') body = tabsHtml() + pointsViewHtml();
+    else if (A.view === 'settings') body = tabsHtml() + settingsHtml();
+    else body = tabsHtml() + ordersViewHtml();
+    box.innerHTML = top + body;
+  }
+  function ordersViewHtml() {
+    const list = allOrders();
+    const ph = store.get('pm_phone', '');
+    const look = signedIn() ? '' : `<form class="form form--solo acct-look" data-form="lookup" novalidate>
+        <label class="f"><span>Your phone number</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="98XXXXXXXX" value="${esc(ph)}" required></label>
+        <button class="btn" type="submit"><span>Show my orders</span></button>
+        <p class="hint">Shows the orders made with this number on this phone or computer. ${codesOn() ? 'Sign in to see them on any device.' : ''}</p>
+        <p class="form-msg" role="alert"></p></form>`;
+    const pts = signedIn() ? pointsCardHtml(A.me.points, A.me.canSpend) : (A.look ? pointsCardHtml(A.look.points, false) : '');
+    return `${look}${pts}${list.length ? `<div class="ocards">${list.map(orderCardHtml).join('')}</div>` : '<p class="empty">No orders yet on this phone. Orders you send appear here and update by themselves.</p>'}${accountCta()}`;
+  }
+  function accountCta() {
+    if (signedIn() || !A.cfg || !A.cfg.on) return '';
+    if (!codesOn()) return `<p class="hint acct-soon">${esc((S.c.accounts || {}).text || '')} Accounts open soon.</p>`;
+    return `<div class="acct-cta"><p><b>${esc((S.c.accounts || {}).title || 'Your account')}</b><br><span class="hint">${esc((S.c.accounts || {}).text || '')}</span></p>
+      <div class="row"><button type="button" class="btn" data-act="account" data-id="signup"><span>Create an account</span></button><button type="button" class="btn btn--ghost" data-act="account" data-id="signin"><span>Sign in</span></button></div></div>`;
+  }
+  function pointsViewHtml() {
+    const L = LY();
+    const p = signedIn() ? A.me.points : A.look && A.look.points;
+    const how = `<ul class="pts-how"><li>Every finished order gives you ${Number(L.percent) || 0}% back as points.</li><li>1 point = ${rs(Number(L.rupeesPerPoint) || 1)} off a later order${Number(L.minSpend) ? `, from ${Number(L.minSpend)} points` : ''}.</li><li>Points last ${Number(L.expiryMonths) || 12} months.</li>${Number(L.birthdayPoints) ? `<li>${Number(L.birthdayPoints)} birthday points in your birthday week (with an account and your birthday in Settings).</li>` : ''}<li>Points belong to your phone number: give it when you order, even at your table.</li></ul>`;
+    const note = signedIn() && A.me.me.phone && !A.me.canSpend ? `<p class="hint acct-warn">Show this screen at the counter once so staff can confirm your phone number ${esc(A.me.me.phone)}. After that you can use your points straight from checkout.</p>` : signedIn() && !A.me.me.phone ? '<p class="hint acct-warn">Add your phone number in Settings: points are kept by phone number.</p>' : '';
+    return `${pointsCardHtml(p, signedIn() && A.me.canSpend)}${note}${!signedIn() && !p ? '<p class="hint">Type your phone number under Orders to see its points.</p>' : ''}${how}${accountCta()}`;
+  }
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function settingsHtml() {
+    const me = signedIn() ? A.me.me : null;
+    const general = `<section class="set-group"><h3>Help and information</h3>
+        <button type="button" class="set-row" data-act="chat">${ICON.chat}<span>Contact us</span></button>
+        <a class="set-row" href="/privacy">${ICON.lock}<span>Privacy policy</span></a>
+        ${S.c.appCard && S.c.appCard.show !== false ? `<a class="set-row" href="/#get-app" data-act="close">${ICON.download}<span>Get the app</span></a>` : ''}
+        <p class="hint set-about">${esc(S.c.brand.name)} website · version 11</p></section>`;
+    if (!me) {
+      const ph = store.get('pm_phone', '');
+      return `${accountCta()}<section class="set-group"><h3>This device</h3>
+          <p class="hint">${ph ? `Phone number kept on this device: <b>${esc(ph)}</b>` : 'No phone number kept on this device.'}</p>
+          <div class="row">${ph ? '<button type="button" class="btn btn--small btn--ghost" data-act="forgetphone"><span>Forget my phone number</span></button>' : ''}${myOrders().length ? '<button type="button" class="btn btn--small btn--ghost" data-act="forgetorders"><span>Clear my orders from this device</span></button>' : ''}</div>
+        </section>${general}`;
+    }
+    const [bm, bd] = (me.birthday || '').split('-').map(Number);
+    return `<form class="form set-group" data-form="profile" novalidate><h3>Your details</h3>
+        <label class="f"><span>Name</span><input name="name" maxlength="80" autocomplete="name" value="${esc(me.name)}"></label>
+        <label class="f"><span>Phone number ${me.phone ? (me.phoneVerified ? '<small class="ok">confirmed</small>' : '<small>not confirmed yet</small>') : ''}</span><input name="phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" value="${esc(me.phone)}" placeholder="98XXXXXXXX"></label>
+        <label class="f f--wide"><span>Delivery address</span><textarea name="address" rows="2" maxlength="300" placeholder="Tole, landmark, ward">${esc(me.address)}</textarea></label>
+        <div class="f"><span>Birthday ${me.birthday ? '<small>(ask us to change it)</small>' : '<small>(for birthday points; can be set once)</small>'}</span>
+          <div class="row row--tight"><select name="bmonth" aria-label="Birthday month"${me.birthday ? ' disabled' : ''}><option value="">Month</option>${MONTHS.map((m, i) => `<option value="${i + 1}"${bm === i + 1 ? ' selected' : ''}>${m}</option>`).join('')}</select>
+          <select name="bday" aria-label="Birthday day"${me.birthday ? ' disabled' : ''}><option value="">Day</option>${Array.from({ length: 31 }, (x, i) => `<option${bd === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></div></div>
+        <label class="f"><span>Login ID (optional; you can also sign in with your email or phone)</span><input name="username" maxlength="60" autocapitalize="off" autocomplete="username" value="${esc(me.username)}"></label>
+        <label class="set-check"><input type="checkbox" name="offers"${me.prefs.offers ? ' checked' : ''}><span>Tell me about offers and new specials</span></label>
+        <p class="form-msg" role="alert"></p><button class="btn" type="submit"><span>Save my details</span></button></form>
+      <form class="form set-group" data-form="password" novalidate><h3>Password</h3>
+        ${me.hasPassword ? '<label class="f"><span>Current password</span><input name="current" type="password" autocomplete="current-password" required></label>' : ''}
+        <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" required></label>
+        <p class="form-msg" role="alert"></p><button class="btn btn--ghost" type="submit"><span>Change password</span></button></form>
+      <form class="form set-group" data-form="newemail" novalidate><h3>Email</h3>
+        <p class="hint">${me.email ? `Now: <b>${esc(me.email)}</b>` : 'No email yet.'}</p>
+        ${A.su.change ? `<label class="f"><span>Code we sent to ${esc(A.su.change)}</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>` : '<label class="f"><span>New email</span><input name="to" type="email" autocomplete="email" maxlength="120" required></label>'}
+        <p class="form-msg" role="alert"></p><button class="btn btn--ghost" type="submit"><span>${A.su.change ? 'Confirm the new email' : 'Send me a code'}</span></button></form>
+      <section class="set-group"><h3>Account</h3>
+        <button type="button" class="set-row" data-act="signout">${ICON.lock}<span>Sign out</span></button>
+        <button type="button" class="set-row set-row--bad" data-act="deleteacct">${ICON.x}<span>Delete my account</span></button>
+        <p class="hint">Deleting your account removes your login, details and points. Your past orders stay in the cafe's records without your account.</p>
+      </section>${general}`;
+  }
+  function signinHtml() {
+    return `<form class="form" data-form="signin" novalidate>
+        <label class="f f--wide"><span>Login ID, email or phone</span><input name="id" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" maxlength="120" required autofocus></label>
+        <label class="f f--wide"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label>
+        <p class="form-msg f--wide" role="alert"></p>
+        <button class="btn f--wide" type="submit"><span>Sign in</span></button>
+        ${codesOn() ? `<div class="row f--wide"><button type="button" class="link-btn" data-act="account" data-id="reset"><span>Forgot password</span></button><button type="button" class="link-btn" data-act="account" data-id="signup"><span>Create an account</span></button></div>` : ''}
+        <button type="button" class="link-btn f--wide" data-act="account" data-id="orders"><span>Back</span></button>
+      </form>`;
+  }
+  const toLabel = () => (A.cfg && A.cfg.sms ? 'Email or phone number' : 'Email');
+  function codeSteps(kind) {
+    const st = A.su[kind] || {};
+    if (!st.to) return `<label class="f f--wide"><span>${toLabel()}</span><input name="to" ${A.cfg && A.cfg.sms ? 'inputmode="email"' : 'type="email"'} autocomplete="email" autocapitalize="off" maxlength="120" required autofocus></label>
+      <p class="hint f--wide">We send you a 6-digit code.</p>`;
+    if (!st.ticket) return `<label class="f f--wide"><span>The code we sent to ${esc(st.to)}</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required autofocus></label>
+      <p class="hint f--wide">Not there? Check your spam folder, or <button type="button" class="link-btn" data-act="restart" data-id="${kind}"><span>use another address</span></button>.</p>`;
+    return '';
+  }
+  function signupHtml() {
+    const st = A.su.signup || {};
+    const ph = store.get('pm_phone', '');
+    const more = st.ticket ? `<p class="hint f--wide">${esc(st.to)} is confirmed. Now choose how you sign in.</p>
+        <label class="f"><span>Your name</span><input name="name" maxlength="80" autocomplete="name"></label>
+        ${st.kind === 'phone' ? '' : `<label class="f"><span>Phone number (for points)</span><input name="phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" value="${esc(ph)}" placeholder="98XXXXXXXX"></label>`}
+        <label class="f"><span>Login ID (optional, any name you like)</span><input name="username" maxlength="60" autocapitalize="off" autocomplete="username"></label>
+        <label class="f"><span>Password</span><input name="password" type="password" autocomplete="new-password" required></label>
+        <label class="set-check f--wide"><input type="checkbox" name="offers"><span>Tell me about offers and new specials</span></label>` : '';
+    return `<form class="form" data-form="signup" novalidate>${codeSteps('signup')}${more}
+        <p class="form-msg f--wide" role="alert"></p>
+        <button class="btn f--wide" type="submit"><span>${!st.to ? 'Send me a code' : !st.ticket ? 'Check the code' : 'Create my account'}</span></button>
+        <button type="button" class="link-btn f--wide" data-act="account" data-id="signin"><span>I already have an account</span></button>
+      </form>`;
+  }
+  function resetHtml() {
+    const st = A.su.reset || {};
+    return `<form class="form" data-form="reset" novalidate>${codeSteps('reset')}
+        ${st.ticket ? '<label class="f f--wide"><span>New password</span><input name="password" type="password" autocomplete="new-password" required autofocus></label>' : ''}
+        <p class="form-msg f--wide" role="alert"></p>
+        <button class="btn f--wide" type="submit"><span>${!st.to ? 'Send me a code' : !st.ticket ? 'Check the code' : 'Save the new password'}</span></button>
+        <button type="button" class="link-btn f--wide" data-act="account" data-id="signin"><span>Back</span></button>
+      </form>`;
+  }
+  async function codeStep(kind, d, purpose) {
+    const st = A.su[kind] = A.su[kind] || {};
+    if (!st.to) {
+      const r = await call('POST', '/api/account/code', { to: d.to, purpose });
+      st.to = r.to; st.kind = r.by === 'sms' ? 'phone' : 'email';
+      paintAccount();
+      return false;
+    }
+    if (!st.ticket) {
+      const r = await call('POST', '/api/account/verify', { to: st.to, code: d.code, purpose });
+      st.ticket = r.ticket;
+      paintAccount();
+      return false;
+    }
+    return true;
+  }
+  async function signedInNow(r) {
+    A.me = await call('GET', `/api/account/me?device=${DEVICE}`);
+    if (!A.me.me) A.me = null;
+    A.su = {};
+    paintAccountBtn();
+    A.view = 'orders';
+    paintAccount();
+    toast(r && r.created ? 'Your account is ready.' : 'You are signed in.');
+  }
+  Object.assign(FORMS, {
+    async lookup(d) {
+      const p = normPhone(d.phone);
+      if (!p) throw new Error('Please type your phone number.');
+      store.set('pm_phone', p);
+      A.look = await call('POST', '/api/lookup', { phone: p, device: DEVICE });
+      paintAccount();
+      if (!A.look.orders.length) toast(A.look.account ? 'No orders from this device yet. Sign in to see them all.' : 'No orders with this number from this device yet.');
+    },
+    async signin(d) {
+      const r = await call('POST', '/api/account/login', { id: d.id, password: d.password });
+      await signedInNow(r);
+    },
+    async signup(d, form) {
+      if (!(await codeStep('signup', d, 'signup'))) return;
+      const st = A.su.signup;
+      const r = await call('POST', '/api/account/register', { ticket: st.ticket, name: d.name, phone: d.phone, username: d.username, password: d.password, offers: Boolean(form.elements.offers && form.elements.offers.checked) });
+      if (d.phone) store.set('pm_phone', normPhone(d.phone));
+      r.created = true;
+      await signedInNow(r);
+    },
+    async reset(d) {
+      if (!(await codeStep('reset', d, 'reset'))) return;
+      const r = await call('POST', '/api/account/reset', { ticket: A.su.reset.ticket, password: d.password });
+      await signedInNow(r);
+    },
+    async profile(d, form) {
+      const body = { name: d.name, phone: d.phone, address: d.address, username: d.username, prefs: { orderUpdates: true, offers: Boolean(form.elements.offers.checked) }, device: DEVICE };
+      if (!A.me.me.birthday && d.bmonth && d.bday) body.birthday = `${String(d.bmonth).padStart(2, '0')}-${String(d.bday).padStart(2, '0')}`;
+      A.me = await call('PATCH', '/api/account/me', body);
+      if (d.phone) store.set('pm_phone', normPhone(d.phone));
+      paintAccount();
+      toast('Saved.');
+    },
+    async password(d, form) {
+      await call('PATCH', '/api/account/me', { current: d.current, password: d.password, device: DEVICE });
+      form.reset();
+      return 'Your password is changed.';
+    },
+    async newemail(d) {
+      if (!A.su.change) {
+        const r = await call('POST', '/api/account/code', { to: d.to, purpose: 'change' });
+        A.su.change = r.to;
+        paintAccount();
+        return;
+      }
+      const v = await call('POST', '/api/account/verify', { to: A.su.change, code: d.code, purpose: 'change' });
+      A.me = await call('POST', '/api/account/email', { ticket: v.ticket, device: DEVICE });
+      A.su.change = '';
+      paintAccount();
+      toast('Your email is changed.');
+    },
+  });
+  Object.assign(ACT, {
+    account(el) {
+      const v = el.dataset.id || (signedIn() ? 'orders' : 'orders');
+      if ($('.modal--acct')) { A.view = v; paintAccount(); const m = $('.modal--acct'); if (m) m.scrollTop = 0; } else openAccount(v);
+    },
+    restart(el) { A.su[el.dataset.id] = {}; paintAccount(); },
+    async signout() { await call('POST', '/api/account/logout').catch(() => {}); A.me = null; paintAccountBtn(); A.view = 'orders'; paintAccount(); toast('Signed out.'); },
+    async deleteacct() {
+      if (!window.confirm('Delete your account? Your login, details and points are removed. This cannot be undone.')) return;
+      try { await call('DELETE', '/api/account/me'); A.me = null; paintAccountBtn(); A.view = 'orders'; paintAccount(); toast('Your account is deleted.'); } catch (e) { toast(e.message); }
+    },
+    forgetphone() { store.set('pm_phone', null); A.look = null; paintAccount(); },
+    forgetorders() { if (!window.confirm('Clear your orders from this device?')) return; store.set('pm_orders', null); A.live = {}; A.look = null; paintLivePill(); paintAccount(); },
+    again(el) {
+      const o = allOrders().find((x) => x.id === el.dataset.id);
+      if (!o) return;
+      let added = 0;
+      let missing = 0;
+      for (const l of o.lines || []) {
+        if (!l.itemId || l.whole) continue;
+        const f = findPrice(l.itemId, l.label);
+        if (!f || f.item.available === false || !(Number(f.price.price) > 0)) { missing += 1; continue; }
+        addToCart(l.itemId, l.label || '', l.qty, false, l.extraIds || []);
+        added += 1;
+      }
+      if (!added) return toast('These items are not on the menu right now.');
+      bump();
+      openLayer(cartHtml());
+      toast(missing ? `Added. ${missing} item${missing === 1 ? ' is' : 's are'} not on the menu right now.` : 'Added to your order.');
+    },
+    async tcall(el) {
+      if (!TABLE) return;
+      try {
+        const r = await call('POST', '/api/table-call', { table: TABLE, kind: el.dataset.id });
+        toast(r.again ? 'We already got that. Someone is coming.' : ({ staff: 'Someone is coming to your table.', bill: 'We are bringing your bill.', water: 'Water is on its way.' })[el.dataset.id] || 'Sent.');
+      } catch (e) { toast(e.message); }
+    },
+    copywifi(el) {
+      const t = el.dataset.id || '';
+      if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast('Wi-Fi password copied.')).catch(() => toast(t));
+      else toast(t);
+    },
+  });
+
+  /* checkout: points, and the details we already know */
+  const ptsCache = {};
+  async function checkoutPoints(force) {
+    const box = $('#co-points');
+    const form = $('form[data-form=checkout]');
+    if (!box || !form) return;
+    if (!pointsOn()) { box.innerHTML = ''; return; }
+    const phone = normPhone(form.elements.phone.value);
+    const L = LY();
+    const value = Number(L.rupeesPerPoint) || 1;
+    const lines = cartLines();
+    const sub = lines.reduce((s, l) => s + l.price * l.qty, 0);
+    const earn = Math.floor(sub * (Number(L.percent) || 0) / 100 / value);
+    let bal = 0;
+    let sure = false;
+    if (phone && signedIn() && A.me.me.phone === phone && A.me.points) { bal = A.me.points.balance; sure = A.me.canSpend; }
+    else if (phone) {
+      if (!(phone in ptsCache) || force) {
+        ptsCache[phone] = null;
+        try { const r = await call('POST', '/api/lookup', { phone, device: DEVICE }); ptsCache[phone] = r.points ? r.points.balance : 0; } catch (e) { ptsCache[phone] = 0; }
+      }
+      bal = ptsCache[phone] || 0;
+    }
+    const method = ($('input[name=method]:checked', form) || {}).value || 'later';
+    const use = Math.min(bal, Math.floor(sub / value));
+    const was = $('input[name=usePoints]', box);
+    const ticked = was ? was.checked : false;
+    const canUse = use >= (Number(L.minSpend) || 0) && use > 0 && (sure || method === 'later');
+    box.innerHTML = `${canUse ? `<label class="pts-use"><input type="checkbox" name="usePoints" value="${use}"${ticked ? ' checked' : ''}><span>${ICON.gift}<span>Use ${use} of my ${bal} points <b>${rs(use * value)} off</b>${sure ? '' : '<small>Staff take them off at the counter.</small>'}</span></span></label>`
+      : bal > 0 ? `<p class="hint">${ICON.gift} This number has ${bal} points.${use < (Number(L.minSpend) || 0) ? ` You can use them from ${Number(L.minSpend) || 0} points.` : ' To use them with Pay now, sign in first, or choose Pay later.'}</p>` : ''}
+      ${earn > 0 ? `<p class="hint pts-earn">${phone ? `This order gives ${earn} points to ${esc(phone)} when it is done.` : `Add your phone number to get ${earn} points for this order.`}</p>` : ''}`;
+    S.coPts = canUse && sure && ticked ? use * value : 0;
+    const type = ($('input[name=type]:checked', form) || {}).value;
+    $('#co-sum').innerHTML = sumHtml(type);
+  }
+  function fillKnown() {
+    const form = $('form[data-form=checkout]');
+    if (!form) return;
+    const me = signedIn() ? A.me.me : null;
+    const set = (k, v) => { const el = form.elements[k]; if (el && v && !el.value) el.value = v; };
+    set('phone', (me && me.phone) || store.get('pm_phone', ''));
+    set('name', me && me.name);
+    set('address', me && me.address);
+    S.coPts = 0;
+    checkoutPoints();
+  }
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'co-phone') { clearTimeout(checkoutPoints.t); checkoutPoints.t = setTimeout(() => checkoutPoints(), 600); }
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.name === 'usePoints' || (e.target.closest && e.target.closest('form[data-form=checkout]') && e.target.name === 'method')) checkoutPoints();
+  });
+
+  /* "get the app" card under the map */
+  function appCardHtml(c) {
+    const a = c.appCard || {};
+    const ok = (u) => (/^https:\/\//.test(u || '') ? u : '');
+    const ios = ok(a.appStore);
+    const play = ok(a.googlePlay);
+    const apk = ok(a.apk);
+    if (a.show === false || !(ios || play || apk)) return '';
+    const badge = (url, img, label, icon) => (url ? `<a class="store-badge" href="${esc(url)}" target="_blank" rel="noopener">${safeUrl(img) ? `<img src="${esc(safeUrl(img))}" alt="${esc(label)}">` : `${icon}<span>${esc(label)}</span>`}</a>` : '');
+    return `<div class="get-app rv" id="get-app">
+        <h3${ed('appCard.title')}>${esc(a.title || 'Get the app')}</h3>
+        ${a.text ? `<p class="hint"${ed('appCard.text')}>${esc(a.text)}</p>` : ''}
+        <div class="get-app-card"><img class="get-app-qr" src="/api/app-qr.svg" alt="QR code for the ${esc(c.brand.name)} app" width="120" height="120" loading="lazy"><p${ed('appCard.qrText')}>${esc(a.qrText || '')}</p></div>
+        <div class="store-badges">${badge(ios, a.appStoreBadge, 'App Store', '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M16.400 12.600c0-2.300 1.900-3.400 2-3.500-1.100-1.600-2.800-1.800-3.400-1.800-1.400-.1-2.800.9-3.500.9s-1.800-.9-3-.8c-1.500 0-3 .9-3.800 2.300-1.600 2.800-.4 7 1.200 9.200.8 1.100 1.700 2.400 2.900 2.300 1.200 0 1.600-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.800-2.200.9-1.300 1.300-2.500 1.300-2.600 0 0-2.500-1-2.500-3.800zM14.200 5.800c.6-.8 1.100-1.900 1-3-1 0-2.100.7-2.800 1.500-.6.700-1.200 1.800-1 2.900 1 .1 2.100-.6 2.800-1.400z"/></svg>')}
+          ${badge(play, a.googlePlayBadge, 'Google Play', '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M4 2.800v18.400c0 .4.400.6.700.4L20.500 12.600c.3-.2.3-.7 0-.9L4.700 2.400C4.400 2.200 4 2.400 4 2.800z"/></svg>')}
+          ${!play && apk ? badge(apk, '', 'Android app (download)', ICON.download) : ''}</div>
+      </div>`;
+  }
+
+  /* table guests: Call staff, Bring the bill, Water please, and the Wi-Fi */
+  function tableHelpHtml(c) {
+    if (!TABLE || PREVIEW) return '';
+    const t = c.tableHelp || {};
+    const btns = FEATURE('tableButtons') && t.show !== false ? `<div class="tbl-btns">
+        <button type="button" data-act="tcall" data-id="staff">${ICON.bell}<span>Call staff</span></button>
+        <button type="button" data-act="tcall" data-id="bill">${ICON.receipt}<span>Bring the bill</span></button>
+        <button type="button" data-act="tcall" data-id="water">${ICON.drop}<span>Water please</span></button></div>` : '';
+    const wifi = t.wifiName ? `<p class="tbl-wifi">${ICON.wifi}<span>Wi-Fi <b>${esc(t.wifiName)}</b>${t.wifiPassword ? ` · password <b>${esc(t.wifiPassword)}</b>` : ''}</span>${t.wifiPassword ? `<button type="button" data-act="copywifi" data-id="${esc(t.wifiPassword)}">Copy</button>` : ''}</p>` : '';
+    return btns || wifi ? `<div class="tbl-help">${btns}${wifi}</div>` : '';
+  }
+
+  /* menu items sold out today (staff tap it on the counter screen; back the next morning) */
+  function markSoldOut(c) {
+    const out = new Set(c.soldOut || []);
+    if (!out.size) return;
+    for (const g of c.menu.categories || []) for (const it of g.items || []) if (out.has(it.id)) { it.available = false; it.soldOut = true; }
+  }
+
   /* ---------- start ---------- */
   async function start() {
     if (ADMIN) {
@@ -1844,8 +2361,10 @@
     try {
       const [c, r] = await Promise.all([fetch('/api/content').then((x) => x.json()), fetch('/api/reviews').then((x) => x.json()).catch(() => [])]);
       S.c = c;
+      markSoldOut(S.c);
       S.reviews = Array.isArray(r) ? r : [];
       render();
+      if (!PREVIEW) { loadAccount().then(() => { if (location.hash === '#account') openAccount('orders'); }); startLive(); }
       const q = new URLSearchParams(location.search);
       if (/^#tab-/.test(location.hash)) {
         const id = location.hash.slice(5);
