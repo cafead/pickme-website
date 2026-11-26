@@ -510,14 +510,13 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/counter')) res.set('X-Robots-Tag', 'noindex, nofollow');
   next();
 });
-// The old Railway address forwards visitors to the cafe's own domain (same page), so the address bar
-// shows pickmecafe.com.np. /api is left alone: older test copies of the Android app still call it there.
+// The old Railway address forwards everything to the cafe's own domain (same path), so the address bar
+// shows pickmecafe.com.np. 308 for POST/PUT etc. keeps the method and body.
 const PUBLIC_HOST = String(process.env.PUBLIC_HOST || 'pickmecafe.com.np').trim().toLowerCase();
 app.use((req, res, next) => {
   const host = String(req.get('host') || '').toLowerCase().split(':')[0];
-  if (!PUBLIC_HOST || !host.endsWith('.up.railway.app') || req.path.startsWith('/api/')) return next();
-  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  res.redirect(301, `https://${PUBLIC_HOST}${req.originalUrl}`);
+  if (!PUBLIC_HOST || !host.endsWith('.up.railway.app')) return next();
+  res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, `https://${PUBLIC_HOST}${req.originalUrl}`);
 });
 const rawImage = express.raw({ type: () => true, limit: '8mb' });
 const json = express.json({ limit: '3mb' });

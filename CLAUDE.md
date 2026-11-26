@@ -9,7 +9,7 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 
 ## Hosting
 - Railway service `pickmeclaude` deploys this repository's `main` branch. Its data lives on a Railway volume mounted at `/data` (the server finds it through `RAILWAY_VOLUME_MOUNT_PATH`). `ADMIN_PASSWORD` is a Railway variable. Railway variable changes stay pending until Deploy is pressed.
-- The old address `pickmeclaude-production.up.railway.app` (any `*.up.railway.app` host) answers page and file requests with a 301 to `https://pickmecafe.com.np` + the same path (`PUBLIC_HOST`, default pickmecafe.com.np). `/api/` is not redirected, because older Android test APKs still call the API there.
+- The old address `pickmeclaude-production.up.railway.app` (any `*.up.railway.app` host) forwards every request to `https://pickmecafe.com.np` + the same path (301 for GET/HEAD, 308 otherwise; `PUBLIC_HOST`, default pickmecafe.com.np). The app (`SERVER` in app/src/api.js) uses pickmecafe.com.np since v10; old APKs that used the Railway address are not supported (owner's decision).
 - Never commit backups with orders or customer phone numbers: this repository is public.
 
 ## Standing decisions
