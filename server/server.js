@@ -558,6 +558,16 @@ app.get(['/counter', '/counter/', '/counter.html'], (req, res) => { res.set('Cac
 // The delivery driver's page (version 12): his deliveries, steps, and live location while the page is open.
 const DRIVER_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'driver.html'), 'utf8'));
 app.get(['/driver', '/driver/', '/driver.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.set('X-Robots-Tag', 'noindex, nofollow'); res.type('html').send(DRIVER_PAGE); });
+// Map pages shown inside the phone app (version 12): choose the delivery spot, and follow the driver.
+const MAP_PAGES = { pick: stamp(fs.readFileSync(path.join(ROOT, 'public', 'm-pick.html'), 'utf8')), track: stamp(fs.readFileSync(path.join(ROOT, 'public', 'm-track.html'), 'utf8')) };
+app.get('/m/:page', (req, res) => {
+  const html = MAP_PAGES[req.params.page];
+  if (!html) return res.sendStatus(404);
+  res.set('Cache-Control', 'no-cache');
+  res.set('X-Robots-Tag', 'noindex');
+  // The app's web preview shows these in a frame on the same site.
+  res.type('html').send(html);
+});
 const attr = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const siteBase = (req) => `${req.protocol}://${req.get('host')}`;
 const absUrl = (base, u) => (/^https?:\/\//i.test(u || '') ? u : /^\/(?!\/)/.test(u || '') ? base + u : '');

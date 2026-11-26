@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<title>Your delivery</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<style>
+  html, body, #map { margin: 0; height: 100%; background: #EFE9DD; font: 14px -apple-system, Roboto, Arial, sans-serif; }
+  .pin { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 2px solid #A8843A; font-size: 18px; box-shadow: 0 6px 14px -6px rgba(0,0,0,.5); }
+  .pin.bike { border-color: #1D5FA8; font-size: 20px; }
+  #note { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 600; padding: 8px 12px; border-radius: 12px; background: rgba(255,253,249,.95); color: #2B2118; box-shadow: 0 6px 18px -10px rgba(0,0,0,.5); }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="note">Loading…</div>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script>
+// Used inside the Pick Me Cafe app: the delivery's driver and drop-off on a map, refreshed every 8 seconds.
+(function () {
+  var q = new URLSearchParams(location.search);
+  var id = q.get('id') || '';
+  var key = q.get('key') || '';
+  var map = L.map('map', { zoomControl: false }).setView([27.4287, 85.0322], 14);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+  var icon = function (cls, t) { return L.divIcon({ className: '', html: '<div class="pin ' + cls + '">' + t + '</div>', iconSize: [36, 36], iconAnchor: [18, 18] }); };
+  var dest = null, bike = null, fitted = false;
+  var TEXT = { waiting: 'Waiting for a driver', assigned: 'A driver has your order', picked: 'Picked up from the cafe', onway: 'On the way to you', delivered: 'Delivered' };
+  function load() {
+    fetch('/api/orders/' + encodeURIComponent(id) + '/status?key=' + encodeURIComponent(key)).then(function (r) { return r.json(); }).then(function (s) {
+      var d = s.delivery;
+      if (!d) { document.getElementById('note').textContent = 'This order is not a delivery.'; return; }
+      if (d.destination && !dest) dest = L.marker([d.destination.lat, d.destination.lng], { icon: icon('', '🏠') }).addTo(map);
+      if (d.where) { if (!bike) bike = L.marker([d.where.lat, d.where.lng], { icon: icon('bike', '🛵') }).addTo(map); else bike.setLatLng([d.where.lat, d.where.lng]); }
+      var pts = [d.where, d.destination].filter(Boolean).map(function (p) { return [p.lat, p.lng]; });
+      if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 17 }); else if (pts.length && !fitted) map.setView(pts[0], 16);
+      fitted = true;
+      var ago = d.where ? Math.max(0, Math.round((Date.now() - Date.parse(d.where.at)) / 1000)) : null;
+      document.getElementById('note').textContent = (TEXT[d.status] || '') + (d.driver ? ' · ' + d.driver.name : '') + (ago != null ? ' · updated ' + ago + ' s ago' : '');
+    }).catch(function () { document.getElementById('note').textContent = 'No internet. Trying again…'; });
+  }
+  load();
+  setInterval(load, 8000);
+})();
+</script>
+</body>
+</html>
