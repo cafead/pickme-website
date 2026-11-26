@@ -2350,10 +2350,10 @@
       document.documentElement.classList.add('is-admin');
       const css = document.createElement('link');
       css.rel = 'stylesheet';
-      css.href = '/css/admin.css';
+      css.href = '/css/admin.css?v=' + (window.PM_V || Date.now());
       document.head.appendChild(css);
       const js = document.createElement('script');
-      js.src = '/js/admin.js';
+      js.src = '/js/admin.js?v=' + (window.PM_V || Date.now());
       document.body.appendChild(js);
       return;
     }

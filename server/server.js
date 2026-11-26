@@ -528,7 +528,16 @@ const json = express.json({ limit: '3mb' });
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 /* ---------- pages: what Google and link previews (WhatsApp, Facebook) read ---------- */
-const PAGE = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+// Cloudflare tells browsers to keep .js and .css files for 4 hours, so every page asks for them with this
+// version (?v=...), which changes with each deploy. New versions are then loaded at once.
+const BUILD = String(process.env.RAILWAY_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
+const stamp = (html) => html
+  .replace(/(src|href)="(\/(?:js|css|vendor)\/[^"?]+\.(?:js|css))"/g, `$1="$2?v=${BUILD}"`)
+  .replace('</head>', `<script>window.PM_V = '${BUILD}';</script>\n</head>`);
+const PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8'));
+const PRINT_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'print-menu.html'), 'utf8'));
+const COUNTER_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'counter.html'), 'utf8'));
+app.get(['/counter', '/counter/', '/counter.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(COUNTER_PAGE); });
 const attr = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const siteBase = (req) => `${req.protocol}://${req.get('host')}`;
 const absUrl = (base, u) => (/^https?:\/\//i.test(u || '') ? u : /^\/(?!\/)/.test(u || '') ? base + u : '');
@@ -656,7 +665,7 @@ app.get(['/admin', '/admin/'], (req, res) => sendPage(res, renderPage(req, { noi
 app.get(['/admin/print-menu', '/admin/print-menu/'], (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.set('X-Robots-Tag', 'noindex, nofollow');
-  res.sendFile(path.join(ROOT, 'public', 'print-menu.html'));
+  res.type('html').send(PRINT_PAGE);
 });
 // Privacy policy, for the website and the phone app (the App Store asks for one). Names and numbers come from Cafe details.
 app.get(['/privacy', '/privacy/'], (req, res) => {
