@@ -1367,7 +1367,8 @@
     const notice = Math.max(Number(c.cake.noticeHours) || 0, ...lines.map((l) => l.notice || 0));
     const wantsPhoto = lines.some((l) => l.photo);
     const slot = pre.date ? { date: pre.date, time: pre.time } : nextSlot(c, hasWhole ? notice : 0.5);
-    const methods = ['esewa', 'fonepay'].filter((m) => c.payment[m] && c.payment[m].enabled !== false);
+    // A pay-now choice shows only when it is switched on AND its QR picture is uploaded (27 Nov 2026).
+    const methods = ['esewa', 'fonepay'].filter((m) => c.payment[m] && c.payment[m].enabled !== false && safeUrl(c.payment[m].qr));
     const phoneNeeded = type !== 'dinein';
     return `<div class="shade" data-act="close"></div>
       <div class="modal" role="dialog" aria-label="Your order">
