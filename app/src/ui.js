@@ -66,10 +66,10 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType, m
 }
 
 // A sheet that slides up from the bottom.
-export function Sheet({ open, onClose, title, children, footer }) {
+export function Sheet({ open, onClose, onBack, title, children, footer }) {
   const inset = useSafeAreaInsets();
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onBack || onClose} statusBarTranslucent>
       <View style={s.shade}>
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.sheet, { paddingBottom: Math.max(inset.bottom, 12) }]}>

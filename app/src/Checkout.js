@@ -141,7 +141,7 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
   if (step === 'cart') {
     return (
       <Sheet open={open} onClose={close} title="Your order"
-        footer={cart.length ? <Button title={`Continue · ${rs(subtotal)}`} onPress={() => setStep('details')} /> : null}>
+        footer={cart.length ? <View style={{ gap: 6 }}><Small style={{ textAlign: 'center' }}>Delivery (inside Hetauda) adds {rs(pay.deliveryFee)}.</Small><Button title={`Continue · ${rs(subtotal)}`} onPress={() => setStep('details')} /></View> : null}>
         {!cart.length ? <Body style={{ paddingVertical: 30, textAlign: 'center' }}>Your order is empty. Add something from the menu.</Body> : null}
         {cart.map((l) => (
           <View key={l.uid} style={s.line}>
@@ -163,9 +163,16 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
   }
 
   return (
-    <Sheet open={open} onClose={close} title="Order details"
+    <Sheet open={open} onClose={close} onBack={() => setStep('cart')} title="Order details"
       footer={<View style={{ gap: 8 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Small>Total{fee ? ` (with delivery ${rs(fee)})` : ''}{ptsOff ? ` (points ${rs(ptsOff)} off)` : ''}</Small><Text style={s.total}>{rs(total)}</Text></View>
+        {fee || ptsOff ? (
+          <View style={{ gap: 2 }}>
+            <View style={s.sumRow}><Small>Subtotal</Small><Small>{rs(subtotal)}</Small></View>
+            {fee ? <View style={s.sumRow}><Small>Delivery charge</Small><Small>+{rs(fee)}</Small></View> : null}
+            {ptsOff ? <View style={s.sumRow}><Small>Points</Small><Small>−{rs(ptsOff)}</Small></View> : null}
+          </View>
+        ) : null}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Small>Total to pay</Small><Text style={s.total}>{rs(total)}</Text></View>
         <Button title={busy ? 'Sending…' : 'Place order'} onPress={send} disabled={busy} />
       </View>}>
       <Pressable onPress={() => setStep('cart')}><Text style={s.back}>‹ Back to your order</Text></Pressable>
@@ -174,7 +181,7 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
       <View style={s.wrap}>
         {[['dinein', 'At the cafe'], ['pickup', 'Pickup'], ['delivery', 'Delivery']].map(([k, t]) => <Chip key={k} text={t} on={type === k} onPress={() => setType(k)} />)}
       </View>
-      {type === 'delivery' ? <Small style={{ marginTop: 6 }}>{pay.deliveryNote || 'Delivery inside Hetauda only.'} Delivery {rs(pay.deliveryFee)}.</Small> : null}
+      {type === 'delivery' ? <View style={{ marginTop: 8 }}><Note>🛵 Delivery charge {rs(pay.deliveryFee)}, added to your total. {pay.deliveryNote || 'Delivery inside Hetauda only.'}</Note></View> : null}
       {type === 'delivery' && pinOn ? (
         <View style={{ marginTop: 10 }}>
           {loc ? <Note kind="ok">📍 Delivery spot set on the map · {loc.km} km from the cafe</Note> : null}
@@ -299,4 +306,5 @@ const s = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   back: { color: C.goldDark, fontWeight: '600', marginBottom: 4 },
   total: { fontFamily: SERIF, fontSize: 22, color: C.brown },
+  sumRow: { flexDirection: 'row', justifyContent: 'space-between' },
 });

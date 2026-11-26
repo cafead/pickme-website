@@ -1,7 +1,7 @@
 // The "Me" tab: an optional customer account (orders on every phone, points, settings, delete account), points
 // by phone number for guests, and the login for cafe staff and the delivery driver.
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Platform, Alert, Linking } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Platform, Alert, Linking, BackHandler } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
@@ -50,6 +50,15 @@ function SignedOut() {
   const viaSms = Boolean(cfg && cfg.sms);
   const toLabel = viaSms ? 'Email or phone number' : 'Email';
   const reset = (m) => { setMode(m); setStep(1); setErr(''); setMsg(''); setCode(''); setTicket(''); setPw(''); };
+  // Android Back: one step back in Create account / Forgot password, then back to Sign in.
+  React.useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (mode !== 'in' && step > 1) { setStep(step - 1); setErr(''); return true; }
+      if (mode !== 'in') { reset('in'); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [mode, step]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = async (fn) => { setErr(''); setMsg(''); setBusy(true); try { await fn(); } catch (e) { setErr(e.message); } setBusy(false); };
   const done = async (r) => { await askPermission(); await signedIn(r); };
 
