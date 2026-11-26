@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<title>Choose the spot</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<style>
+  html, body, #map { margin: 0; height: 100%; background: #EFE9DD; }
+  /* The pin stays in the middle; the map moves under it. */
+  .centre { position: absolute; left: 50%; top: 50%; z-index: 500; width: 34px; height: 34px; margin: -34px 0 0 -17px; pointer-events: none; }
+  .centre span { display: block; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #A8843A; box-shadow: 0 6px 14px -6px rgba(0,0,0,.55); }
+  .centre span::after { content: ""; position: absolute; left: 11px; top: 11px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .cafe { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 2px solid #A8843A; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="centre"><span></span></div>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script>
+// Used inside the Pick Me Cafe app (WebView) and its web preview (iframe). Tells the app where the pin is.
+(function () {
+  var q = new URLSearchParams(location.search);
+  var num = function (k, d) { var n = parseFloat(q.get(k)); return isFinite(n) ? n : d; };
+  var cafe = { lat: num('clat', 27.4287), lng: num('clng', 85.0322) };
+  var radius = num('r', 9);
+  var start = { lat: num('lat', cafe.lat), lng: num('lng', cafe.lng) };
+  var map = L.map('map', { zoomControl: false }).setView([start.lat, start.lng], q.get('lat') ? 17 : 14);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+  L.circle([cafe.lat, cafe.lng], { radius: radius * 1000, color: '#A8843A', weight: 1.5, fillOpacity: 0.04 }).addTo(map);
+  L.marker([cafe.lat, cafe.lng], { icon: L.divIcon({ className: '', html: '<div class="cafe">☕</div>', iconSize: [30, 30], iconAnchor: [15, 15] }), interactive: false }).addTo(map);
+  function km(a, b) { var r = function (d) { return d * Math.PI / 180; }; var h = Math.pow(Math.sin(r(b.lat - a.lat) / 2), 2) + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.pow(Math.sin(r(b.lng - a.lng) / 2), 2); return 6371 * 2 * Math.asin(Math.sqrt(h)); }
+  function send(msg) { var t = JSON.stringify(msg); if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(t); else if (window.parent !== window) window.parent.postMessage(t, '*'); }
+  function tell() { var c = map.getCenter(); var d = km({ lat: c.lat, lng: c.lng }, cafe); send({ type: 'pin', lat: Math.round(c.lat * 1e6) / 1e6, lng: Math.round(c.lng * 1e6) / 1e6, km: Math.round(d * 10) / 10, out: radius > 0 && d > radius }); }
+  map.on('moveend', tell);
+  map.on('click', function (e) { map.panTo(e.latlng); });
+  // The app sends {type: 'goto', lat, lng} after it finds the phone's location.
+  function onMsg(e) { try { var m = JSON.parse(e.data); if (m && m.type === 'goto') map.setView([m.lat, m.lng], 17); } catch (err) { /* not for us */ } }
+  window.addEventListener('message', onMsg);
+  document.addEventListener('message', onMsg);
+  window.pmGoto = function (lat, lng) { map.setView([lat, lng], 17); };
+  tell();
+})();
+</script>
+</body>
+</html>
