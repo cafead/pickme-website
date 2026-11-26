@@ -429,6 +429,27 @@ module.exports = {
     note: '',
   },
   // Sizes set by dragging in admin ("Edit layout"), and photo positions and zoom.
+  // Version 11: switches for the new parts, so any of them can be turned off from admin without a new version.
+  features: { accounts: true, points: true, tableButtons: true, soldOut: true, liveStatus: true, orderAgain: true },
+  // Loyalty points: a share of each finished order comes back as points (1 point = Rs. 1 by default).
+  loyalty: {
+    percent: 5, rupeesPerPoint: 1, minSpend: 50, expiryMonths: 12, birthdayPoints: 100, birthdayDays: 7,
+    title: 'Pick Me points',
+    text: 'Every order gives you 5% back as points. 1 point = Rs. 1 off a later order.',
+  },
+  // Customer accounts are optional: nobody needs one to order.
+  accounts: {
+    title: 'Your Pick Me account',
+    text: 'Optional. Keep your orders and points on any phone, and order faster next time.',
+  },
+  // Buttons for guests who scanned the QR on their table.
+  tableHelp: { show: true, wifiName: '', wifiPassword: '' },
+  // "Get the app" card under the map.
+  appCard: {
+    show: true, title: 'Get the app', text: 'Order, follow your order and collect points from your phone.',
+    qrText: 'Scan with your phone to get the Pick Me Cafe app',
+    appStore: 'https://apps.apple.com/app/id6838835257', googlePlay: '', apk: '',
+  },
   sizes: { map: { h: 240 } },
   crops: {},
   // The printable paper menu (Admin > Print menu). One A4 page. Items and prices come from the

@@ -237,6 +237,8 @@ const reviews = new Store('reviews.json', []);
 const messages = new Store('messages.json', []);
 const auth = new Store('auth.json', {});
 const trash = new Store('trash.json', []);
+// Version 11: accounts, points, table calls, sold out, sales, backups (server/customers.js, mounted below).
+let CUST = null;
 
 /* ---------- activity log ---------- */
 function audit(by, action, ref) {
@@ -479,6 +481,8 @@ function orderText(o) {
     '',
     ...o.lines.map((l) => `${l.qty} x ${lineName(l)} = Rs. ${l.qty * l.price}`),
     o.deliveryFee ? `Delivery = Rs. ${o.deliveryFee}` : null,
+    o.points && o.points.used ? `Points used = -Rs. ${o.points.value || o.points.used}` : null,
+    o.points && o.points.asked && !o.points.used ? `Wants to use ${o.points.asked} points (staff to approve)` : null,
     `Total: Rs. ${o.total}`,
     o.cakeMessage ? `On the cake: ${o.cakeMessage}` : null,
     o.occasion ? `Occasion: ${o.occasion}` : null,
@@ -715,7 +719,7 @@ app.get('/manifest.webmanifest', (req, res) => {
 });
 
 /* public: content and reviews */
-app.get('/api/content', (req, res) => res.json(content.get()));
+app.get('/api/content', (req, res) => res.json(Object.assign({}, content.get(), { soldOut: CUST ? CUST.soldOutIds() : [] })));
 app.get('/api/reviews', (req, res) => {
   res.json(reviews.get().filter((r) => r.approved).map(({ id, name, rating, text, favorite, source, createdAt }) => ({ id, name, rating, text, favorite, source, createdAt })));
 });
@@ -761,7 +765,7 @@ function findPrice(itemId, label) {
       if (it.id !== itemId) continue;
       const p = (it.prices || []).find((x) => (x.label || '') === (label || ''));
       if (!p) return null;
-      const off = g.hidden || it.hidden || it.available === false;
+      const off = g.hidden || it.hidden || it.available === false || (CUST && CUST.soldOutIds().includes(it.id));
       // An item (or its group) can be served only between two times, for example a morning combo.
       const hours = it.timeFrom || it.timeTo ? { from: it.timeFrom, to: it.timeTo } : (g.timeFrom || g.timeTo ? { from: g.timeFrom, to: g.timeTo } : null);
       return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p, group: g.id, hours };
@@ -918,10 +922,14 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
     notes: str(b.notes, 500),
     payment: { method, proof, txn },
   };
+  // Account and points (server/customers.js): links the order to a signed-in customer and takes points off.
+  const pointsError = await CUST.onPlace(order, b, req);
+  if (pointsError) return bad(res, pointsError);
   await orders.set([order, ...orders.get()]);
+  await CUST.afterPlace(order);
   audit('public', 'order-placed', order.id);
   notify(`New order ${order.id}: Rs. ${order.total}`, orderText(order));
-  res.json({ ok: true, id: order.id, key: order.key, total: order.total, text: orderText(order) });
+  res.json({ ok: true, id: order.id, key: order.key, total: order.total, points: order.points || null, text: orderText(order) });
 });
 
 /* public: order and booking status, for the phone app (needs the private key given when it was placed) */
@@ -933,7 +941,8 @@ app.get('/api/orders/:id/status', limit('status', 600, 15 * 60e3), (req, res) =>
   const last = (o.log || [])[(o.log || []).length - 1];
   res.json({
     id: o.id, status: o.status, paid: Boolean(o.paid), type: o.type, total: o.total, createdAt: o.createdAt,
-    updatedAt: last ? last.at : o.createdAt, schedule: o.schedule, hasWhole: Boolean(o.hasWhole),
+    updatedAt: last ? last.at : o.createdAt, schedule: o.schedule, hasWhole: Boolean(o.hasWhole), tableNo: o.tableNo || '',
+    points: o.points ? { used: o.points.used || 0, asked: o.points.asked || 0, approved: o.points.approved } : null, pointsEarned: o.pointsEarned || 0,
     lines: (o.lines || []).map((l) => ({ name: l.name, label: l.label, qty: l.qty, extras: l.extras || [] })),
   });
 });
@@ -1033,6 +1042,7 @@ app.put('/api/admin/content', admin, json, async (req, res) => {
     return res.status(409).json({ error: 'The website was saved from another device after you opened this editor.', rev: current._rev });
   }
   const next = fillDefaults(c, freshDefaults());
+  delete next.soldOut;
   next.fixes = Object.assign({}, current.fixes, next.fixes);
   tidyEvents(next);
   ensurePrintMenu(next);
@@ -1233,6 +1243,7 @@ function listRoutes(base, name, store, fields, guard) {
     const list = store.get();
     const row = list.find((x) => x.id === req.params.id);
     if (!row) return res.sendStatus(404);
+    const before = row.status;
     const done = [];
     for (const [k, check] of Object.entries(fields)) {
       if (req.body[k] !== undefined && check(req.body[k]) && row[k] !== req.body[k]) { row[k] = req.body[k]; done.push(`${k}=${req.body[k]}`); }
@@ -1247,6 +1258,7 @@ function listRoutes(base, name, store, fields, guard) {
         row.log.push({ at: row.updatedAt, by: who(req), what });
       }
     }
+    if (name === 'orders' && row.status !== before) await CUST.onStatus(row, before, who(req));
     await store.set(list);
     audit(who(req), `${name}-updated ${done.join(' ')}`, row.id);
     res.json(row);
@@ -1308,6 +1320,10 @@ app.post('/api/admin/reviews', admin, json, async (req, res) => {
 const BACKUP_KIND = 'pick-me-backup';
 const FILE_NAME = /^[a-f0-9]{16,40}\.(png|jpe?g|webp|gif|svg)$/;
 const meta = new Store('meta.json', {});
+CUST = require('./customers')({
+  app, Store, json, str, bad, limit, content, orders, bookings, reviews, messages, audit, desk, admin, who, meta, AdmZip, notify,
+  sign: (body) => sign(body), makeHash, checkHash, NP_OFFSET, DATA_DIR,
+});
 function makeBackup(full) {
   const zip = new AdmZip();
   zip.addFile('manifest.json', Buffer.from(JSON.stringify({ kind: BACKUP_KIND, format: 1, createdAt: new Date().toISOString(), full: Boolean(full), cafe: content.get().brand.name }, null, 1)));
@@ -1316,6 +1332,7 @@ function makeBackup(full) {
   if (full) {
     for (const [name, store] of Object.entries({ orders, bookings, reviews, messages })) zip.addFile(`${name}.json`, Buffer.from(JSON.stringify(store.get(), null, 1)));
     for (const f of fs.readdirSync(PROOFS)) if (PROOF_NAME.test(f)) zip.addLocalFile(path.join(PROOFS, f), 'proofs/');
+    CUST.addToBackup(zip);
   }
   return zip.toBuffer();
 }
@@ -1351,8 +1368,10 @@ async function restoreBackup(buf, by) {
       out[name] = add.length;
     }
   }
+  Object.assign(out, await CUST.restoreFromBackup((n) => { try { return read(n); } catch { return null; } }));
   const saved = read('content.json');
   if (saved && saved.brand && saved.menu) {
+    delete saved.soldOut;
     const current = content.get();
     if (!listHistory().length) await addHistory({ at: new Date().toISOString(), by, note: 'Website before the backup was restored', changes: [] }, current);
     const next = fillDefaults(saved, freshDefaults());
