@@ -1,0 +1,62 @@
+# Builds "Pick Me Test" (the app version waiting for store approval) from the app-1.0.2 branch.
+# It is a separate app that installs next to the real one. Nothing goes on the Releases page: the APK is
+# kept with the run (Actions > this run > Artifacts) for 14 days.
+name: Android test APK
+
+on:
+  push:
+    branches: [app-1.0.2]
+    paths: ['app/**', '.github/workflows/android-test-apk.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: android-test-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      APP_VARIANT: test
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install
+        run: npm ci
+
+      - name: Make the Android project
+        run: npx expo prebuild --platform android --no-install --clean
+        env:
+          EXPO_NO_TELEMETRY: 1
+
+      - name: Build the APK
+        working-directory: app/android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Name the file
+        run: cp android/app/build/outputs/apk/release/app-release.apk ../PickMeTest.apk
+
+      - name: Keep the APK with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: PickMeTest-apk-${{ github.run_number }}
+          path: PickMeTest.apk
+          retention-days: 14

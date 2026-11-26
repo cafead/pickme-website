@@ -92,7 +92,7 @@ function SignedOut() {
       {mode === 'new' && step === 3 ? (
         <>
           <Field label="Login ID (optional)" value={user} onChangeText={setUser} autoCapitalize="none" maxLength={60} hint="Any name you like. You can also sign in with your email." />
-          <Field label="Password" value={pw} onChangeText={setPw} secure autoComplete="new-password" textContentType="newPassword" maxLength={200} />
+          <Field label="Password" value={pw} onChangeText={setPw} secure autoComplete="new-password" textContentType="newPassword" maxLength={200} hint="At least 4 characters." />
           <Field label="Your name (optional)" value={name} onChangeText={setName} maxLength={80} />
           <Field label="Phone (for your points)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={20} placeholder="98XXXXXXXX" />
           <Button title={busy ? 'Creating…' : 'Create my account'} onPress={create} disabled={busy} />
@@ -100,7 +100,7 @@ function SignedOut() {
       ) : null}
       {mode === 'reset' && step === 3 ? (
         <>
-          <Field label="New password" value={pw} onChangeText={setPw} secure autoComplete="new-password" textContentType="newPassword" maxLength={200} />
+          <Field label="New password" value={pw} onChangeText={setPw} secure autoComplete="new-password" textContentType="newPassword" maxLength={200} hint="At least 4 characters." />
           <Button title={busy ? 'Saving…' : 'Save and sign in'} onPress={newPw} disabled={busy} />
         </>
       ) : null}
@@ -235,7 +235,7 @@ function SignedIn({ refresh }) {
       <Card style={{ marginBottom: 14 }}>
         <Text style={s.h}>{me.hasPassword ? 'Change password' : 'Set a password'}</Text>
         {me.hasPassword ? <Field label="Current password" value={cur} onChangeText={setCur} secure autoComplete="password" maxLength={200} /> : null}
-        <Field label="New password" value={pw} onChangeText={setPw} secure autoComplete="new-password" textContentType="newPassword" maxLength={200} />
+        <Field label="New password" value={pw} onChangeText={setPw} secure autoComplete="new-password" textContentType="newPassword" maxLength={200} hint="At least 4 characters." />
         <Button title={busy === 'pw' ? 'Saving…' : 'Save password'} onPress={savePw} disabled={Boolean(busy)} />
       </Card>
 
