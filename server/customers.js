@@ -168,9 +168,13 @@ module.exports = function customers(x) {
     try { const p = JSON.parse(Buffer.from(body, 'base64url').toString()); return p.exp > Date.now() && p.purpose === purpose ? p : null; } catch { return null; }
   }
 
-  const googleIds = () => String(process.env.GOOGLE_CLIENT_ID || '').split(',').map((v) => v.trim()).filter(Boolean);
+  // GOOGLE_CLIENT_ID = the website's client (more may follow, comma-separated); the phone app's own clients are
+  // GOOGLE_IOS_CLIENT_ID and GOOGLE_ANDROID_CLIENT_ID. Sign-in tokens from any of them are accepted.
+  const googleWeb = () => String(process.env.GOOGLE_CLIENT_ID || '').split(',').map((v) => v.trim()).filter(Boolean);
+  const googleApp = () => ({ ios: String(process.env.GOOGLE_IOS_CLIENT_ID || '').trim(), android: String(process.env.GOOGLE_ANDROID_CLIENT_ID || '').trim() });
+  const googleIds = () => [...googleWeb(), googleApp().ios, googleApp().android].filter(Boolean);
   app.get('/api/account/config', (req, res) => {
-    res.json({ on: feature('accounts'), email: emailOn(), sms: smsOn(), points: pointsOn(), loyalty: L(), google: feature('accounts') && feature('googleSignIn') && googleIds().length ? googleIds()[0] : '' });
+    res.json({ on: feature('accounts'), email: emailOn(), sms: smsOn(), points: pointsOn(), loyalty: L(), google: feature('accounts') && feature('googleSignIn') && googleWeb().length ? googleWeb()[0] : '', googleApp: feature('accounts') && feature('googleSignIn') && googleWeb().length ? { web: googleWeb()[0], ...googleApp() } : null, apple: feature('accounts') });
   });
 
   /* ---------- Sign in with Google (website now, app later) and Sign in with Apple (app) ----------
