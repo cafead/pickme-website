@@ -1170,12 +1170,47 @@
 
   /* ---------- cart drawer and checkout ---------- */
   const layer = () => $('#layer');
-  function closeLayer() { if ($('form[data-form=checkout]', layer())) saveDraft(false); closeQrFull(); if (typeof closeMapPicker === 'function') closeMapPicker(); layer().innerHTML = ''; document.body.classList.remove('lock'); }
-  function openLayer(html) {
+  /* The phone's Back button (26 Nov 2026). Every overlay (item options, your order, checkout, account, an event,
+     photos, the payment QR, the delivery map) adds a step to the browser history, so Back closes it or goes one
+     step back (checkout -> your order -> the page) instead of leaving the page for the home page. */
+  const NAV = { stack: [], skip: 0 };
+  function navPush(tag, undo) {
+    NAV.stack.push({ tag, undo });
+    try { history.pushState({ pm: NAV.stack.length }, ''); } catch (e) { /* very old browser */ }
+  }
+  const navTop = () => NAV.stack[NAV.stack.length - 1];
+  // The page closed everything itself (Close, Escape, an order sent): take our steps out of the history again.
+  function navDropAll() {
+    const n = NAV.stack.length;
+    NAV.stack = [];
+    if (n) { NAV.skip += 1; history.go(-n); }
+  }
+  // A Back-like button inside an overlay: use the history step if there is one, so both stay in line.
+  function navBack(tag) { const t = navTop(); if (t && (!tag || t.tag === tag)) { history.back(); return true; } return false; }
+  window.addEventListener('popstate', (e) => {
+    if (NAV.skip) { NAV.skip -= 1; return; }
+    const t = NAV.stack.pop();
+    if (t) { t.undo(); return; }
+    // A step left over from before a reload (for example after the payment app): skip it.
+    if (e.state && e.state.pm) history.back();
+  });
+  function closeLayerRaw() { if ($('form[data-form=checkout]', layer())) saveDraft(false); closeQrRaw(); if (typeof closeMapRaw === 'function') closeMapRaw(); layer().innerHTML = ''; document.body.classList.remove('lock'); }
+  function closeLayer() { closeLayerRaw(); navDropAll(); }
+  // opts.same: the same view drawn again (no history step). opts.back: how to draw the view Back returns to
+  // (default: the view on screen now). opts.reset: a final screen (order sent): Back closes it.
+  function openLayer(html, opts) {
+    const o = opts || {};
     const t = $('#toast');
     if (t) t.classList.remove('is-on');
+    const before = layer().innerHTML;
+    const wasOpen = Boolean(before.trim());
+    const acct = wasOpen && $('.modal--acct', layer()) ? A.view : null;
+    if (wasOpen && $('form[data-form=checkout]', layer())) saveDraft(false);
     layer().innerHTML = html;
     document.body.classList.add('lock');
+    if (!wasOpen) navPush('layer', closeLayerRaw);
+    else if (o.reset) NAV.stack.forEach((x) => { if (x.tag !== 'layer') { x.tag = 'skip'; x.undo = () => history.back(); } });
+    else if (!o.same) navPush('step', o.back || (acct ? () => openAccount(acct, { same: true }) : () => openLayer(before, { same: true })));
     const f = $('[autofocus], button, input', layer());
     if (f) f.focus();
   }
@@ -1215,7 +1250,7 @@
             <b>${rs(l.price * l.qty)}</b></li>`).join('')}</ul>
           ${upsellHtml(lines)}</div>
           <footer><p class="sum"><span>Subtotal</span><b>${rs(total)}</b></p>
-            <p class="hint">Delivery inside Hetauda adds ${rs(S.c.payment.deliveryFee)}.</p>
+            <p class="hint">For delivery (inside Hetauda) a delivery charge of <b>${rs(S.c.payment.deliveryFee)}</b> is added.</p>
             <button type="button" class="btn" data-act="checkout"><span>Continue to order</span>${ICON.arrow}</button>
             <button type="button" class="btn btn--ghost" data-act="close"><span>Keep browsing</span></button></footer>`
         : `<p class="empty">Your order is empty. Add something from the menu.</p>
@@ -1242,7 +1277,7 @@
           </div>
           <p class="form-msg" role="alert"></p>
         </form>
-      </div>`);
+      </div>`, back ? { back: () => openLayer(cartHtml(), { same: true }) } : undefined);
   }
   function extrasTotal() {
     const t = $('#x-total');
@@ -1256,7 +1291,8 @@
     const sub = lines.reduce((s, l) => s + l.price * l.qty, 0);
     const fee = type === 'delivery' ? Number(S.c.payment.deliveryFee) || 0 : 0;
     return `<ul class="lines lines--mini">${lines.map((l) => `<li><div><strong>${l.qty} × ${esc(l.name)}</strong>${l.label || l.extraNames.length ? `<small>${esc(l.label)}${l.label && l.extraNames.length ? ' · ' : ''}${l.extraNames.map(esc).join(', ')}</small>` : ''}</div><b>${rs(l.price * l.qty)}</b></li>`).join('')}
-      ${fee ? `<li><div><strong>Delivery</strong></div><b>${rs(fee)}</b></li>` : ''}
+      ${lines.length > 1 || fee || S.coPts ? `<li class="sub"><div><strong>Subtotal</strong></div><b>${rs(sub)}</b></li>` : ''}
+      ${fee ? `<li><div><strong>Delivery charge</strong></div><b>+${rs(fee)}</b></li>` : ''}
       ${S.coPts ? `<li><div><strong>Points</strong></div><b>−${rs(S.coPts)}</b></li>` : ''}</ul>
       <p class="sum sum--big"><span>Total to pay</span><b id="co-total">${rs(Math.max(0, sub + fee - (S.coPts || 0)))}</b></p>`;
   }
@@ -1277,7 +1313,7 @@
   function openQrFull(method) {
     const p = S.c.payment[method] || {};
     if (!safeUrl(p.qr)) return;
-    closeQrFull();
+    closeQrRaw();
     const box = document.createElement('div');
     box.id = 'qr-full';
     box.setAttribute('role', 'dialog');
@@ -1290,9 +1326,11 @@
         <button type="button" class="btn" data-act="qrclose"><span>Back to my order</span></button>
       </div>`;
     document.body.appendChild(box);
+    navPush('qr', closeQrRaw);
     $('button', box).focus();
   }
-  function closeQrFull() { const b = $('#qr-full'); if (b) b.remove(); }
+  function closeQrRaw() { const b = $('#qr-full'); if (b) b.remove(); }
+  function closeQrFull() { if (!navBack('qr')) closeQrRaw(); }
   // What the guest typed at checkout is kept for this visit, so it survives a trip to the payment app
   // (phones often reload the page on the way back).
   const DRAFT = 'pm_checkout';
@@ -1345,7 +1383,7 @@
           <label class="f"><span id="co-phone-label">${phoneNeeded ? 'Phone' : 'Phone (optional)'}</span><input name="phone" id="co-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"${phoneNeeded ? ' required' : ''}></label>
           <label class="f"><span>Your name (optional)</span><input name="name" id="co-name" autocomplete="name" maxlength="80"></label>
           <label class="f f--wide" id="co-addr"${type === 'delivery' ? '' : ' hidden'}><span>Delivery address (optional, we will call if it is missing)</span><textarea name="address" id="co-address" rows="2" maxlength="300" placeholder="Tole, landmark, ward"></textarea><small class="hint">${esc(c.payment.deliveryNote)}</small></label>
-          <div class="f f--wide" id="co-pin-wrap"${type === 'delivery' ? '' : ' hidden'}><div id="co-pin"></div></div>
+          <div class="f f--wide" id="co-pin-wrap"${type === 'delivery' ? '' : ' hidden'}><p class="deliv-fee">${ICON.pin}<span><b>Delivery charge ${rs(c.payment.deliveryFee)}</b>, added to your total. ${esc(c.payment.deliveryNote || 'Inside Hetauda only.')}</span></p><div id="co-pin"></div></div>
           <fieldset class="f f--wide seg"><legend>When?</legend>
             ${hasWhole ? '' : `<input type="radio" name="when" id="co-now" value="now"${later ? '' : ' checked'}><label for="co-now">Now</label>`}
             <input type="radio" name="when" id="co-later" value="later"${later ? ' checked' : ''}><label for="co-later">Later</label>
@@ -1381,7 +1419,8 @@
   }
   function openCheckout() {
     if (!cartLines().length) return toast('Your cart is empty.');
-    openLayer(checkoutHtml());
+    const fromCart = Boolean($('.drawer', layer()));
+    openLayer(checkoutHtml(), fromCart ? { back: () => openLayer(cartHtml(), { same: true }) } : undefined);
     const pre = S.preset || {};
     $$('[data-bsp]', layer()).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: pre.date || el.dataset.value }));
     restoreDraft(readDraft());
@@ -1426,7 +1465,8 @@
       const ids = $$('input[name=x]:checked', form).map((el) => el.value);
       addToCart(form.dataset.item, form.dataset.label, qty, false, ids);
       const f = findPrice(form.dataset.item, form.dataset.label);
-      if (form.dataset.back) openLayer(cartHtml()); else closeLayer();
+      // Back to where the guest came from (your order, or an event), or close.
+      if (!navBack('step')) closeLayer();
       toast(`${f ? f.item.name : 'Item'} added to your order`);
       bump();
     },
@@ -1443,7 +1483,7 @@
       const res = await post('/api/bookings', { name: d.name, phone: d.phone, people: d.people, date: d.date, dateBs: d.dateBs, time: d.time, seating: d.seating, food: d.food, cakeName: d.cakeName, decoration: d.decoration, remarks: d.remarks });
       form.reset();
       render();
-      openLayer(doneHtml('Booking request sent', [`Your booking number is ${res.id}.`, 'We will call or message you to confirm your table.'], res.text));
+      openLayer(doneHtml('Booking request sent', [`Your booking number is ${res.id}.`, 'We will call or message you to confirm your table.'], res.text), { reset: true });
     },
     async review(d, form) {
       await post('/api/reviews', { name: d.name, rating: d.rating, favorite: d.favorite, text: d.text });
@@ -1497,7 +1537,7 @@
         res.points && res.points.asked && !res.points.used ? `Staff will take your ${res.points.asked} points off at the counter.` : '',
         earn > 0 ? `You get ${earn} points when it is done.` : '',
         payNow ? `We will call you on ${d.phone} to confirm your payment, then ${atCafe ? 'bring your order to you' : 'start your order'}.` : (atCafe ? 'We are preparing it and will bring it to you.' : 'We will call you if anything is unclear. You can pay later.'),
-      ], atCafe ? '' : res.text));
+      ], atCafe ? '' : res.text), { reset: true });
     },
   };
   document.addEventListener('submit', async (e) => {
@@ -1573,7 +1613,7 @@
       const now = Date.now();
       if (now - (S.lockTap || 0) < 450) { S.lockTap = 0; openStaffLogin(); } else S.lockTap = now;
     },
-    loginkind(el) { openStaffLogin(el.dataset.id || ''); },
+    loginkind(el) { if (!el.dataset.id && navBack('step')) return; openStaffLogin(el.dataset.id || ''); },
     qrbig(el) { openQrFull(el.dataset.id); },
     qrclose() { closeQrFull(); },
     tab(el) {
@@ -1591,7 +1631,7 @@
       const inCart = Boolean(el.closest('.drawer'));
       if (extrasOf(f.group).length) return openExtras(el.dataset.item, el.dataset.label, inCart);
       addToCart(el.dataset.item, el.dataset.label, 1);
-      if (inCart) openLayer(cartHtml());
+      if (inCart) openLayer(cartHtml(), { same: true });
       toast(`${f.item.name} added to your order`);
       bump();
     },
@@ -1632,14 +1672,18 @@
       showCakePhoto(sel.value);
       $('#cake').scrollIntoView({ behavior: 'smooth' });
     },
-    cart() { openLayer(cartHtml()); },
+    cart() { openLayer(cartHtml(), $('.drawer', layer()) ? { same: true } : undefined); },
     qty(el) {
       const line = S.cart.find((l) => lineKey(l) === el.dataset.key);
       if (line) addToCart(line.itemId, line.label, line.qty + Number(el.dataset.d), true, line.extras);
-      openLayer(cartHtml());
+      openLayer(cartHtml(), { same: true });
     },
     checkout() { openCheckout(); },
-    close() { closeLayer(); },
+    close(el) {
+      // A link that leaves for another page: just close (its own navigation follows).
+      if (el && el.tagName === 'A' && el.getAttribute('href') && !el.getAttribute('href').startsWith('#')) { closeLayerRaw(); NAV.stack = []; return; }
+      closeLayer();
+    },
     slide(el) { showSlide(Number(el.dataset.i)); },
     'slide-step'(el) { showSlide(S.slide + Number(el.dataset.d)); },
     nav(el) {
@@ -1697,7 +1741,8 @@
   document.addEventListener('touchend', letGo, { passive: true });
   document.addEventListener('touchcancel', letGo, { passive: true });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && $('#qr-full')) closeQrFull();
+    if (e.key === 'Escape' && $('#map-pick')) closeMapPicker();
+    else if (e.key === 'Escape' && $('#qr-full')) closeQrFull();
     else if (e.key === 'Escape' && layer().innerHTML) closeLayer();
     if (e.key === 'Enter' && S.inline && e.target.closest && e.target.closest('[data-edit]')) { e.preventDefault(); e.target.blur(); }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd' && !PREVIEW) { e.preventDefault(); location.hash = '#admin'; }
@@ -1967,10 +2012,10 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden && myOrders().length) refreshLive(); });
 
   /* the account sheet: Orders, Points, Settings (and Sign in / Create account) */
-  function openAccount(view) {
+  function openAccount(view, opts) {
     A.view = view || A.view || 'orders';
     if (['signin', 'signup', 'reset'].includes(A.view) && !codesOn() && A.view !== 'signin') A.view = 'orders';
-    openLayer(`<div class="shade" data-act="close"></div><div class="modal modal--sheet modal--acct" role="dialog" aria-label="Your orders and account"><div id="acct-body"></div></div>`);
+    openLayer(`<div class="shade" data-act="close"></div><div class="modal modal--sheet modal--acct" role="dialog" aria-label="Your orders and account"><div id="acct-body"></div></div>`, opts || ($('.modal--acct', layer()) ? { same: true } : undefined));
     paintAccount();
     refreshAccount();
   }
@@ -2231,7 +2276,15 @@
   Object.assign(ACT, {
     account(el) {
       const v = el.dataset.id || (signedIn() ? 'orders' : 'orders');
-      if ($('.modal--acct')) { A.view = v; paintAccount(); const m = $('.modal--acct'); if (m) m.scrollTop = 0; } else openAccount(v);
+      if ($('.modal--acct')) {
+        const was = A.view;
+        const form = (x) => ['signin', 'signup', 'reset'].includes(x);
+        if (v === was) return;
+        // Back from Sign in / Create account / Forgot password returns to the view before it.
+        if (form(v)) navPush('step', () => { A.view = was; paintAccount(); });
+        else if (form(was) && navTop() && navTop().tag === 'step') NAV.stack[NAV.stack.length - 1] = { tag: 'skip', undo: () => history.back() };
+        A.view = v; paintAccount(); const m = $('.modal--acct'); if (m) m.scrollTop = 0;
+      } else openAccount(v);
     },
     restart(el) { A.su[el.dataset.id] = {}; paintAccount(); },
     async signout() { await call('POST', '/api/account/logout').catch(() => {}); A.me = null; paintAccountBtn(); A.view = 'orders'; paintAccount(); toast('Signed out.'); },
@@ -2397,7 +2450,7 @@
   async function openMapPicker() {
     let L;
     try { L = await loadLeaflet(); } catch (e) { return toast(e.message); }
-    closeMapPicker();
+    closeMapRaw();
     const area = AREA();
     const start = S.coLoc || { lat: area.lat, lng: area.lng };
     const box = document.createElement('div');
@@ -2411,6 +2464,7 @@
         <button type="button" class="btn" data-act="mp-ok"><span>Deliver here</span></button>
         <button type="button" class="btn btn--ghost" data-act="mp-close"><span>Cancel</span></button></div></div>`;
     document.body.appendChild(box);
+    navPush('map', closeMapRaw);
     const map = L.map('mp-map', { zoomControl: true }).setView([start.lat, start.lng], S.coLoc ? 17 : 14);
     tiles(L).addTo(map);
     L.circle([area.lat, area.lng], { radius: (Number(area.radiusKm) || 7) * 1000, color: '#A8843A', weight: 1.5, fillOpacity: 0.04 }).addTo(map);
@@ -2434,12 +2488,13 @@
     setTimeout(() => map.invalidateSize(), 50);
     if (!S.coLoc) ACT['mp-gps'](true);
   }
-  function closeMapPicker() {
+  function closeMapRaw() {
     const b = $('#map-pick');
     if (S.mp && S.mp.map) S.mp.map.remove();
     S.mp = null;
     if (b) b.remove();
   }
+  function closeMapPicker() { if (!navBack('map')) closeMapRaw(); }
   function paintPin() {
     const box = $('#co-pin');
     if (!box) return;

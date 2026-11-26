@@ -943,3 +943,8 @@ html.anim .os-dots i.on:last-of-type { animation: pulse 1.6s ease-in-out infinit
 .or span { position: relative; padding: 0 10px; background: var(--bg); }
 .cake-ref input[type=file] { padding: 8px 0; }
 .cake-ref .ok { color: #24693F; font-weight: 500; }
+
+/* Delivery charge note in checkout (26 Nov 2026) */
+.deliv-fee { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(168, 132, 58, .1); border: 1px solid rgba(168, 132, 58, .3); font-size: .92rem; line-height: 1.4; }
+.deliv-fee svg { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 1px; color: var(--gold, #A8843A); }
+.lines--mini li.sub { border-top: 1px dashed rgba(0,0,0,.12); }
