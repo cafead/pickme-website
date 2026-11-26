@@ -629,7 +629,8 @@ app.get('/opening.ics', (req, res) => {
 app.use((req, res, next) => {
   if ((req.method !== 'GET' && req.method !== 'HEAD') || !SOON_PATHS.test(req.path) || !soonNow()) return next();
   if (keyOk(req.query.preview)) { previewCookie(req, res); return res.redirect(302, req.path); }
-  if (req.query.table || readSession(req) || hasPreview(req)) return next();
+  // ?soon=1 always shows the opening page (lets the logged-in owner see what guests see).
+  if (req.query.soon === undefined && (req.query.table || readSession(req) || hasPreview(req))) return next();
   const c = content.get();
   const base = siteBase(req);
   res.set('Cache-Control', 'no-store');

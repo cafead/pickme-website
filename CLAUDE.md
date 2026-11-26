@@ -29,7 +29,7 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 
 ## Opening soon page (until the launch)
 - `server/soon.js` + a middleware in `server/server.js`: until `LAUNCH_AT` (Railway variable; default 2026-11-28T15:00:00+05:45, Saturday 3 PM Nepal time) the public pages `/`, `/menu`, `/cake`, `/gallery`, `/event/:id` show an invitation page (hero photo, countdown, Save the date = `/opening.ics` or Google Calendar on Android, Directions, WhatsApp). At the launch time the server serves the normal site and an open page reloads by itself. After the launch the code does nothing and can be removed later.
-- Real site before the launch: logged-in owner/staff (`pm_auth`), table QR (`?table=N`), or the private link `/preview/<PREVIEW_KEY>` (Railway variable) which sets a signed `pm_preview` cookie. `/admin`, `/counter`, `/privacy`, `/app-preview` and `/api` are never blocked.
+- Real site before the launch: logged-in owner/staff (`pm_auth`), table QR (`?table=N`), or the private link `/preview/<PREVIEW_KEY>` (Railway variable) which sets a signed `pm_preview` cookie. `?soon=1` always shows the opening page (for the owner to check it while logged in). `/admin`, `/counter`, `/privacy`, `/app-preview` and `/api` are never blocked.
 
 ## Print menu (paper menu)
 - `/admin/print-menu` (owner only; link "Print menu" in the admin tabs): `public/print-menu.html`, `public/js/print-menu.js`, `public/css/print-menu.css`. A4 preview on the left third, settings on the right; on phones the paper sits on top.
