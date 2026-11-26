@@ -17,6 +17,13 @@
         "UIBackgroundModes": [
           "location",
           "remote-notification"
+        ],
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.869345460609-8hf0t5vcv1ijshkqf8juo06tal6pfi83"
+            ]
+          }
         ]
       },
       "config": {
