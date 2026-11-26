@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const defaults = require('./default-content');
+const soon = require('./soon');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -594,7 +595,48 @@ function renderPage(req, opts) {
     .replace('<!--SEO-->', head);
 }
 const sendPage = (res, html) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(html); };
-app.get(['/', '/index.html'], (req, res) => sendPage(res, renderPage(req)));
+
+/* ---------- opening soon: public pages show the invitation page until the launch time ---------- */
+// LAUNCH_AT (Railway variable) can move the time; default Saturday 28 Nov 2026, 3 PM Nepal time.
+const LAUNCH_AT = Date.parse(process.env.LAUNCH_AT || '2026-11-28T15:00:00+05:45');
+const PREVIEW_KEY = String(process.env.PREVIEW_KEY || '').trim();
+const SOON_PATHS = /^\/(?:index\.html|menu|cake|gallery|event\/[^/]+)?\/?$/;
+const previewMark = () => sign('preview:' + PREVIEW_KEY);
+const hasPreview = (req) => {
+  if (!PREVIEW_KEY) return false;
+  const m = /(?:^|;\s*)pm_preview=([^;]+)/.exec(req.headers.cookie || '');
+  return Boolean(m && m[1] === previewMark());
+};
+const soonNow = () => Number.isFinite(LAUNCH_AT) && Date.now() < LAUNCH_AT;
+function previewCookie(req, res) {
+  const age = Math.max(0, Math.round((LAUNCH_AT - Date.now()) / 1000)) + 7 * 86400;
+  res.set('Set-Cookie', `pm_preview=${previewMark()}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${req.secure ? '; Secure' : ''}`);
+}
+const keyOk = (k) => Boolean(PREVIEW_KEY) && typeof k === 'string' && k.length === PREVIEW_KEY.length
+  && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(PREVIEW_KEY));
+// The private link for the owner and staff: opens the real website on this phone or computer until the launch.
+app.get('/preview/:key', (req, res) => {
+  if (keyOk(req.params.key)) previewCookie(req, res);
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, '/');
+});
+app.get('/opening.ics', (req, res) => {
+  if (!Number.isFinite(LAUNCH_AT)) return res.sendStatus(404);
+  res.set('Cache-Control', 'no-cache');
+  res.type('text/calendar').set('Content-Disposition', 'inline; filename="pick-me-cafe-opening.ics"');
+  res.send(soon.calendar(content.get(), siteBase(req), LAUNCH_AT).ics);
+});
+app.use((req, res, next) => {
+  if ((req.method !== 'GET' && req.method !== 'HEAD') || !SOON_PATHS.test(req.path) || !soonNow()) return next();
+  if (keyOk(req.query.preview)) { previewCookie(req, res); return res.redirect(302, req.path); }
+  if (req.query.table || readSession(req) || hasPreview(req)) return next();
+  const c = content.get();
+  const base = siteBase(req);
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(soon.soonPage({ c, base, launch: LAUNCH_AT, absUrl, cafeJson: JSON.stringify(cafeData(c, base)).replace(/</g, '\\u003c') }));
+});
+
+app.get(['/', '/index.html'],(req, res) => sendPage(res, renderPage(req)));
 // /admin is an easier address to type and share than /#admin. Both open the editor.
 app.get(['/admin', '/admin/'], (req, res) => sendPage(res, renderPage(req, { noindex: true, title: 'Admin | ' + content.get().brand.name })));
 // The paper menu editor (owner only; the page asks for the password when needed).
