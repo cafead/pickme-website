@@ -27,7 +27,7 @@
   }
   const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
   const when = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kathmandu', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
-  const frame = () => document.getElementById('ad-frame');
+  const frame = () => document.getElementById('pk-frame');
   const tell = (msg) => { const f = frame(); if (f && f.contentWindow) f.contentWindow.postMessage(msg, location.origin); };
 
   async function api(method, url, body, rawType) {
@@ -41,12 +41,12 @@
     return data;
   }
   function flash(text, bad) {
-    const el = document.getElementById('ad-flash');
+    const el = document.getElementById('pk-flash');
     if (!el) return;
     el.textContent = text;
-    el.className = 'ad-flash is-on' + (bad ? ' is-bad' : '');
+    el.className = 'pk-flash is-on' + (bad ? ' is-bad' : '');
     clearTimeout(flash.t);
-    flash.t = setTimeout(() => { el.className = 'ad-flash'; }, 3200);
+    flash.t = setTimeout(() => { el.className = 'pk-flash'; }, 3200);
   }
 
   /* ---------- what can be edited ---------- */
@@ -266,18 +266,18 @@
     clearTimeout(A.timer);
     A.timer = setTimeout(pushPreview, 140);
   }
-  function pushPreview() { tell({ pm: 'content', content: A.content }); if (A.drawEventTicks && document.body.contains(document.querySelector('.ad-evticks'))) A.drawEventTicks(); }
+  function pushPreview() { tell({ pm: 'content', content: A.content }); if (A.drawEventTicks && document.body.contains(document.querySelector('.pk-evticks'))) A.drawEventTicks(); }
   function status() {
     const dirty = JSON.stringify(A.content) !== A.saved;
-    const el = document.getElementById('ad-status');
+    const el = document.getElementById('pk-status');
     if (el) { el.textContent = dirty ? 'You have unsaved changes' : 'All changes saved'; el.classList.toggle('is-dirty', dirty); }
-    const save = document.getElementById('ad-save');
+    const save = document.getElementById('pk-save');
     if (save) save.disabled = !dirty;
     return dirty;
   }
 
   function imageField(field, obj, done) {
-    const thumb = h('div', { class: 'ad-thumb' });
+    const thumb = h('div', { class: 'pk-thumb' });
     const url = h('input', { type: 'text', placeholder: 'Photo link, or upload', value: get(obj, field.k) || '', 'aria-label': field.l + ' link' });
     const show = () => { const v = get(obj, field.k); thumb.replaceChildren(v ? h('img', { src: v, alt: '' }) : h('span', {}, 'No photo')); };
     const apply = (v) => { set(obj, field.k, v); url.value = v; show(); done(); };
@@ -295,45 +295,45 @@
       file.value = '';
     } });
     show();
-    return h('div', { class: 'ad-image' }, thumb, h('div', { class: 'ad-image-tools' }, url,
-      h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn', onclick: () => file.click() }, 'Upload photo'),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => apply('') }, 'Remove')), file,
+    return h('div', { class: 'pk-image' }, thumb, h('div', { class: 'pk-image-tools' }, url,
+      h('div', { class: 'pk-row' }, h('button', { type: 'button', class: 'pk-btn', onclick: () => file.click() }, 'Upload photo'),
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => apply('') }, 'Remove')), file,
       cropControls(() => get(obj, field.k))));
   }
   // Move the photo inside its frame, zoom in, or show the whole photo.
   function cropControls(currentUrl) {
-    const box = h('div', { class: 'ad-crop' });
-    const d = h('details', { class: 'ad-crop-wrap' }, h('summary', {}, 'Adjust position and zoom'), box);
+    const box = h('div', { class: 'pk-crop' });
+    const d = h('details', { class: 'pk-crop-wrap' }, h('summary', {}, 'Adjust position and zoom'), box);
     const draw = () => {
       const u = currentUrl();
       box.replaceChildren();
-      if (!u) { box.append(h('p', { class: 'ad-note' }, 'Add a photo first.')); return; }
+      if (!u) { box.append(h('p', { class: 'pk-note' }, 'Add a photo first.')); return; }
       A.content.crops = A.content.crops || {};
       const k = Object.assign({ x: 50, y: 50, z: 1, fit: 'cover' }, A.content.crops[u] || {});
       const commit = () => { A.content.crops[u] = Object.assign({}, k); changed(); };
       const slider = (label, key, min, max, step, fmt) => {
-        const out = h('span', { class: 'ad-crop-val' }, fmt(k[key]));
+        const out = h('span', { class: 'pk-crop-val' }, fmt(k[key]));
         const id = `adf-${++fieldSeq}`;
         const input = h('input', { type: 'range', id, min, max, step, value: k[key], oninput: (e) => { k[key] = Number(e.target.value); out.textContent = fmt(k[key]); commit(); } });
-        return h('div', { class: 'ad-crop-row' }, h('label', { for: id }, label), input, out);
+        return h('div', { class: 'pk-crop-row' }, h('label', { for: id }, label), input, out);
       };
       // The sliders move the photo the way you pull: left moves it left, up moves it up.
       // (Stored x / y are the photo's object-position, which runs the other way, so they are flipped here.)
       const flip = (label, key, cls, fmt) => {
-        const out = h('span', { class: 'ad-crop-val' }, fmt(k[key]));
+        const out = h('span', { class: 'pk-crop-val' }, fmt(k[key]));
         const id = `adf-${++fieldSeq}`;
         const input = h('input', { type: 'range', id, class: cls, min: 0, max: 100, step: 1, value: key === 'y' ? k[key] : 100 - k[key], oninput: (e) => { const v = Number(e.target.value); k[key] = key === 'y' ? v : 100 - v; out.textContent = fmt(k[key]); commit(); } });
-        return h('div', { class: `ad-crop-row ${cls}-row` }, h('label', { for: id }, label), input, out);
+        return h('div', { class: `pk-crop-row ${cls}-row` }, h('label', { for: id }, label), input, out);
       };
       const side = (v) => (v === 50 ? 'middle' : v < 50 ? `${50 - v} right` : `${v - 50} left`);
       const updown = (v) => (v === 50 ? 'middle' : v < 50 ? `${50 - v} down` : `${v - 50} up`);
       box.append(
-        flip('Left / right', 'x', 'ad-slide-x', side),
-        flip('Up / down', 'y', 'ad-slide-y', updown),
+        flip('Left / right', 'x', 'pk-slide-x', side),
+        flip('Up / down', 'y', 'pk-slide-y', updown),
         slider('Zoom', 'z', 0.3, 4, 0.05, (v) => `${Math.round(v * 100)}%`),
-        h('p', { class: 'ad-note' }, 'Zoom below 100% to see more of the photo; the empty part of the frame is filled with a soft blend of the same photo.'),
-        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: k.fit === 'contain', onchange: (e) => { k.fit = e.target.checked ? 'contain' : 'cover'; commit(); } }), h('span', {}, 'Show the whole photo (no cropping)')),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { delete A.content.crops[u]; changed(); draw(); } }, 'Reset position'));
+        h('p', { class: 'pk-note' }, 'Zoom below 100% to see more of the photo; the empty part of the frame is filled with a soft blend of the same photo.'),
+        h('label', { class: 'pk-check' }, h('input', { type: 'checkbox', checked: k.fit === 'contain', onchange: (e) => { k.fit = e.target.checked ? 'contain' : 'cover'; commit(); } }), h('span', {}, 'Show the whole photo (no cropping)')),
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => { delete A.content.crops[u]; changed(); draw(); } }, 'Reset position'));
     };
     d.addEventListener('toggle', () => { if (d.open) draw(); });
     return d;
@@ -343,14 +343,14 @@
       body.replaceChildren();
       const sizes = A.content.sizes || {};
       const used = Object.keys(sizes).filter((k) => SIZES[k] && (sizes[k].w || sizes[k].h));
-      body.append(h('div', { class: 'ad-row' },
-        h('button', { type: 'button', class: 'ad-btn', onclick: () => setLayout(true) }, 'Start editing layout'),
-        used.length && h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { if (!window.confirm('Put every size back to normal?')) return; A.content.sizes = {}; changed(); draw(); } }, 'Reset all sizes'),
-        Object.keys(A.content.crops || {}).length && h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { if (!window.confirm('Put every photo back in the middle of its frame?')) return; A.content.crops = {}; changed(); draw(); } }, 'Reset all photo positions')));
-      if (!used.length) { body.append(h('p', { class: 'ad-note' }, 'Every size is normal at the moment.')); return; }
-      body.append(h('ul', { class: 'ad-sizes' }, used.map((k) => h('li', {},
+      body.append(h('div', { class: 'pk-row' },
+        h('button', { type: 'button', class: 'pk-btn', onclick: () => setLayout(true) }, 'Start editing layout'),
+        used.length && h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => { if (!window.confirm('Put every size back to normal?')) return; A.content.sizes = {}; changed(); draw(); } }, 'Reset all sizes'),
+        Object.keys(A.content.crops || {}).length && h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => { if (!window.confirm('Put every photo back in the middle of its frame?')) return; A.content.crops = {}; changed(); draw(); } }, 'Reset all photo positions')));
+      if (!used.length) { body.append(h('p', { class: 'pk-note' }, 'Every size is normal at the moment.')); return; }
+      body.append(h('ul', { class: 'pk-sizes' }, used.map((k) => h('li', {},
         h('span', {}, `${SIZES[k].label}: ${[sizes[k].w && `${sizes[k].w} wide`, sizes[k].h && `${sizes[k].h} tall`].filter(Boolean).join(', ')}`),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { delete A.content.sizes[k]; changed(); draw(); } }, 'Reset')))));
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => { delete A.content.sizes[k]; changed(); draw(); } }, 'Reset')))));
     };
     A.drawSizes = draw;
     draw();
@@ -415,32 +415,32 @@
     changed();
     drawReminders();
     show('edit', true);
-    const panel = Array.from(document.querySelectorAll('.ad-group')).find((d) => /Events and specials/.test(d.querySelector('summary').textContent));
+    const panel = Array.from(document.querySelectorAll('.pk-group')).find((d) => /Events and specials/.test(d.querySelector('summary').textContent));
     if (panel) { panel.open = true; panel.scrollIntoView({ block: 'start' }); }
     flash(`${t.name} event made. Add photos and special items, then press Save.`);
   }
   function drawReminders() {
-    const box = document.getElementById('ad-remind');
+    const box = document.getElementById('pk-remind');
     if (!box || !A.content) return;
     box.replaceChildren();
     if (A.seed) {
-      box.append(h('div', { class: 'ad-remind ad-remind--seed' },
+      box.append(h('div', { class: 'pk-remind pk-remind--seed' },
         h('span', {}, `This version of the website came with a backup made on ${niceDate(String(A.seed.createdAt).slice(0, 10))}. Use it to bring back your photos, menu and texts?`),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => useSeed(true) }, 'Use the backup'),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => useSeed(false) }, 'No, keep the website as it is')));
+        h('button', { type: 'button', class: 'pk-btn pk-btn--main', onclick: () => useSeed(true) }, 'Use the backup'),
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => useSeed(false) }, 'No, keep the website as it is')));
     }
     const waiting = [...((A.content.extras || {}).groups || []).flatMap((g) => g.options || []), ...((A.content.cake || {}).options || [])].filter((o) => o.show === false && Number(o.price) > 0);
     if (waiting.length && !dismissed('v5-prices')) {
-      box.append(h('div', { class: 'ad-remind' },
+      box.append(h('div', { class: 'pk-remind' },
         h('span', {}, `New: customers can add extras to drinks and choose cake options. ${waiting.map((o) => o.name).join(', ')} are switched off until you check their prices.`),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => { show('edit'); setTimeout(() => { const d = Array.from(document.querySelectorAll('.ad-group > summary')).find((x) => /Drink extras/.test(x.textContent)); if (d) { d.parentElement.open = true; d.scrollIntoView({ block: 'start' }); } }, 50); } }, 'Check the prices'),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { dismiss('v5-prices'); drawReminders(); } }, 'Later')));
+        h('button', { type: 'button', class: 'pk-btn pk-btn--main', onclick: () => { show('edit'); setTimeout(() => { const d = Array.from(document.querySelectorAll('.pk-group > summary')).find((x) => /Drink extras/.test(x.textContent)); if (d) { d.parentElement.open = true; d.scrollIntoView({ block: 'start' }); } }, 50); } }, 'Check the prices'),
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => { dismiss('v5-prices'); drawReminders(); } }, 'Later')));
     }
     for (const r of reminders()) {
-      box.append(h('div', { class: 'ad-remind' },
+      box.append(h('div', { class: 'pk-remind' },
         h('span', {}, `${r.t.name} is on ${niceDate(r.d)}, ${r.left === 0 ? 'today' : r.left === 1 ? 'tomorrow' : `in ${r.left} days`}. Themed cakes sell well; publish them about ${Number(r.t.before) || 7} days before.`),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => makeEvent(r.t, r.d) }, 'Make the event'),
-        h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => { dismiss(`${r.t.key}:${r.d}`); drawReminders(); } }, 'Not this time')));
+        h('button', { type: 'button', class: 'pk-btn pk-btn--main', onclick: () => makeEvent(r.t, r.d) }, 'Make the event'),
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => { dismiss(`${r.t.key}:${r.d}`); drawReminders(); } }, 'Not this time')));
     }
   }
   async function useSeed(use) {
@@ -455,7 +455,7 @@
   async function afterRestore(res) {
     A.content = await fetch('/api/content').then((x) => x.json());
     A.saved = JSON.stringify(A.content);
-    document.getElementById('ad-body').replaceChildren();
+    document.getElementById('pk-body').replaceChildren();
     show('edit', true);
     status();
     drawReminders();
@@ -465,14 +465,14 @@
     const today = BS.todayAD();
     const rows = (A.content.eventTemplates || []).map((t) => ({ t, d: occurrences(t, today)[0] }))
       .sort((a, b) => (a.d || '9999').localeCompare(b.d || '9999'));
-    body.append(h('ul', { class: 'ad-cal' }, rows.map(({ t, d }) => {
+    body.append(h('ul', { class: 'pk-cal' }, rows.map(({ t, d }) => {
       const ev = d && coveredBy(t, d);
       const bs = d ? BS.toBS(d) : null;
       return h('li', {},
         h('div', {}, h('b', {}, t.name), h('span', {}, d ? `${niceDate(d)}${bs ? ` · ${bs.d} ${BS.MONTHS[bs.m - 1]} ${bs.y}` : ''} · ${daysBetween(today, d) === 0 ? 'today' : `in ${daysBetween(today, d)} days`}` : `Date not set yet (usually ${t.usual || 'changes every year'}). Type it under "Edit the calendar".`)),
-        ev ? h('span', { class: 'ad-tag' }, 'Event made') : d && h('button', { type: 'button', class: 'ad-btn', onclick: () => makeEvent(t, d) }, 'Make the event'));
+        ev ? h('span', { class: 'pk-tag' }, 'Event made') : d && h('button', { type: 'button', class: 'pk-btn', onclick: () => makeEvent(t, d) }, 'Make the event'));
     })));
-    const edit = h('details', { class: 'ad-crop-wrap' }, h('summary', {}, 'Edit the calendar (dates, reminders, default text)'));
+    const edit = h('details', { class: 'pk-crop-wrap' }, h('summary', {}, 'Edit the calendar (dates, reminders, default text)'));
     edit.append(buildFields([f('eventTemplates', '', 'list', {
       title: (t) => t.name, add: 'Add a day', blank: () => ({ key: uid('day'), name: 'New day', rule: 'fixed', md: '01-01', dates: '', usual: '', remind: 14, before: 7, tag: '', title: '', text: '', message: '' }),
       fields: [
@@ -489,12 +489,12 @@
   }
   function availabilityPanel(body) {
     const groups = A.content.menu.categories || [];
-    body.append(h('div', { class: 'ad-avail' }, groups.map((g) => h('div', { class: 'ad-avail-group' },
-      h('div', { class: 'ad-avail-head' }, h('b', {}, g.name),
-        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: !g.hidden, onchange: (e) => { g.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show group'))),
-      (g.items || []).map((it) => h('div', { class: 'ad-avail-row' }, h('span', {}, it.name),
-        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: it.available !== false, onchange: (e) => { it.available = e.target.checked; changed(); } }), h('span', {}, 'Available')),
-        h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', checked: !it.hidden, onchange: (e) => { it.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show'))))))));
+    body.append(h('div', { class: 'pk-avail' }, groups.map((g) => h('div', { class: 'pk-avail-group' },
+      h('div', { class: 'pk-avail-head' }, h('b', {}, g.name),
+        h('label', { class: 'pk-check' }, h('input', { type: 'checkbox', checked: !g.hidden, onchange: (e) => { g.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show group'))),
+      (g.items || []).map((it) => h('div', { class: 'pk-avail-row' }, h('span', {}, it.name),
+        h('label', { class: 'pk-check' }, h('input', { type: 'checkbox', checked: it.available !== false, onchange: (e) => { it.available = e.target.checked; changed(); } }), h('span', {}, 'Available')),
+        h('label', { class: 'pk-check' }, h('input', { type: 'checkbox', checked: !it.hidden, onchange: (e) => { it.hidden = !e.target.checked; changed(); } }), h('span', {}, 'Show'))))))));
   }
 
   // Opening one section closes the one that was open, so only one stays expanded.
@@ -506,15 +506,15 @@
     if (shifted) requestAnimationFrame(() => { const r = d.getBoundingClientRect(); if (r.top < 60 || r.top > window.innerHeight - 80) d.scrollIntoView({ block: 'start' }); });
   }
   function listField(field, obj) {
-    const wrap = h('div', { class: 'ad-list' });
+    const wrap = h('div', { class: 'pk-list' });
     const draw = () => {
       if (!Array.isArray(get(obj, field.k))) set(obj, field.k, []);
       const arr = get(obj, field.k);
       wrap.replaceChildren();
       arr.forEach((item, i) => {
-        const title = h('span', { class: 'ad-item-title' }, field.title(item) || '(empty)');
+        const title = h('span', { class: 'pk-item-title' }, field.title(item) || '(empty)');
         const move = (to) => (e) => { e.preventDefault(); if (to < 0 || to >= arr.length) return; arr.splice(to, 0, arr.splice(i, 1)[0]); changed(); draw(); };
-        const tools = h('span', { class: 'ad-item-tools' },
+        const tools = h('span', { class: 'pk-item-tools' },
           h('button', { type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, onclick: move(i - 1) }, '↑'),
           h('button', { type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === arr.length - 1, onclick: move(i + 1) }, '↓'),
           !field.fixed && h('button', { type: 'button', title: 'Delete', 'aria-label': 'Delete', class: 'is-del', onclick: (e) => {
@@ -523,16 +523,16 @@
             if (!window.confirm(`Delete "${field.title(item)}"${inside}? You can bring it back from History if you change your mind after saving.`)) return;
             arr.splice(i, 1); changed(); draw();
           } }, TRASH()));
-        const body = h('div', { class: 'ad-item-body' });
+        const body = h('div', { class: 'pk-item-body' });
         let built = false;
         const build = () => { if (!built) { body.append(buildFields(field.fields, item, () => { title.textContent = field.title(item) || '(empty)'; })); built = true; } };
-        const d = h('details', { class: 'ad-item' }, h('summary', {}, title, tools), body);
+        const d = h('details', { class: 'pk-item' }, h('summary', {}, title, tools), body);
         if (A.open.has(item)) { d.open = true; build(); }
-        d.addEventListener('toggle', () => { if (d.open) { closeOthers(d, '.ad-item'); A.open.add(item); build(); } else A.open.delete(item); });
+        d.addEventListener('toggle', () => { if (d.open) { closeOthers(d, '.pk-item'); A.open.add(item); build(); } else A.open.delete(item); });
         wrap.append(d);
       });
       if (!field.fixed) {
-        wrap.append(h('button', { type: 'button', class: 'ad-btn ad-add', onclick: () => { const it = field.blank(); arr.push(it); A.open.add(it); changed(); draw(); } }, '+ ' + (field.add || 'Add')));
+        wrap.append(h('button', { type: 'button', class: 'pk-btn pk-add', onclick: () => { const it = field.blank(); arr.push(it); A.open.add(it); changed(); draw(); } }, '+ ' + (field.add || 'Add')));
       }
     };
     draw();
@@ -549,52 +549,52 @@
       let control;
       if (field.when && !field.when(obj)) continue;
       if (field.type === 'border') {
-        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), borderPicker(obj, field.k, done)));
+        frag.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, field.l), borderPicker(obj, field.k, done)));
         continue;
       }
       if (field.type === 'eventticks') {
-        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), eventTicks(done)));
+        frag.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, field.l), eventTicks(done)));
         continue;
       }
       if (field.type === 'eventphotos') {
-        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), eventPhotos(obj, done)));
+        frag.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, field.l), eventPhotos(obj, done)));
         continue;
       }
       if (field.type === 'cakephotos') {
-        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), cakePhotos(done)));
+        frag.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, field.l), cakePhotos(done)));
         continue;
       }
       if (field.type === 'list') {
-        frag.append(h('div', { class: 'ad-field' }, field.l && h('span', { class: 'ad-label' }, field.l), listField(field, obj)));
+        frag.append(h('div', { class: 'pk-field' }, field.l && h('span', { class: 'pk-label' }, field.l), listField(field, obj)));
         continue;
       }
       if (field.type === 'image') {
-        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), imageField(field, obj, done)));
+        frag.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, field.l), imageField(field, obj, done)));
         continue;
       }
       if (field.type === 'section') {
         const sec = (A.content.sections || []).find((x) => x.id === field.id);
         if (!sec) continue;
         control = h('input', { type: 'checkbox', id, checked: sec.show !== false, onchange: (e) => { sec.show = e.target.checked; done(); } });
-        frag.append(h('label', { class: 'ad-field ad-check', for: id }, control, h('span', {}, field.l)));
+        frag.append(h('label', { class: 'pk-field pk-check', for: id }, control, h('span', {}, field.l)));
         continue;
       }
       if (field.type === 'checks') {
         const now = () => (Array.isArray(get(obj, field.k)) ? get(obj, field.k) : []);
-        const box = h('div', { class: 'ad-checks', role: 'group', 'aria-label': field.l }, field.options().map(([v, label]) => h('label', { class: 'ad-check' },
+        const box = h('div', { class: 'pk-checks', role: 'group', 'aria-label': field.l }, field.options().map(([v, label]) => h('label', { class: 'pk-check' },
           h('input', { type: 'checkbox', checked: now().includes(v), onchange: (e) => { const next = now().filter((x) => x !== v); if (e.target.checked) next.push(v); set(obj, field.k, next); done(); } }), h('span', {}, label))));
-        frag.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, field.l), box));
+        frag.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, field.l), box));
         continue;
       }
       if (field.type === 'range') {
-        const shown = h('span', { class: 'ad-crop-val' }, `${Number(val) || 0}${field.unit || ''}`);
+        const shown = h('span', { class: 'pk-crop-val' }, `${Number(val) || 0}${field.unit || ''}`);
         control = h('input', { type: 'range', id, min: field.min, max: field.max, step: field.step || 1, value: Number(val) || 0, oninput: (e) => { set(obj, field.k, Number(e.target.value)); shown.textContent = `${e.target.value}${field.unit || ''}`; done(); } });
-        frag.append(h('div', { class: 'ad-field' }, h('label', { class: 'ad-label', for: id }, field.l), h('div', { class: 'ad-crop-row ad-range' }, control, shown)));
+        frag.append(h('div', { class: 'pk-field' }, h('label', { class: 'pk-label', for: id }, field.l), h('div', { class: 'pk-crop-row pk-range' }, control, shown)));
         continue;
       }
       if (field.type === 'toggle') {
         control = h('input', { type: 'checkbox', id, checked: val === undefined ? field.def !== false : Boolean(val), onchange: (e) => { set(obj, field.k, e.target.checked); done(); } });
-        frag.append(h('label', { class: 'ad-field ad-check', for: id }, control, h('span', {}, field.l)));
+        frag.append(h('label', { class: 'pk-field pk-check', for: id }, control, h('span', {}, field.l)));
         continue;
       }
       if (field.type === 'area') {
@@ -607,13 +607,13 @@
       } else if (field.type === 'color') {
         const text = h('input', { type: 'text', value: val || '', 'aria-label': field.l + ' code', oninput: (e) => { if (/^#[0-9a-f]{6}$/i.test(e.target.value)) { set(obj, field.k, e.target.value); picker.value = e.target.value; done(); } } });
         const picker = h('input', { type: 'color', id, value: /^#[0-9a-f]{6}$/i.test(val || '') ? val : '#000000', oninput: (e) => { set(obj, field.k, e.target.value); text.value = e.target.value; done(); } });
-        control = h('div', { class: 'ad-color' }, picker, text);
+        control = h('div', { class: 'pk-color' }, picker, text);
       } else {
         control = h('input', { type: field.type, id, step: field.step, value: val == null ? '' : val, oninput: (e) => {
           set(obj, field.k, field.type === 'number' ? Number(e.target.value) || 0 : e.target.value); done();
         } });
       }
-      frag.append(h('div', { class: 'ad-field' }, h('label', { class: 'ad-label', for: id }, field.l), control));
+      frag.append(h('div', { class: 'pk-field' }, h('label', { class: 'pk-label', for: id }, field.l), control));
     }
     return frag;
   }
@@ -621,14 +621,14 @@
   /* Border themes as small pictures: your own photo with each border around it. */
   function borderPicker(obj, key, done) {
     const sample = A.content.cake.image || A.content.hero.image || '';
-    const grid = h('div', { class: 'ad-borders', role: 'radiogroup', 'aria-label': 'Photo border theme' });
+    const grid = h('div', { class: 'pk-borders', role: 'radiogroup', 'aria-label': 'Photo border theme' });
     const draw = () => {
       const cur = get(obj, key) || 'none';
       grid.replaceChildren(...BORDERS.map(([v, label]) => {
         const [main, rest] = label.split(': ');
-        return h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === cur), class: 'ad-border' + (v === cur ? ' is-on' : ''), title: label,
+        return h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === cur), class: 'pk-border' + (v === cur ? ' is-on' : ''), title: label,
           onclick: () => { set(obj, key, v); done(); draw(); } },
-        h('span', { class: 'ad-border-zoom' }, h('span', { class: v === 'none' ? 'ad-border-frame' : `ad-border-frame deco deco--${v}` }, h('span', { class: 'ad-border-pic', style: sample ? `background-image:url("${sample.replace(/"/g, '')}")` : '' }))),
+        h('span', { class: 'pk-border-zoom' }, h('span', { class: v === 'none' ? 'pk-border-frame' : `pk-border-frame deco deco--${v}` }, h('span', { class: 'pk-border-pic', style: sample ? `background-image:url("${sample.replace(/"/g, '')}")` : '' }))),
         h('small', {}, rest ? rest : main), rest ? h('em', {}, main) : null);
       }));
     };
@@ -649,17 +649,17 @@
   const shortDay = (d, year) => { const t = new Date(d + 'T00:00:00'); return Number.isNaN(t.getTime()) ? '?' : t.toLocaleDateString('en-GB', year ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' }); };
   const shortRange = (a, b) => (!a ? 'No start date' : !b || b === a ? shortDay(a, true) : `${shortDay(a, a.slice(0, 4) !== b.slice(0, 4))} to ${shortDay(b, true)}`);
   function eventTicks(done) {
-    const box = h('div', { class: 'ad-evticks' });
+    const box = h('div', { class: 'pk-evticks' });
     const draw = () => {
       const items = A.content.events.items || [];
-      if (!items.length) { box.replaceChildren(h('p', { class: 'ad-empty' }, 'No events yet. Use "Add an empty event" below, or "Make the event" from the calendar.')); return; }
+      if (!items.length) { box.replaceChildren(h('p', { class: 'pk-empty' }, 'No events yet. Use "Add an empty event" below, or "Make the event" from the calendar.')); return; }
       box.replaceChildren(...items.map((e) => {
         const st = eventStatus(e);
         const last = /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') ? addDays(e.start, Math.max(1, Number(e.days) || 1) - 1) : '';
-        return h('label', { class: 'ad-evtick' + (e.enabled === false ? ' is-off' : '') },
+        return h('label', { class: 'pk-evtick' + (e.enabled === false ? ' is-off' : '') },
           h('input', { type: 'checkbox', checked: e.enabled !== false, onchange: (x) => { e.enabled = x.target.checked; done(); draw(); } }),
           h('span', {}, h('b', {}, e.title || 'Untitled event'), h('small', {}, shortRange(e.start, last))),
-          h('span', { class: 'ad-tag' + (/Showing/.test(st) && e.enabled !== false ? ' ad-tag--live' : '') }, e.enabled === false ? 'Not shown' : st));
+          h('span', { class: 'pk-tag' + (/Showing/.test(st) && e.enabled !== false ? ' pk-tag--live' : '') }, e.enabled === false ? 'Not shown' : st));
       }));
     };
     draw();
@@ -672,8 +672,8 @@
     if (e.image && !e.photos.some((p) => p.image === e.image)) e.photos.unshift({ image: e.image, caption: '' });
     const sync = () => { e.image = (e.photos[0] && e.photos[0].image) || ''; };
     sync();
-    const box = h('div', { class: 'ad-evphotos' });
-    const note = h('p', { class: 'ad-note ad-progress', role: 'status' });
+    const box = h('div', { class: 'pk-evphotos' });
+    const note = h('p', { class: 'pk-note pk-progress', role: 'status' });
     const pick = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async () => {
       const files = Array.from(pick.files).filter((x) => /^image\//.test(x.type));
       let n = 0;
@@ -694,29 +694,29 @@
     const draw = () => {
       const last = e.photos.length - 1;
       const move = (i, to) => () => { if (to < 0 || to > last) return; e.photos.splice(to, 0, e.photos.splice(i, 1)[0]); sync(); done(); draw(); };
-      box.replaceChildren(...e.photos.map((p, i) => h('div', { class: 'ad-evphoto' + (i === 0 ? ' is-main' : '') },
+      box.replaceChildren(...e.photos.map((p, i) => h('div', { class: 'pk-evphoto' + (i === 0 ? ' is-main' : '') },
         h('img', { src: p.image, alt: '', loading: 'lazy' }),
-        h('div', { class: 'ad-evphoto-body' },
-          h('div', { class: 'ad-evphoto-top' },
-            i === 0 ? h('span', { class: 'ad-tag ad-tag--live' }, 'Main photo')
-              : h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: move(i, 0) }, 'Make main photo'),
-            h('span', { class: 'ad-item-tools' },
+        h('div', { class: 'pk-evphoto-body' },
+          h('div', { class: 'pk-evphoto-top' },
+            i === 0 ? h('span', { class: 'pk-tag pk-tag--live' }, 'Main photo')
+              : h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: move(i, 0) }, 'Make main photo'),
+            h('span', { class: 'pk-item-tools' },
               h('button', { type: 'button', title: 'Move earlier', 'aria-label': 'Move earlier', disabled: i === 0, onclick: move(i, i - 1) }, '↑'),
               h('button', { type: 'button', title: 'Move later', 'aria-label': 'Move later', disabled: i === last, onclick: move(i, i + 1) }, '↓'),
               h('button', { type: 'button', title: 'Remove photo', 'aria-label': 'Remove photo', class: 'is-del', onclick: () => {
                 if (!window.confirm(`Remove ${p.caption ? `"${p.caption}"` : 'this photo'} from the event?`)) return;
                 e.photos.splice(i, 1); sync(); done(); draw();
               } }, TRASH()))),
-          h('label', { class: 'ad-evphoto-title' }, h('span', {}, 'Heading'),
+          h('label', { class: 'pk-evphoto-title' }, h('span', {}, 'Heading'),
             h('input', { value: p.caption || '', maxlength: 60, placeholder: `Empty = the event title (${e.title || 'Title'})`, oninput: (x) => { p.caption = x.target.value; done(); } })),
-          h('label', { class: 'ad-evphoto-title' }, h('span', {}, 'Description'),
+          h('label', { class: 'pk-evphoto-title' }, h('span', {}, 'Description'),
             h('textarea', { rows: 2, maxlength: 300, value: p.text || '', placeholder: 'Empty = the event description', oninput: (x) => { p.text = x.target.value; done(); } })),
           cropControls(() => p.image)))));
-      if (!e.photos.length) box.append(h('p', { class: 'ad-empty' }, 'No photos yet. Add a few: the first one becomes the main photo.'));
-      if (e.photos.length === 1) box.append(h('p', { class: 'ad-note' }, 'Only one photo, so this event is one slide. Add more photos to give it more slides.'));
+      if (!e.photos.length) box.append(h('p', { class: 'pk-empty' }, 'No photos yet. Add a few: the first one becomes the main photo.'));
+      if (e.photos.length === 1) box.append(h('p', { class: 'pk-note' }, 'Only one photo, so this event is one slide. Add more photos to give it more slides.'));
     };
     draw();
-    return h('div', {}, box, h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => pick.click() }, '+ Add photos')), pick, note);
+    return h('div', {}, box, h('div', { class: 'pk-row' }, h('button', { type: 'button', class: 'pk-btn pk-btn--main', onclick: () => pick.click() }, '+ Add photos')), pick, note);
   }
   // A photo for each cake that can be pre-ordered whole. Order a Cake shows it when a guest picks that cake.
   function cakePhotos(done) {
@@ -724,8 +724,8 @@
     if (!k.photos || typeof k.photos !== 'object' || Array.isArray(k.photos)) k.photos = {};
     const cakes = [];
     for (const g of A.content.menu.categories || []) for (const it of g.items || []) if ((it.prices || []).some((p) => p.whole)) cakes.push(it);
-    if (!cakes.length) return h('p', { class: 'ad-empty' }, 'No cakes yet. In the menu, tick "Whole cake: pre-order only" on a price to add one.');
-    return h('div', { class: 'ad-cakephotos' }, cakes.map((it) => h('div', { class: 'ad-cakephoto' },
+    if (!cakes.length) return h('p', { class: 'pk-empty' }, 'No cakes yet. In the menu, tick "Whole cake: pre-order only" on a price to add one.');
+    return h('div', { class: 'pk-cakephotos' }, cakes.map((it) => h('div', { class: 'pk-cakephoto' },
       h('b', {}, it.name), imageField(f(it.id, it.name, 'image', { hint: 'If empty, its menu photo is used.' }), k.photos, done))));
   }
 
@@ -767,7 +767,7 @@
       f('script', 'Handwritten line'), f('title', 'Title'), f('text', 'Text under the title', 'area'), f('privacy', 'Small line about removing photos', 'area'),
     ], m));
     // new album
-    const note = h('p', { class: 'ad-note ad-progress', role: 'status' });
+    const note = h('p', { class: 'pk-note pk-progress', role: 'status' });
     const nf = { title: 'At Pick Me today', date: BS.todayAD(), days: 2, download: false };
     const pick = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async () => {
       const album = { id: uid('album'), title: nf.title.trim() || 'Guest moments', date: nf.date || BS.todayAD(), days: Math.max(1, Number(nf.days) || 1), download: nf.download, photos: [] };
@@ -777,17 +777,17 @@
       } catch (e) { note.textContent = ''; flash(e.message, true); }
       pick.value = '';
     } });
-    const newBox = h('div', { class: 'ad-card ad-newalbum' },
+    const newBox = h('div', { class: 'pk-card pk-newalbum' },
       h('strong', {}, 'New album'),
-      h('div', { class: 'ad-grid' },
+      h('div', { class: 'pk-grid' },
         h('label', {}, 'Album name', h('input', { value: nf.title, oninput: (e) => { nf.title = e.target.value; } })),
         h('label', {}, 'First day shown', h('input', { type: 'date', value: nf.date, oninput: (e) => { nf.date = e.target.value; } })),
         h('label', {}, 'Show for how many days', h('input', { type: 'number', min: 1, max: 365, value: nf.days, oninput: (e) => { nf.days = e.target.value; } }))),
-      h('label', { class: 'ad-check' }, h('input', { type: 'checkbox', onchange: (e) => { nf.download = e.target.checked; } }), h('span', {}, 'Let guests download the full-quality photos (for a photographer\'s event photos)')),
-      h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn ad-btn--main', onclick: () => pick.click() }, `Choose photos (up to ${MAX_ALBUM})`)), pick, note);
+      h('label', { class: 'pk-check' }, h('input', { type: 'checkbox', onchange: (e) => { nf.download = e.target.checked; } }), h('span', {}, 'Let guests download the full-quality photos (for a photographer\'s event photos)')),
+      h('div', { class: 'pk-row' }, h('button', { type: 'button', class: 'pk-btn pk-btn--main', onclick: () => pick.click() }, `Choose photos (up to ${MAX_ALBUM})`)), pick, note);
     body.append(newBox);
-    const list = h('div', { class: 'ad-albums' });
-    const ended = h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: () => {
+    const list = h('div', { class: 'pk-albums' });
+    const ended = h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: () => {
       const gone = m.albums.filter((a) => albumState(a).startsWith('ended'));
       if (!gone.length) return flash('No albums have ended.');
       if (!window.confirm(`Delete ${gone.length} album${gone.length === 1 ? '' : 's'} that ended (${gone.reduce((n, a) => n + a.photos.length, 0)} photos)? When you press Save, their photos are deleted from the website for good, to free space.`)) return;
@@ -796,51 +796,51 @@
     } }, 'Delete albums that have ended');
     function drawAlbums() {
       list.replaceChildren();
-      if (!m.albums.length) { list.append(h('p', { class: 'ad-empty' }, 'No albums yet.')); return; }
+      if (!m.albums.length) { list.append(h('p', { class: 'pk-empty' }, 'No albums yet.')); return; }
       m.albums.forEach((a) => {
-        const prog = h('p', { class: 'ad-note ad-progress', role: 'status' });
+        const prog = h('p', { class: 'pk-note pk-progress', role: 'status' });
         const more = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async () => {
           try { if (await uploadAlbumPhotos(a, more.files, prog)) drawAlbums(); } catch (e) { prog.textContent = ''; flash(e.message, true); }
           more.value = '';
         } });
-        const grid = h('div', { class: 'ad-album-grid' }, a.photos.map((ph, i) => h('figure', {},
+        const grid = h('div', { class: 'pk-album-grid' }, a.photos.map((ph, i) => h('figure', {},
           h('img', { src: ph.image, alt: '', loading: 'lazy' }),
-          h('button', { type: 'button', class: 'ad-album-x', 'aria-label': 'Remove this photo', title: 'Remove this photo', onclick: () => { a.photos.splice(i, 1); changed(); drawAlbums(); } }, '×'))));
-        const title = h('span', { class: 'ad-item-title' }, `${a.title} · ${a.photos.length} photos · ${albumState(a)}`);
-        const d = h('details', { class: 'ad-item' }, h('summary', {}, title, h('span', { class: 'ad-item-tools' },
+          h('button', { type: 'button', class: 'pk-album-x', 'aria-label': 'Remove this photo', title: 'Remove this photo', onclick: () => { a.photos.splice(i, 1); changed(); drawAlbums(); } }, '×'))));
+        const title = h('span', { class: 'pk-item-title' }, `${a.title} · ${a.photos.length} photos · ${albumState(a)}`);
+        const d = h('details', { class: 'pk-item' }, h('summary', {}, title, h('span', { class: 'pk-item-tools' },
           h('button', { type: 'button', class: 'is-del', title: 'Delete album', 'aria-label': 'Delete album', onclick: (e) => {
             e.preventDefault();
             if (!window.confirm(`Delete the album "${a.title}" and its ${a.photos.length} photos? When you press Save, the photos are deleted for good.`)) return;
             m.albums.splice(m.albums.indexOf(a), 1); changed(); drawAlbums();
           } }, TRASH()))),
-        h('div', { class: 'ad-item-body' },
+        h('div', { class: 'pk-item-body' },
           buildFields([f('title', 'Album name'), f('date', 'First day shown', 'date'), f('days', 'Show for how many days', 'number'),
             f('download', 'Let guests download the full-quality photos', 'toggle', { def: false })], a, () => { title.textContent = `${a.title} · ${a.photos.length} photos · ${albumState(a)}`; }),
-          a.download && a.photos.some((ph) => !ph.full) ? h('p', { class: 'ad-note' }, 'Photos added before downloads were switched on download at website size.') : null,
+          a.download && a.photos.some((ph) => !ph.full) ? h('p', { class: 'pk-note' }, 'Photos added before downloads were switched on download at website size.') : null,
           grid,
-          h('div', { class: 'ad-row' }, h('button', { type: 'button', class: 'ad-btn', disabled: a.photos.length >= MAX_ALBUM, onclick: () => more.click() }, a.photos.length >= MAX_ALBUM ? 'Album is full (30 photos)' : 'Add more photos')),
+          h('div', { class: 'pk-row' }, h('button', { type: 'button', class: 'pk-btn', disabled: a.photos.length >= MAX_ALBUM, onclick: () => more.click() }, a.photos.length >= MAX_ALBUM ? 'Album is full (30 photos)' : 'Add more photos')),
           more, prog));
         if (A.open.has(a)) d.open = true;
-        d.addEventListener('toggle', () => { if (d.open) { closeOthers(d, '.ad-item'); A.open.add(a); } else A.open.delete(a); });
+        d.addEventListener('toggle', () => { if (d.open) { closeOthers(d, '.pk-item'); A.open.add(a); } else A.open.delete(a); });
         list.append(d);
       });
     }
     drawAlbums();
-    body.append(h('div', { class: 'ad-field' }, h('span', { class: 'ad-label' }, 'Albums (newest first)'), list), h('div', { class: 'ad-row' }, ended));
+    body.append(h('div', { class: 'pk-field' }, h('span', { class: 'pk-label' }, 'Albums (newest first)'), list), h('div', { class: 'pk-row' }, ended));
   }
 
   /* ---------- edit view ---------- */
   function buildPanel() {
-    const panel = h('aside', { class: 'ad-panel' }, h('p', { class: 'ad-intro' }, 'Open a part of the website, change it, and watch the preview. Above the preview, "Edit text" lets you type straight onto the page, and "Edit layout" lets you drag edges to resize photos and boxes, or drag a photo to move it in its frame. Nothing goes live until you press Save, and every save can be undone from History.'));
+    const panel = h('aside', { class: 'pk-panel' }, h('p', { class: 'pk-intro' }, 'Open a part of the website, change it, and watch the preview. Above the preview, "Edit text" lets you type straight onto the page, and "Edit layout" lets you drag edges to resize photos and boxes, or drag a photo to move it in its frame. Nothing goes live until you press Save, and every save can be undone from History.'));
     PANELS.forEach((p) => {
-      const body = h('div', { class: 'ad-group-body' });
+      const body = h('div', { class: 'pk-group-body' });
       let built = false;
-      const d = h('details', { class: 'ad-group' }, h('summary', {}, p.title), body);
+      const d = h('details', { class: 'pk-group' }, h('summary', {}, p.title), body);
       d.addEventListener('toggle', () => {
         if (!d.open) return;
-        closeOthers(d, '.ad-group');
-        if (p.custom) { body.replaceChildren(); if (p.note) body.append(h('p', { class: 'ad-note' }, p.note)); const inner = h('div', { class: 'ad-group-body' }); body.append(inner); p.custom(inner); return; }
-        if (!built) { if (p.note) body.append(h('p', { class: 'ad-note' }, p.note)); body.append(buildFields(p.fields, A.content)); built = true; }
+        closeOthers(d, '.pk-group');
+        if (p.custom) { body.replaceChildren(); if (p.note) body.append(h('p', { class: 'pk-note' }, p.note)); const inner = h('div', { class: 'pk-group-body' }); body.append(inner); p.custom(inner); return; }
+        if (!built) { if (p.note) body.append(h('p', { class: 'pk-note' }, p.note)); body.append(buildFields(p.fields, A.content)); built = true; }
         tell({ pm: 'scroll', id: p.scroll });
       });
       panel.append(d);
@@ -850,33 +850,33 @@
   function setInline(on) {
     A.inline = on;
     if (on && A.layout) setLayout(false);
-    const b = document.getElementById('ad-inline');
-    if (b) { b.textContent = on ? 'Editing text: on' : 'Edit text'; b.classList.toggle('ad-btn--main', on); b.setAttribute('aria-pressed', on); }
+    const b = document.getElementById('pk-inline');
+    if (b) { b.textContent = on ? 'Editing text: on' : 'Edit text'; b.classList.toggle('pk-btn--main', on); b.setAttribute('aria-pressed', on); }
     tell({ pm: 'inline', on });
     if (on) { flash('Click any dashed text in the preview and type.'); showMobile('prev'); } else refreshPanel();
   }
   function setLayout(on) {
     A.layout = on;
     if (on && A.inline) setInline(false);
-    const b = document.getElementById('ad-layout');
-    if (b) { b.textContent = on ? 'Editing layout: on' : 'Edit layout'; b.classList.toggle('ad-btn--main', on); b.setAttribute('aria-pressed', on); }
+    const b = document.getElementById('pk-layout');
+    if (b) { b.textContent = on ? 'Editing layout: on' : 'Edit layout'; b.classList.toggle('pk-btn--main', on); b.setAttribute('aria-pressed', on); }
     tell({ pm: 'layout', on });
     if (on) { flash('Drag the edge of a photo or box to resize it. Drag a photo to move it in its frame.'); showMobile('prev'); } else if (A.drawSizes) A.drawSizes();
   }
   function refreshPanel() {
-    const old = document.querySelector('.ad-panel');
+    const old = document.querySelector('.pk-panel');
     if (old) old.replaceWith(buildPanel());
     pushPreview();
   }
   function showMobile(which) {
     A.mobile = which;
-    const split = document.querySelector('.ad-split');
+    const split = document.querySelector('.pk-split');
     if (split) split.dataset.show = which;
     document.querySelectorAll('[data-mobile]').forEach((b) => b.classList.toggle('is-on', b.dataset.mobile === which));
   }
   function editView() {
-    const frameEl = h('iframe', { id: 'ad-frame', src: '/?preview=1', title: 'Live preview of the website' });
-    const wrap = h('div', { class: 'ad-frame-wrap is-computer' }, frameEl);
+    const frameEl = h('iframe', { id: 'pk-frame', src: '/?preview=1', title: 'Live preview of the website' });
+    const wrap = h('div', { class: 'pk-frame-wrap is-computer' }, frameEl);
     // "Computer" shows the page at a real computer width (1280 px), shrunk to fit beside the editor.
     const fit = () => {
       if (!wrap.classList.contains('is-computer')) { frameEl.style.cssText = ''; return; }
@@ -887,22 +887,22 @@
       frameEl.style.cssText = `width:1280px;height:${Math.round(hgt / sc)}px;transform:scale(${sc});transform-origin:0 0;`;
     };
     if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
-    const size = (cls, label) => h('button', { type: 'button', class: 'ad-btn ad-btn--quiet ad-wide-only', 'data-size': cls, onclick: () => {
-      wrap.className = 'ad-frame-wrap ' + cls;
+    const size = (cls, label) => h('button', { type: 'button', class: 'pk-btn pk-btn--quiet pk-wide-only', 'data-size': cls, onclick: () => {
+      wrap.className = 'pk-frame-wrap ' + cls;
       document.querySelectorAll('[data-size]').forEach((b) => b.classList.toggle('is-on', b.dataset.size === cls));
       fit();
     } }, label);
     A.inline = false;
     A.layout = false;
-    const split = h('div', { class: 'ad-split', 'data-show': A.mobile },
-      h('div', { class: 'ad-switch' },
+    const split = h('div', { class: 'pk-split', 'data-show': A.mobile },
+      h('div', { class: 'pk-switch' },
         h('button', { type: 'button', 'data-mobile': 'edit', class: A.mobile === 'edit' ? 'is-on' : '', onclick: () => showMobile('edit') }, 'Editor'),
         h('button', { type: 'button', 'data-mobile': 'prev', class: A.mobile === 'prev' ? 'is-on' : '', onclick: () => showMobile('prev') }, 'Preview')),
       buildPanel(),
-      h('section', { class: 'ad-preview' },
-        h('div', { class: 'ad-prev-bar' }, h('strong', { class: 'ad-wide-only' }, 'Live preview'), h('span', { class: 'ad-row' },
-          h('button', { type: 'button', id: 'ad-inline', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => setInline(!A.inline) }, 'Edit text'),
-          h('button', { type: 'button', id: 'ad-layout', class: 'ad-btn', 'aria-pressed': 'false', onclick: () => setLayout(!A.layout) }, 'Edit layout'),
+      h('section', { class: 'pk-preview' },
+        h('div', { class: 'pk-prev-bar' }, h('strong', { class: 'pk-wide-only' }, 'Live preview'), h('span', { class: 'pk-row' },
+          h('button', { type: 'button', id: 'pk-inline', class: 'pk-btn', 'aria-pressed': 'false', onclick: () => setInline(!A.inline) }, 'Edit text'),
+          h('button', { type: 'button', id: 'pk-layout', class: 'pk-btn', 'aria-pressed': 'false', onclick: () => setLayout(!A.layout) }, 'Edit layout'),
           size('is-computer', 'Computer'), size('is-phone', 'Phone'))), wrap));
     return split;
   }
@@ -913,19 +913,19 @@
   const waNum = (p) => String(p || '').replace(/\D/g, '').replace(/^(?=9\d{9}$)/, '977');
   const contact = (x) => `<a href="tel:${esc(x.phone)}">${esc(x.phone)}</a> · <a href="https://wa.me/${esc(waNum(x.phone))}" target="_blank" rel="noopener">WhatsApp</a>`;
   const line = (label, v) => (v ? `<p><b>${label}:</b> ${esc(v)}</p>` : '');
-  const alerts = () => `<p class="ad-note">Email alerts: <b>${A.me.email ? 'on' : 'off'}</b> · WhatsApp alerts: <b>${A.me.whatsapp ? 'on' : 'off'}</b>. The README explains how to switch them on. This list refreshes every 30 seconds. Staff can use the <a href="/counter" target="_blank" rel="noopener">counter screen</a>.</p>`;
+  const alerts = () => `<p class="pk-note">Email alerts: <b>${A.me.email ? 'on' : 'off'}</b> · WhatsApp alerts: <b>${A.me.whatsapp ? 'on' : 'off'}</b>. The README explains how to switch them on. This list refreshes every 30 seconds. Staff can use the <a href="/counter" target="_blank" rel="noopener">counter screen</a>.</p>`;
 
   const STEP_NAMES = { pending: 'Pending', acknowledged: 'Acknowledged', preparing: 'Preparing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled', confirmed: 'Confirmed', seated: 'Seated', declined: 'Declined' };
   const ORDER_STEPS = ['pending', 'acknowledged', 'preparing', 'ready', 'done', 'cancelled'];
   const BOOKING_STEPS = ['pending', 'confirmed', 'seated', 'done', 'declined'];
   const stepOptions = (list, cur) => list.map((x) => `<option value="${x}"${x === cur ? ' selected' : ''}>${STEP_NAMES[x]}</option>`).join('');
   const clock = (iso) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kathmandu', hour: 'numeric', minute: '2-digit', hour12: true });
-  const logList = (x) => (Array.isArray(x.log) && x.log.length ? `<details class="ad-log-mini"><summary>History of this ${x.lines ? 'order' : 'booking'}</summary><ul>${x.log.map((l) => `<li>${clock(l.at)} · ${esc(l.what)} <span>${esc(l.by)}</span></li>`).join('')}</ul></details>` : '');
+  const logList = (x) => (Array.isArray(x.log) && x.log.length ? `<details class="pk-log-mini"><summary>History of this ${x.lines ? 'order' : 'booking'}</summary><ul>${x.log.map((l) => `<li>${clock(l.at)} · ${esc(l.what)} <span>${esc(l.by)}</span></li>`).join('')}</ul></details>` : '');
   const time12 = (t) => { const [hh, mm] = String(t || '').split(':').map(Number); return Number.isFinite(hh) ? `${hh % 12 || 12}:${String(mm || 0).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}` : String(t || ''); };
   function orderCard(o) {
-    const quick = (step, label) => (o.status !== step && o.status !== 'cancelled' ? `<button type="button" class="ad-btn" data-quick="orders" data-id="${esc(o.id)}" data-step="${step}">${label}</button>` : '');
-    return `<article class="ad-card is-${esc(o.status)}">
-      <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="ad-tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="ad-step ad-step--${esc(o.status)}">${STEP_NAMES[o.status] || esc(o.status)}</span><span class="ad-step ${o.paid ? 'ad-step--paid' : 'ad-step--unpaid'}">${o.paid ? 'Paid' : 'Not paid'}</span>${!o.paid && o.payment && o.payment.method !== 'later' && !['done', 'cancelled'].includes(o.status) ? '<span class="ad-step ad-step--pending">Payment to check: call the guest</span>' : ''}<b>${rs(o.total)}</b></header>
+    const quick = (step, label) => (o.status !== step && o.status !== 'cancelled' ? `<button type="button" class="pk-btn" data-quick="orders" data-id="${esc(o.id)}" data-step="${step}">${label}</button>` : '');
+    return `<article class="pk-card is-${esc(o.status)}">
+      <header><strong>${esc(o.id)}</strong><span>${when(o.createdAt)}</span><span class="pk-tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="pk-step pk-step--${esc(o.status)}">${STEP_NAMES[o.status] || esc(o.status)}</span><span class="pk-step ${o.paid ? 'pk-step--paid' : 'pk-step--unpaid'}">${o.paid ? 'Paid' : 'Not paid'}</span>${!o.paid && o.payment && o.payment.method !== 'later' && !['done', 'cancelled'].includes(o.status) ? '<span class="pk-step pk-step--pending">Payment to check: call the guest</span>' : ''}<b>${rs(o.total)}</b></header>
       <p>${esc(o.name || 'Guest')}${o.phone ? ` · ${contact(o)}` : ''}</p>
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || (/^\d{4}-\d{2}-\d{2}$/.test(o.schedule.date || '') ? BS.label(o.schedule.date) : o.schedule.date))} at ${esc(time12(o.schedule.time))}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}
@@ -934,19 +934,19 @@
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <footer>
         ${quick('acknowledged', 'Acknowledge')}${quick('done', 'Mark done')}
-        ${o.paid ? `<button type="button" class="ad-btn ad-btn--quiet" data-quickpaid="false" data-id="${esc(o.id)}">Mark not paid</button>` : `<button type="button" class="ad-btn ad-btn--main" data-quickpaid="true" data-id="${esc(o.id)}">Mark paid</button>`}
+        ${o.paid ? `<button type="button" class="pk-btn pk-btn--quiet" data-quickpaid="false" data-id="${esc(o.id)}">Mark not paid</button>` : `<button type="button" class="pk-btn pk-btn--main" data-quickpaid="true" data-id="${esc(o.id)}">Mark paid</button>`}
         <label>Status <select data-patch="desk/orders" data-id="${esc(o.id)}" data-key="status">${stepOptions(ORDER_STEPS, o.status)}</select></label>
-        ${o.payment.proof ? `<a class="ad-btn ad-btn--quiet" href="/api/desk/proof/${esc(o.payment.proof)}" target="_blank" rel="noopener">Payment screenshot</a>` : ''}
-        ${o.refPhoto ? `<a class="ad-btn ad-btn--quiet" href="/api/desk/proof/${esc(o.refPhoto)}" target="_blank" rel="noopener">Cake design photo</a>` : ''}
-        <button type="button" class="ad-btn ad-btn--quiet" data-del="orders" data-id="${esc(o.id)}">Delete</button>
+        ${o.payment.proof ? `<a class="pk-btn pk-btn--quiet" href="/api/desk/proof/${esc(o.payment.proof)}" target="_blank" rel="noopener">Payment screenshot</a>` : ''}
+        ${o.refPhoto ? `<a class="pk-btn pk-btn--quiet" href="/api/desk/proof/${esc(o.refPhoto)}" target="_blank" rel="noopener">Cake design photo</a>` : ''}
+        <button type="button" class="pk-btn pk-btn--quiet" data-del="orders" data-id="${esc(o.id)}">Delete</button>
       </footer>${logList(o)}</article>`;
   }
   function daySummary(list) {
     const live = list.filter((o) => o.status !== 'cancelled');
     const sum = (arr) => arr.reduce((t, o) => t + Number(o.total || 0), 0);
     const count = (k) => live.filter((o) => o.type === k).length;
-    const tile = (label, value, cls) => `<div class="ad-tile ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
-    return `<div class="ad-tiles">
+    const tile = (label, value, cls) => `<div class="pk-tile ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
+    return `<div class="pk-tiles">
       ${tile('Orders', `${live.length}${list.length > live.length ? ` <small>(${list.length - live.length} cancelled)</small>` : ''}`)}
       ${tile('Total', rs(sum(live)))}${tile('Paid', rs(sum(live.filter((o) => o.paid))), 'is-paid')}${tile('Not paid yet', rs(sum(live.filter((o) => !o.paid))), 'is-unpaid')}
       ${tile('Still to do', live.filter((o) => o.status !== 'done').length)}
@@ -959,116 +959,116 @@
     const shown = new Set(A.dayOrders.map((o) => o.id));
     const other = (A.orders || []).filter((o) => o.status === 'pending' && !shown.has(o.id));
     if (!other.length) return '';
-    return `<p class="ad-waiting">${other.length} pending order${other.length === 1 ? ' is' : 's are'} on other days. <button type="button" class="ad-btn ad-btn--main" data-showtodo="1">Show every order still to do</button></p>`;
+    return `<p class="pk-waiting">${other.length} pending order${other.length === 1 ? ' is' : 's are'} on other days. <button type="button" class="pk-btn pk-btn--main" data-showtodo="1">Show every order still to do</button></p>`;
   }
   function listView(kind) {
-    const box = h('div', { class: 'ad-page' });
+    const box = h('div', { class: 'pk-page' });
     if (kind === 'orders') {
       const day = A.day || BS.todayAD();
       const bs = BS.toBS(day);
       const list = A.dayOrders.filter((o) => A.orderFilter === 'all' || (A.orderFilter === 'unpaid' ? !o.paid && o.status !== 'cancelled' : o.status === A.orderFilter));
-      const chip = (k, label) => `<button type="button" class="ad-chip${A.orderFilter === k ? ' is-on' : ''}" data-ofilter="${k}">${label}</button>`;
+      const chip = (k, label) => `<button type="button" class="pk-chip${A.orderFilter === k ? ' is-on' : ''}" data-ofilter="${k}">${label}</button>`;
       box.innerHTML = `<h2>Orders</h2>${alerts()}
-        <form class="ad-card ad-dayform" id="ad-day-form">
-          <div class="ad-row">
-            <button type="button" class="ad-btn ad-btn--quiet" data-day="-1" aria-label="Previous day">‹ Previous day</button>
-            <label class="ad-inline">Day <input type="date" name="day" value="${day}"></label>
-            <button type="button" class="ad-btn ad-btn--quiet" data-day="1" aria-label="Next day">Next day ›</button>
-            <button type="button" class="ad-btn ad-btn--quiet" data-day="0">Today</button>
+        <form class="pk-card pk-dayform" id="pk-day-form">
+          <div class="pk-row">
+            <button type="button" class="pk-btn pk-btn--quiet" data-day="-1" aria-label="Previous day">‹ Previous day</button>
+            <label class="pk-inline">Day <input type="date" name="day" value="${day}"></label>
+            <button type="button" class="pk-btn pk-btn--quiet" data-day="1" aria-label="Next day">Next day ›</button>
+            <button type="button" class="pk-btn pk-btn--quiet" data-day="0">Today</button>
           </div>
-          <p class="ad-bsday">${bs ? `${bs.d} ${BS.MONTHS[bs.m - 1]} ${bs.y}` : ''} · ${niceDate(day)}</p>
-          <div class="ad-row">
-            <label class="ad-inline">Show <select name="by"><option value="placed"${A.dayBy === 'placed' ? ' selected' : ''}>orders placed this day</option><option value="due"${A.dayBy === 'due' ? ' selected' : ''}>orders due this day</option><option value="todo"${A.dayBy === 'todo' ? ' selected' : ''}>every order still to do (any day)</option></select></label>
-            ${A.dayBy === 'todo' ? '' : `<a class="ad-btn" href="/api/desk/day.csv?date=${day}&by=${A.dayBy}">Download this day (opens in Excel)</a>`}
+          <p class="pk-bsday">${bs ? `${bs.d} ${BS.MONTHS[bs.m - 1]} ${bs.y}` : ''} · ${niceDate(day)}</p>
+          <div class="pk-row">
+            <label class="pk-inline">Show <select name="by"><option value="placed"${A.dayBy === 'placed' ? ' selected' : ''}>orders placed this day</option><option value="due"${A.dayBy === 'due' ? ' selected' : ''}>orders due this day</option><option value="todo"${A.dayBy === 'todo' ? ' selected' : ''}>every order still to do (any day)</option></select></label>
+            ${A.dayBy === 'todo' ? '' : `<a class="pk-btn" href="/api/desk/day.csv?date=${day}&by=${A.dayBy}">Download this day (opens in Excel)</a>`}
           </div>
         </form>
         ${waitingNote(day)}
         ${daySummary(A.dayOrders)}
-        <div class="ad-chips">${chip('all', 'All')}${ORDER_STEPS.map((k) => chip(k, STEP_NAMES[k])).join('')}${chip('unpaid', 'Not paid')}</div>`
-        + (list.length ? list.map(orderCard).join('') : '<p class="ad-empty">No orders here.</p>');
+        <div class="pk-chips">${chip('all', 'All')}${ORDER_STEPS.map((k) => chip(k, STEP_NAMES[k])).join('')}${chip('unpaid', 'Not paid')}</div>`
+        + (list.length ? list.map(orderCard).join('') : '<p class="pk-empty">No orders here.</p>');
     } else if (kind === 'bookings') {
       box.innerHTML = `<h2>Table bookings</h2>${alerts()}` + (A.bookings.length ? A.bookings.map((b) => `
-        <article class="ad-card is-${esc(b.status)}">
-          <header><strong>${esc(b.id)}</strong><span>asked ${when(b.createdAt)}</span><span class="ad-step ad-step--${esc(b.status)}">${STEP_NAMES[b.status] || esc(b.status)}</span><b>${esc(b.people)} people</b></header>
+        <article class="pk-card is-${esc(b.status)}">
+          <header><strong>${esc(b.id)}</strong><span>asked ${when(b.createdAt)}</span><span class="pk-step pk-step--${esc(b.status)}">${STEP_NAMES[b.status] || esc(b.status)}</span><b>${esc(b.people)} people</b></header>
           <p><b>${esc(b.bs || b.date)} at ${esc(b.time)}</b>${b.seating ? ` · ${esc(b.seating)}` : ''}</p>
           <p>${esc(b.name || 'Guest')} · ${contact(b)}</p>
           ${line('Food ready on arrival', b.food)}${line('Name on cake', b.cakeName)}${line('Decoration', b.decoration)}${line('Remarks', b.remarks)}
           <footer>
-            ${b.status === 'pending' ? `<button type="button" class="ad-btn ad-btn--main" data-quick="bookings" data-id="${esc(b.id)}" data-step="confirmed">Confirm</button>` : ''}
+            ${b.status === 'pending' ? `<button type="button" class="pk-btn pk-btn--main" data-quick="bookings" data-id="${esc(b.id)}" data-step="confirmed">Confirm</button>` : ''}
             <label>Status <select data-patch="desk/bookings" data-id="${esc(b.id)}" data-key="status">${stepOptions(BOOKING_STEPS, b.status)}</select></label>
-            <button type="button" class="ad-btn ad-btn--quiet" data-del="bookings" data-id="${esc(b.id)}">Delete</button>
+            <button type="button" class="pk-btn pk-btn--quiet" data-del="bookings" data-id="${esc(b.id)}">Delete</button>
           </footer>${logList(b)}
-        </article>`).join('') : '<p class="ad-empty">No bookings yet.</p>');
+        </article>`).join('') : '<p class="pk-empty">No bookings yet.</p>');
     } else if (kind === 'reviews') {
       box.innerHTML = `<h2>Reviews</h2>
-        <p class="ad-note">Tick "Show on website" for the reviews you want visitors to see. To show a Google review, copy it from Google Maps and add it below.</p>
-        <form class="ad-card ad-form" id="ad-newrev">
+        <p class="pk-note">Tick "Show on website" for the reviews you want visitors to see. To show a Google review, copy it from Google Maps and add it below.</p>
+        <form class="pk-card pk-form" id="pk-newrev">
           <header><strong>Add a review yourself</strong></header>
-          <div class="ad-grid">
+          <div class="pk-grid">
             <label>Name<input name="name" required maxlength="60"></label>
             <label>Stars<select name="rating">${[5, 4, 3, 2, 1].map((n) => `<option>${n}</option>`).join('')}</select></label>
             <label>From<select name="source"><option value="google">Google review</option><option value="site">Guest in the cafe</option></select></label>
           </div>
           <label>What they tried (optional)<input name="favorite" maxlength="100"></label>
           <label>Review<textarea name="text" rows="2" required maxlength="800"></textarea></label>
-          <footer><button class="ad-btn" type="submit">Add and show on website</button></footer>
+          <footer><button class="pk-btn" type="submit">Add and show on website</button></footer>
         </form>`
         + (A.reviews.length ? A.reviews.map((r) => `
-        <article class="ad-card${r.approved ? '' : ' is-new'}">
-          <header><strong>${esc(r.name)}</strong><span>${'★'.repeat(r.rating)}</span><span class="ad-tag">${r.source === 'google' ? 'Google' : 'Website'}</span><span>${when(r.createdAt)}</span></header>
+        <article class="pk-card${r.approved ? '' : ' is-new'}">
+          <header><strong>${esc(r.name)}</strong><span>${'★'.repeat(r.rating)}</span><span class="pk-tag">${r.source === 'google' ? 'Google' : 'Website'}</span><span>${when(r.createdAt)}</span></header>
           <p>${esc(r.text)}</p>${line('Tried', r.favorite)}
           <footer>
-            <label class="ad-check"><input type="checkbox" data-patch="admin/reviews" data-id="${esc(r.id)}" data-key="approved"${r.approved ? ' checked' : ''}><span>Show on website</span></label>
-            <button type="button" class="ad-btn ad-btn--quiet" data-del="reviews" data-id="${esc(r.id)}">Delete</button>
+            <label class="pk-check"><input type="checkbox" data-patch="admin/reviews" data-id="${esc(r.id)}" data-key="approved"${r.approved ? ' checked' : ''}><span>Show on website</span></label>
+            <button type="button" class="pk-btn pk-btn--quiet" data-del="reviews" data-id="${esc(r.id)}">Delete</button>
           </footer>
-        </article>`).join('') : '<p class="ad-empty">No reviews yet.</p>');
+        </article>`).join('') : '<p class="pk-empty">No reviews yet.</p>');
     } else if (kind === 'messages') {
-      box.innerHTML = `<h2>Messages</h2><p class="ad-note">Messages sent from the "Send us a message" box. The customer also sends the same text to your WhatsApp.</p>`
+      box.innerHTML = `<h2>Messages</h2><p class="pk-note">Messages sent from the "Send us a message" box. The customer also sends the same text to your WhatsApp.</p>`
         + (A.messages.length ? A.messages.map((m) => `
-        <article class="ad-card${m.read ? '' : ' is-new'}">
+        <article class="pk-card${m.read ? '' : ' is-new'}">
           <header><strong>${esc(m.name || 'Guest')}</strong><span>${when(m.createdAt)}</span></header>
           <p>${esc(m.text)}</p>
           ${m.phone ? `<p>${contact(m)}</p>` : ''}
           <footer>
-            <label class="ad-check"><input type="checkbox" data-patch="admin/messages" data-id="${esc(m.id)}" data-key="read"${m.read ? ' checked' : ''}><span>Read</span></label>
-            <button type="button" class="ad-btn ad-btn--quiet" data-del="messages" data-id="${esc(m.id)}">Delete</button>
+            <label class="pk-check"><input type="checkbox" data-patch="admin/messages" data-id="${esc(m.id)}" data-key="read"${m.read ? ' checked' : ''}><span>Read</span></label>
+            <button type="button" class="pk-btn pk-btn--quiet" data-del="messages" data-id="${esc(m.id)}">Delete</button>
           </footer>
-        </article>`).join('') : '<p class="ad-empty">No messages yet.</p>');
+        </article>`).join('') : '<p class="pk-empty">No messages yet.</p>');
     } else if (kind === 'history') {
       box.innerHTML = `<h2>History and backup</h2>
-        <div class="ad-card">
+        <div class="pk-card">
           <header><strong>Backups</strong></header>
-          <p class="ad-note">Download a website backup before you put a new version of the website on GitHub. If the new version starts empty, come here and restore the file: your photos, menu, prices, texts, sizes and photo positions come back. To have Claude build the next version on top of your current website, upload the website backup file in the chat.</p>
+          <p class="pk-note">Download a website backup before you put a new version of the website on GitHub. If the new version starts empty, come here and restore the file: your photos, menu, prices, texts, sizes and photo positions come back. To have Claude build the next version on top of your current website, upload the website backup file in the chat.</p>
           <footer>
-            <a class="ad-btn ad-btn--main" href="/api/admin/backup">Download website backup</a>
-            <a class="ad-btn" href="/api/admin/backup?full=1">Download full backup (also orders, bookings, reviews, messages)</a>
+            <a class="pk-btn pk-btn--main" href="/api/admin/backup">Download website backup</a>
+            <a class="pk-btn" href="/api/admin/backup?full=1">Download full backup (also orders, bookings, reviews, messages)</a>
           </footer>
-          <form class="ad-form" id="ad-restore-form">
+          <form class="pk-form" id="pk-restore-form">
             <label>Restore from a backup file (.zip)<input type="file" name="file" accept=".zip,application/zip" required></label>
-            <footer><button class="ad-btn" type="submit">Restore</button><span class="ad-note">Nothing is deleted: the current website is kept in the list below, and orders are only added.</span></footer>
+            <footer><button class="pk-btn" type="submit">Restore</button><span class="pk-note">Nothing is deleted: the current website is kept in the list below, and orders are only added.</span></footer>
           </form>
-          <p class="ad-note">Passwords and staff logins are never put in a backup. Customer accounts go in without their passwords (customers choose "Forgot password" once after a restore).</p>
+          <p class="pk-note">Passwords and staff logins are never put in a backup. Customer accounts go in without their passwords (customers choose "Forgot password" once after a restore).</p>
         </div>
-        <div class="ad-card"><header><strong>Automatic backups (every night)</strong><button type="button" class="ad-btn ad-btn--quiet" data-do="backup-now">Make one now</button></header>
-          <p class="ad-note">Every night after 11 PM the website, orders, bookings, accounts and points are saved here (14 newest)${A.auto && A.auto.email ? ' and emailed to you, so a copy is kept outside the server' : '. To also get them by email (a copy outside the server), set RESEND_API_KEY and BACKUP_EMAIL on Railway'}. Photos are only in the manual website backup above.</p>
-          ${A.auto && A.auto.last ? `<p class="ad-note">Last: ${when(A.auto.last.at)}${A.auto.last.emailed ? ', emailed' : ''}.</p>` : ''}
-          ${A.auto && A.auto.files.length ? `<ul class="ad-staff">${A.auto.files.map((x) => `<li><span>${esc(x.file)} · ${Math.max(1, Math.round(x.bytes / 1024))} KB</span><a class="ad-btn ad-btn--quiet" href="/api/admin/auto-backups/${esc(x.file)}">Download</a></li>`).join('')}</ul>` : '<p class="ad-empty">None yet. The first one is made tonight.</p>'}
+        <div class="pk-card"><header><strong>Automatic backups (every night)</strong><button type="button" class="pk-btn pk-btn--quiet" data-do="backup-now">Make one now</button></header>
+          <p class="pk-note">Every night after 11 PM the website, orders, bookings, accounts and points are saved here (14 newest)${A.auto && A.auto.email ? ' and emailed to you, so a copy is kept outside the server' : '. To also get them by email (a copy outside the server), set RESEND_API_KEY and BACKUP_EMAIL on Railway'}. Photos are only in the manual website backup above.</p>
+          ${A.auto && A.auto.last ? `<p class="pk-note">Last: ${when(A.auto.last.at)}${A.auto.last.emailed ? ', emailed' : ''}.</p>` : ''}
+          ${A.auto && A.auto.files.length ? `<ul class="pk-staff">${A.auto.files.map((x) => `<li><span>${esc(x.file)} · ${Math.max(1, Math.round(x.bytes / 1024))} KB</span><a class="pk-btn pk-btn--quiet" href="/api/admin/auto-backups/${esc(x.file)}">Download</a></li>`).join('')}</ul>` : '<p class="pk-empty">None yet. The first one is made tonight.</p>'}
         </div>
-        <p class="ad-note">Every time you press Save, the website is kept here. Open an older version to look at it in the editor; press Save if you want to use it again. Nothing changes until you save.</p>
-        <div class="ad-card"><header><strong>Website versions</strong></header>
-          ${A.history.length ? A.history.map((v, n) => `<div class="ad-version">
-            <div><b>${when(v.at)}</b>${n === 0 ? ' <span class="ad-tag">live now</span>' : ''}${v.note ? ` · ${esc(v.note)}` : ''}
-              ${v.changes && v.changes.length ? `<ul>${v.changes.slice(0, 8).map((c) => `<li>${esc(c)}</li>`).join('')}${v.changes.length > 8 ? `<li>and ${v.changes.length - 8} more changes</li>` : ''}</ul>` : `<p class="ad-note">${v.note ? '' : 'No changes listed.'}</p>`}</div>
-            ${n === 0 ? '' : `<button type="button" class="ad-btn" data-version="${esc(v.id)}">Open this version</button>`}
-          </div>`).join('') : '<p class="ad-empty">No saved versions yet. They appear after your first save.</p>'}
+        <p class="pk-note">Every time you press Save, the website is kept here. Open an older version to look at it in the editor; press Save if you want to use it again. Nothing changes until you save.</p>
+        <div class="pk-card"><header><strong>Website versions</strong></header>
+          ${A.history.length ? A.history.map((v, n) => `<div class="pk-version">
+            <div><b>${when(v.at)}</b>${n === 0 ? ' <span class="pk-tag">live now</span>' : ''}${v.note ? ` · ${esc(v.note)}` : ''}
+              ${v.changes && v.changes.length ? `<ul>${v.changes.slice(0, 8).map((c) => `<li>${esc(c)}</li>`).join('')}${v.changes.length > 8 ? `<li>and ${v.changes.length - 8} more changes</li>` : ''}</ul>` : `<p class="pk-note">${v.note ? '' : 'No changes listed.'}</p>`}</div>
+            ${n === 0 ? '' : `<button type="button" class="pk-btn" data-version="${esc(v.id)}">Open this version</button>`}
+          </div>`).join('') : '<p class="pk-empty">No saved versions yet. They appear after your first save.</p>'}
         </div>
-        <div class="ad-card"><header><strong>Deleted orders, bookings, reviews and messages</strong></header>
-          ${A.bin.length ? A.bin.map((t) => `<div class="ad-version"><div><b>${esc(t.item.id)}</b> · ${esc(t.kind)} · ${esc(t.item.name || 'Guest')} · deleted ${when(t.at)}</div>
-            <button type="button" class="ad-btn" data-unbin="${esc(t.key)}">Bring back</button></div>`).join('') : '<p class="ad-empty">Nothing deleted.</p>'}
+        <div class="pk-card"><header><strong>Deleted orders, bookings, reviews and messages</strong></header>
+          ${A.bin.length ? A.bin.map((t) => `<div class="pk-version"><div><b>${esc(t.item.id)}</b> · ${esc(t.kind)} · ${esc(t.item.name || 'Guest')} · deleted ${when(t.at)}</div>
+            <button type="button" class="pk-btn" data-unbin="${esc(t.key)}">Bring back</button></div>`).join('') : '<p class="pk-empty">Nothing deleted.</p>'}
         </div>
-        <div class="ad-card">
+        <div class="pk-card">
           <header><strong>Recent activity</strong></header>
-          ${A.log.length ? `<div class="ad-log"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Number</th></tr></thead><tbody>${A.log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.ref)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">Nothing yet.</p>'}
+          ${A.log.length ? `<div class="pk-log"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Number</th></tr></thead><tbody>${A.log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.ref)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="pk-empty">Nothing yet.</p>'}
         </div>`;
     } else if (kind === 'customers') {
       const C = A.cust || { customers: [], guests: [] };
@@ -1077,84 +1077,84 @@
       const KIND = { earn: 'Earned', spend: 'Used', refund: 'Given back', reverse: 'Taken back', adjust: 'Changed by owner', birthday: 'Birthday', closed: 'Account closed' };
       const L = A.content.loyalty || {};
       box.innerHTML = `<h2>Customers and points</h2>
-        <p class="ad-note">${C.customers.length} account${C.customers.length === 1 ? '' : 's'}. Points: ${L.percent || 0}% back on finished orders, 1 point = Rs. ${L.rupeesPerPoint || 1}, usable from ${L.minSpend || 0} points, last ${L.expiryMonths || 12} months. Change these in Edit website, "Loyalty points and accounts".</p>
-        <form class="ad-card ad-form" id="ad-points-form"><header><strong>Add or take away points</strong></header>
-          <div class="ad-grid"><label>Phone number<input name="phone" type="tel" required></label><label>Points (minus to take away)<input name="amount" type="number" required></label><label>Reason (kept with the points)<input name="note" required maxlength="160"></label></div>
-          <footer><button class="ad-btn" type="submit">Save</button></footer></form>
-        <div class="ad-card"><header><strong>Accounts</strong><input type="search" id="ad-cust-q" placeholder="Search name, email or phone" value="${esc(A.custQ || '')}"></header>
-          ${list.length ? `<div class="ad-log"><table><thead><tr><th>Name</th><th>Sign in with</th><th>Phone</th><th>Points</th><th>Birthday</th><th>Since</th><th></th></tr></thead><tbody>${list.map((c) => `<tr>
-            <td>${esc(c.name || '—')}${c.prefs && c.prefs.offers ? ' <span class="ad-tag">offers ok</span>' : ''}</td><td>${esc([c.username, c.email].filter(Boolean).join(' · '))}${c.hasPassword ? '' : ' <span class="ad-tag">no password yet</span>'}</td>
-            <td>${esc(c.phone || '—')}${c.phone ? (c.phoneVerified ? ' ✓' : ` <button type="button" class="ad-btn ad-btn--quiet" data-cust="confirm" data-id="${esc(c.id)}">Confirm</button>`) : ''}</td>
-            <td>${c.points}</td><td>${esc(c.birthday || '—')} <button type="button" class="ad-btn ad-btn--quiet" data-cust="birthday" data-id="${esc(c.id)}">Change</button></td><td>${when(c.createdAt)}</td>
-            <td><button type="button" class="ad-btn ad-btn--quiet" data-cust="signout" data-id="${esc(c.id)}">Sign out</button><button type="button" class="ad-btn ad-btn--quiet" data-cust="delete" data-id="${esc(c.id)}">Delete</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">No accounts yet.</p>'}
+        <p class="pk-note">${C.customers.length} account${C.customers.length === 1 ? '' : 's'}. Points: ${L.percent || 0}% back on finished orders, 1 point = Rs. ${L.rupeesPerPoint || 1}, usable from ${L.minSpend || 0} points, last ${L.expiryMonths || 12} months. Change these in Edit website, "Loyalty points and accounts".</p>
+        <form class="pk-card pk-form" id="pk-points-form"><header><strong>Add or take away points</strong></header>
+          <div class="pk-grid"><label>Phone number<input name="phone" type="tel" required></label><label>Points (minus to take away)<input name="amount" type="number" required></label><label>Reason (kept with the points)<input name="note" required maxlength="160"></label></div>
+          <footer><button class="pk-btn" type="submit">Save</button></footer></form>
+        <div class="pk-card"><header><strong>Accounts</strong><input type="search" id="pk-cust-q" placeholder="Search name, email or phone" value="${esc(A.custQ || '')}"></header>
+          ${list.length ? `<div class="pk-log"><table><thead><tr><th>Name</th><th>Sign in with</th><th>Phone</th><th>Points</th><th>Birthday</th><th>Since</th><th></th></tr></thead><tbody>${list.map((c) => `<tr>
+            <td>${esc(c.name || '—')}${c.prefs && c.prefs.offers ? ' <span class="pk-tag">offers ok</span>' : ''}</td><td>${esc([c.username, c.email].filter(Boolean).join(' · '))}${c.hasPassword ? '' : ' <span class="pk-tag">no password yet</span>'}</td>
+            <td>${esc(c.phone || '—')}${c.phone ? (c.phoneVerified ? ' ✓' : ` <button type="button" class="pk-btn pk-btn--quiet" data-cust="confirm" data-id="${esc(c.id)}">Confirm</button>`) : ''}</td>
+            <td>${c.points}</td><td>${esc(c.birthday || '—')} <button type="button" class="pk-btn pk-btn--quiet" data-cust="birthday" data-id="${esc(c.id)}">Change</button></td><td>${when(c.createdAt)}</td>
+            <td><button type="button" class="pk-btn pk-btn--quiet" data-cust="signout" data-id="${esc(c.id)}">Sign out</button><button type="button" class="pk-btn pk-btn--quiet" data-cust="delete" data-id="${esc(c.id)}">Delete</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="pk-empty">No accounts yet.</p>'}
         </div>
-        ${C.guests.length ? `<div class="ad-card"><header><strong>Phone numbers with points but no account</strong></header><ul class="ad-staff">${C.guests.map((g) => `<li><span>${esc(g.phone)}</span><b>${g.points} points</b></li>`).join('')}</ul></div>` : ''}
-        <div class="ad-card"><header><strong>Every points change (newest first)</strong></header>
-          ${(A.ledger || []).length ? `<div class="ad-log"><table><thead><tr><th>When</th><th>Phone</th><th>What</th><th>Points</th><th>By</th></tr></thead><tbody>${A.ledger.slice(0, 200).map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.phone)}</td><td>${esc(KIND[l.kind] || l.kind)}${l.order ? ` · ${esc(l.order)}` : ''}${l.note ? ` · ${esc(l.note)}` : ''}</td><td>${l.amount > 0 ? '+' : ''}${l.amount}</td><td>${esc(l.by || '')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">No points yet. They are added when orders with a phone number are marked Done.</p>'}
+        ${C.guests.length ? `<div class="pk-card"><header><strong>Phone numbers with points but no account</strong></header><ul class="pk-staff">${C.guests.map((g) => `<li><span>${esc(g.phone)}</span><b>${g.points} points</b></li>`).join('')}</ul></div>` : ''}
+        <div class="pk-card"><header><strong>Every points change (newest first)</strong></header>
+          ${(A.ledger || []).length ? `<div class="pk-log"><table><thead><tr><th>When</th><th>Phone</th><th>What</th><th>Points</th><th>By</th></tr></thead><tbody>${A.ledger.slice(0, 200).map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.phone)}</td><td>${esc(KIND[l.kind] || l.kind)}${l.order ? ` · ${esc(l.order)}` : ''}${l.note ? ` · ${esc(l.note)}` : ''}</td><td>${l.amount > 0 ? '+' : ''}${l.amount}</td><td>${esc(l.by || '')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="pk-empty">No points yet. They are added when orders with a phone number are marked Done.</p>'}
         </div>`;
     } else if (kind === 'sales') {
       const d = (A.sales && A.sales.data) || null;
       const t = BS.todayAD();
-      const range = (label, from, to) => `<button type="button" class="ad-chip${A.sales && A.sales.from === from && A.sales.to === to ? ' is-on' : ''}" data-range="${from}|${to}">${label}</button>`;
-      const tile = (label, value, cls) => `<div class="ad-tile ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
+      const range = (label, from, to) => `<button type="button" class="pk-chip${A.sales && A.sales.from === from && A.sales.to === to ? ' is-on' : ''}" data-range="${from}|${to}">${label}</button>`;
+      const tile = (label, value, cls) => `<div class="pk-tile ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
       const TYPEN = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
       const maxH = d ? Math.max(1, ...d.hours) : 1;
       const firstHour = d ? Math.max(0, d.hours.findIndex((n) => n > 0) - 1) : 7;
       box.innerHTML = `<h2>Sales</h2>
-        <div class="ad-chips">${range('Today', t, t)}${range('Yesterday', addDays(t, -1), addDays(t, -1))}${range('Last 7 days', addDays(t, -6), t)}${range('Last 30 days', addDays(t, -29), t)}${range('Last 365 days', addDays(t, -364), t)}</div>
-        <form class="ad-card ad-dayform" id="ad-sales-form"><div class="ad-row"><label class="ad-inline">From <input type="date" name="from" value="${esc((A.sales || {}).from || t)}"></label><label class="ad-inline">To <input type="date" name="to" value="${esc((A.sales || {}).to || t)}"></label><button class="ad-btn" type="submit">Show</button></div></form>
-        ${d ? `<div class="ad-tiles">${tile('Orders', `${d.orders}${d.cancelled ? ` <small>(${d.cancelled} cancelled)</small>` : ''}`)}${tile('Total', rs(d.total))}${tile('Paid', rs(d.paid), 'is-paid')}${tile('Average order', rs(d.average))}${tile('Table bookings', d.bookings)}
+        <div class="pk-chips">${range('Today', t, t)}${range('Yesterday', addDays(t, -1), addDays(t, -1))}${range('Last 7 days', addDays(t, -6), t)}${range('Last 30 days', addDays(t, -29), t)}${range('Last 365 days', addDays(t, -364), t)}</div>
+        <form class="pk-card pk-dayform" id="pk-sales-form"><div class="pk-row"><label class="pk-inline">From <input type="date" name="from" value="${esc((A.sales || {}).from || t)}"></label><label class="pk-inline">To <input type="date" name="to" value="${esc((A.sales || {}).to || t)}"></label><button class="pk-btn" type="submit">Show</button></div></form>
+        ${d ? `<div class="pk-tiles">${tile('Orders', `${d.orders}${d.cancelled ? ` <small>(${d.cancelled} cancelled)</small>` : ''}`)}${tile('Total', rs(d.total))}${tile('Paid', rs(d.paid), 'is-paid')}${tile('Average order', rs(d.average))}${tile('Table bookings', d.bookings)}
             ${d.byType.map((x) => tile(TYPEN[x.type], `${x.orders} · ${rs(x.total)}`)).join('')}${tile('From the app', d.bySource.find((x) => x.source === 'app').orders)}
             ${tile('Points given', d.points.earned)}${tile('Points used', d.points.spent)}${tile('Points customers hold now', `${d.points.owed} <small>(${rs(d.points.value)})</small>`)}${tile('Customer accounts', d.customers)}</div>
-          <div class="ad-card"><header><strong>Best sellers</strong></header>${d.best.length ? `<div class="ad-log"><table><thead><tr><th>Item</th><th>Sold</th><th>Total</th></tr></thead><tbody>${d.best.map((b) => `<tr><td>${esc(b.name)}</td><td>${b.qty}</td><td>${rs(b.total)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">No orders in these days.</p>'}</div>
-          <div class="ad-card"><header><strong>Busiest hours (orders placed)</strong></header><div class="ad-hours">${d.hours.slice(firstHour, Math.max(firstHour + 6, 24 - [...d.hours].reverse().findIndex((n) => n > 0) + 1)).map((n, i) => `<div><i style="height:${Math.round((n / maxH) * 100)}%"></i><b>${n || ''}</b><span>${((firstHour + i) % 12) || 12}${firstHour + i < 12 ? 'a' : 'p'}</span></div>`).join('')}</div></div>
-          ${Object.keys(d.days).length > 1 ? `<div class="ad-card"><header><strong>Day by day</strong></header><div class="ad-log"><table><thead><tr><th>Day</th><th>Orders</th><th>Total</th></tr></thead><tbody>${Object.entries(d.days).sort((a, b) => b[0].localeCompare(a[0])).map(([day, v]) => `<tr><td>${esc(niceDate(day))}</td><td>${v.orders}</td><td>${rs(v.total)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}` : ''}`;
+          <div class="pk-card"><header><strong>Best sellers</strong></header>${d.best.length ? `<div class="pk-log"><table><thead><tr><th>Item</th><th>Sold</th><th>Total</th></tr></thead><tbody>${d.best.map((b) => `<tr><td>${esc(b.name)}</td><td>${b.qty}</td><td>${rs(b.total)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="pk-empty">No orders in these days.</p>'}</div>
+          <div class="pk-card"><header><strong>Busiest hours (orders placed)</strong></header><div class="pk-hours">${d.hours.slice(firstHour, Math.max(firstHour + 6, 24 - [...d.hours].reverse().findIndex((n) => n > 0) + 1)).map((n, i) => `<div><i style="height:${Math.round((n / maxH) * 100)}%"></i><b>${n || ''}</b><span>${((firstHour + i) % 12) || 12}${firstHour + i < 12 ? 'a' : 'p'}</span></div>`).join('')}</div></div>
+          ${Object.keys(d.days).length > 1 ? `<div class="pk-card"><header><strong>Day by day</strong></header><div class="pk-log"><table><thead><tr><th>Day</th><th>Orders</th><th>Total</th></tr></thead><tbody>${Object.entries(d.days).sort((a, b) => b[0].localeCompare(a[0])).map(([day, v]) => `<tr><td>${esc(niceDate(day))}</td><td>${v.orders}</td><td>${rs(v.total)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}` : ''}`;
     } else if (kind === 'tables') {
       const base = location.origin;
       const n = Math.max(1, Math.min(60, Number(A.tables) || 10));
       box.innerHTML = `<h2>Table QR codes</h2>
-        <p class="ad-note">Put one on each table. Guests scan it, see the menu, and order without paying first. The order arrives in Orders and on the counter screen with the table number.</p>
-        <form class="ad-card ad-form ad-noprint" id="ad-tables-form">
-          <div class="ad-grid ad-grid--2">
+        <p class="pk-note">Put one on each table. Guests scan it, see the menu, and order without paying first. The order arrives in Orders and on the counter screen with the table number.</p>
+        <form class="pk-card pk-form pk-noprint" id="pk-tables-form">
+          <div class="pk-grid pk-grid--2">
             <label>How many tables<input type="number" name="n" min="1" max="60" value="${n}"></label>
             <label>Website address<input name="base" value="${esc(A.tableBase || base)}"></label>
           </div>
-          <footer><button class="ad-btn" type="submit">Make QR codes</button><button class="ad-btn ad-btn--main" type="button" data-do="print">Print</button></footer>
+          <footer><button class="pk-btn" type="submit">Make QR codes</button><button class="pk-btn pk-btn--main" type="button" data-do="print">Print</button></footer>
         </form>
-        <div class="ad-qr-sheet">${Array.from({ length: n }, (x, i) => {
+        <div class="pk-qr-sheet">${Array.from({ length: n }, (x, i) => {
           const link = `${(A.tableBase || base).replace(/\/+$/, '')}/?table=${i + 1}`;
-          return `<figure class="ad-qr"><img src="/api/admin/qr?text=${encodeURIComponent(link)}" alt="QR code for table ${i + 1}"><figcaption><b>Table ${i + 1}</b><span>Scan to see the menu and order</span></figcaption></figure>`;
+          return `<figure class="pk-qr"><img src="/api/admin/qr?text=${encodeURIComponent(link)}" alt="QR code for table ${i + 1}"><figcaption><b>Table ${i + 1}</b><span>Scan to see the menu and order</span></figcaption></figure>`;
         }).join('')}
-        ${A.content.reviews.googleLink ? `<figure class="ad-qr ad-qr--google"><img src="/api/admin/qr?text=${encodeURIComponent(A.content.reviews.googleLink)}" alt="QR code for Google reviews"><figcaption><b>Enjoyed your visit?</b><span>Scan to review us on Google</span></figcaption></figure>` : ''}</div>
-        ${A.content.reviews.googleLink ? '' : '<p class="ad-note ad-noprint">To print a "Review us on Google" card with these, add your Google review link in Edit website, Reviews section.</p>'}`;
+        ${A.content.reviews.googleLink ? `<figure class="pk-qr pk-qr--google"><img src="/api/admin/qr?text=${encodeURIComponent(A.content.reviews.googleLink)}" alt="QR code for Google reviews"><figcaption><b>Enjoyed your visit?</b><span>Scan to review us on Google</span></figcaption></figure>` : ''}</div>
+        ${A.content.reviews.googleLink ? '' : '<p class="pk-note pk-noprint">To print a "Review us on Google" card with these, add your Google review link in Edit website, Reviews section.</p>'}`;
     } else {
       box.innerHTML = `<h2>Security and staff</h2>
-        <form class="ad-card ad-form" id="ad-pass-form">
+        <form class="pk-card pk-form" id="pk-pass-form">
           <header><strong>Change the owner password</strong></header>
-          <div class="ad-grid ad-grid--2">
+          <div class="pk-grid pk-grid--2">
             <label>Current password<input type="password" name="current" autocomplete="current-password" required></label>
             <label>New password (8 or more characters)<input type="password" name="next" autocomplete="new-password" minlength="8" required></label>
           </div>
-          <footer><button class="ad-btn" type="submit">Change password</button>
-            <button class="ad-btn ad-btn--quiet" type="button" data-do="signout-all">Sign out on every device</button></footer>
+          <footer><button class="pk-btn" type="submit">Change password</button>
+            <button class="pk-btn pk-btn--quiet" type="button" data-do="signout-all">Sign out on every device</button></footer>
         </form>
-        <div class="ad-card">
-          <header><strong>Staff logins for the counter screen</strong><a class="ad-btn ad-btn--quiet" href="/counter" target="_blank" rel="noopener">Open counter screen</a></header>
-          <p class="ad-note">Staff can see and update orders and bookings at /counter. They cannot edit the website.</p>
-          ${A.staff.length ? `<ul class="ad-staff">${A.staff.map((s) => `<li><span><b>${esc(s.name)}</b> · login ID ${esc(s.username)}${s.active ? '' : ' · switched off'}${s.lastLoginAt ? ` · last login ${when(s.lastLoginAt)}` : ''}</span>
-            <span class="ad-row"><button type="button" class="ad-btn ad-btn--quiet" data-staff="reset" data-id="${esc(s.id)}">New password</button>
-            <button type="button" class="ad-btn ad-btn--quiet" data-staff="toggle" data-id="${esc(s.id)}" data-on="${s.active}">${s.active ? 'Switch off' : 'Switch on'}</button>
-            <button type="button" class="ad-btn ad-btn--quiet" data-staff="remove" data-id="${esc(s.id)}">Remove</button></span></li>`).join('')}</ul>` : '<p class="ad-empty">No staff logins yet.</p>'}
-          <form class="ad-form" id="ad-staff-form">
-            <div class="ad-grid">
+        <div class="pk-card">
+          <header><strong>Staff logins for the counter screen</strong><a class="pk-btn pk-btn--quiet" href="/counter" target="_blank" rel="noopener">Open counter screen</a></header>
+          <p class="pk-note">Staff can see and update orders and bookings at /counter. They cannot edit the website.</p>
+          ${A.staff.length ? `<ul class="pk-staff">${A.staff.map((s) => `<li><span><b>${esc(s.name)}</b> · login ID ${esc(s.username)}${s.active ? '' : ' · switched off'}${s.lastLoginAt ? ` · last login ${when(s.lastLoginAt)}` : ''}</span>
+            <span class="pk-row"><button type="button" class="pk-btn pk-btn--quiet" data-staff="reset" data-id="${esc(s.id)}">New password</button>
+            <button type="button" class="pk-btn pk-btn--quiet" data-staff="toggle" data-id="${esc(s.id)}" data-on="${s.active}">${s.active ? 'Switch off' : 'Switch on'}</button>
+            <button type="button" class="pk-btn pk-btn--quiet" data-staff="remove" data-id="${esc(s.id)}">Remove</button></span></li>`).join('')}</ul>` : '<p class="pk-empty">No staff logins yet.</p>'}
+          <form class="pk-form" id="pk-staff-form">
+            <div class="pk-grid">
               <label>Name<input name="name" required maxlength="80"></label>
               <label>Login ID<input name="username" required maxlength="30" autocapitalize="none" placeholder="e.g. sita"></label>
               <label>Password (6 or more)<input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
             </div>
-            <footer><button class="ad-btn" type="submit">Add staff login</button></footer>
+            <footer><button class="pk-btn" type="submit">Add staff login</button></footer>
           </form>
         </div>
-        <p class="ad-note">Backups and the activity log are under History and backup.</p>`;
+        <p class="pk-note">Backups and the activity log are under History and backup.</p>`;
     }
     return box;
   }
@@ -1188,11 +1188,11 @@
   }
   function show(view, force) {
     A.view = view;
-    document.querySelectorAll('.ad-tabs button').forEach((b) => b.classList.toggle('is-on', b.dataset.view === view));
-    const body = document.getElementById('ad-body');
-    if (view === 'edit') { if (!body.querySelector('.ad-split')) body.replaceChildren(editView()); return; }
+    document.querySelectorAll('.pk-tabs button').forEach((b) => b.classList.toggle('is-on', b.dataset.view === view));
+    const body = document.getElementById('pk-body');
+    if (view === 'edit') { if (!body.querySelector('.pk-split')) body.replaceChildren(editView()); return; }
     const busy = !force && body.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (!busy || !body.querySelector('.ad-page')) body.replaceChildren(listView(view));
+    if (!busy || !body.querySelector('.pk-page')) body.replaceChildren(listView(view));
   }
   async function reload(view) {
     if (view === 'security') await loadSecurity();
@@ -1209,21 +1209,21 @@
       if (view !== 'edit' && A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) return;
       if (view === 'edit') return show('edit', true);
       try { await reload(view); } catch (e) { flash(e.message, true); }
-    } }, label, !/edit|security|history|tables|customers|sales/.test(view) && h('span', { class: 'ad-count', 'data-count': view, hidden: true }, '0'));
+    } }, label, !/edit|security|history|tables|customers|sales/.test(view) && h('span', { class: 'pk-count', 'data-count': view, hidden: true }, '0'));
     root.replaceChildren(
-      h('header', { class: 'ad-top' },
-        h('strong', { class: 'ad-name' }, 'Pick Me Cafe admin'),
-        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('customers', 'Customers and points'), tab('sales', 'Sales'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
-          h('a', { class: 'ad-tablink', href: '/admin/print-menu', onclick: (e) => { if (A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) e.preventDefault(); } }, 'Print menu')),
-        h('span', { class: 'ad-right' },
-          h('span', { id: 'ad-status', class: 'ad-status' }, 'All changes saved'),
-          h('button', { type: 'button', id: 'ad-save', class: 'ad-btn ad-btn--main', disabled: true, onclick: save }, 'Save'),
-          h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: discard }, 'Undo changes'),
-          h('a', { class: 'ad-btn ad-btn--quiet', href: '/', target: '_blank', rel: 'noopener' }, 'Open site'),
-          h('button', { type: 'button', class: 'ad-btn ad-btn--quiet', onclick: async () => { await api('POST', '/api/auth/logout'); login(); } }, 'Log out'))),
-      h('div', { id: 'ad-remind', class: 'ad-reminders' }),
-      h('div', { id: 'ad-body', class: 'ad-body' }),
-      h('div', { id: 'ad-flash', class: 'ad-flash', role: 'status' }));
+      h('header', { class: 'pk-top' },
+        h('strong', { class: 'pk-name' }, 'Pick Me Cafe admin'),
+        h('nav', { class: 'pk-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('customers', 'Customers and points'), tab('sales', 'Sales'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
+          h('a', { class: 'pk-tablink', href: '/admin/print-menu', onclick: (e) => { if (A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) e.preventDefault(); } }, 'Print menu')),
+        h('span', { class: 'pk-right' },
+          h('span', { id: 'pk-status', class: 'pk-status' }, 'All changes saved'),
+          h('button', { type: 'button', id: 'pk-save', class: 'pk-btn pk-btn--main', disabled: true, onclick: save }, 'Save'),
+          h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: discard }, 'Undo changes'),
+          h('a', { class: 'pk-btn pk-btn--quiet', href: '/', target: '_blank', rel: 'noopener' }, 'Open site'),
+          h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: async () => { await api('POST', '/api/auth/logout'); login(); } }, 'Log out'))),
+      h('div', { id: 'pk-remind', class: 'pk-reminders' }),
+      h('div', { id: 'pk-body', class: 'pk-body' }),
+      h('div', { id: 'pk-flash', class: 'pk-flash', role: 'status' }));
   }
   async function save(force) {
     const r = await fetch('/api/admin/content' + (force === true ? '?force=1' : '') + (A.note ? `${force === true ? '&' : '?'}note=${encodeURIComponent(A.note)}` : ''), {
@@ -1236,7 +1236,7 @@
       if (mine) return save(true);
       A.content = await fetch('/api/content').then((x) => x.json());
       A.saved = JSON.stringify(A.content);
-      document.getElementById('ad-body').replaceChildren();
+      document.getElementById('pk-body').replaceChildren();
       show('edit', true);
       status();
       return flash('Loaded the newest version.');
@@ -1252,21 +1252,21 @@
     if (status() && !window.confirm('Undo every change since your last save?')) return;
     A.content = JSON.parse(A.saved);
     A.note = '';
-    document.getElementById('ad-body').replaceChildren();
+    document.getElementById('pk-body').replaceChildren();
     show('edit', true);
     status();
   }
 
   const formData = (form) => Object.fromEntries(new FormData(form).entries());
   root.addEventListener('input', (e) => {
-    if (e.target.id !== 'ad-cust-q') return;
+    if (e.target.id !== 'pk-cust-q') return;
     A.custQ = e.target.value;
     clearTimeout(A.custT);
-    A.custT = setTimeout(() => { const pos = e.target.selectionStart; show('customers', true); const q = document.getElementById('ad-cust-q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }, 250);
+    A.custT = setTimeout(() => { const pos = e.target.selectionStart; show('customers', true); const q = document.getElementById('pk-cust-q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }, 250);
   });
   root.addEventListener('change', async (e) => {
     const t = e.target;
-    if (t.closest && t.closest('#ad-day-form')) {
+    if (t.closest && t.closest('#pk-day-form')) {
       if (t.name === 'day' && /^\d{4}-\d{2}-\d{2}$/.test(t.value)) A.day = t.value;
       if (t.name === 'by') A.dayBy = t.value;
       try { await reload('orders'); } catch (err) { flash(err.message, true); }
@@ -1302,7 +1302,7 @@
         old._rev = JSON.parse(A.saved)._rev;
         A.content = old;
         A.note = v ? `restored the version from ${when(v.at)}` : 'restored an older version';
-        document.getElementById('ad-body').replaceChildren();
+        document.getElementById('pk-body').replaceChildren();
         show('edit', true);
         status();
         flash('This is the older version. Look at the preview, then press Save to make it live, or Undo changes to go back.');
@@ -1353,11 +1353,11 @@
   });
   root.addEventListener('submit', async (e) => {
     const id = e.target.id;
-    if (!/^ad-(newrev|pass-form|staff-form|tables-form|restore-form|day-form|points-form|sales-form)$/.test(id)) return;
+    if (!/^pk-(newrev|pass-form|staff-form|tables-form|restore-form|day-form|points-form|sales-form)$/.test(id)) return;
     e.preventDefault();
-    if (id === 'ad-day-form') return;
+    if (id === 'pk-day-form') return;
     try {
-      if (id === 'ad-restore-form') {
+      if (id === 'pk-restore-form') {
         const file = e.target.elements.file.files[0];
         if (!file) return;
         if (!window.confirm('Restore this backup? The current website stays in History, so you can go back.')) return;
@@ -1368,12 +1368,12 @@
         await afterRestore(res);
         return;
       }
-      if (id === 'ad-points-form') { await api('POST', '/api/admin/points', formData(e.target)); await reload('customers'); flash('Points saved.'); return; }
-      if (id === 'ad-sales-form') { const d = formData(e.target); if (d.from && d.to) { A.sales = { from: d.from <= d.to ? d.from : d.to, to: d.from <= d.to ? d.to : d.from }; await reload('sales'); } return; }
-      if (id === 'ad-tables-form') { const d = formData(e.target); A.tables = d.n; A.tableBase = String(d.base || '').trim() || location.origin; show('tables', true); return; }
-      if (id === 'ad-newrev') { await api('POST', '/api/admin/reviews', formData(e.target)); await reload('reviews'); flash('Review added.'); }
-      if (id === 'ad-pass-form') { await api('POST', '/api/admin/password', formData(e.target)); await reload('security'); flash('Password changed. Other devices are signed out.'); }
-      if (id === 'ad-staff-form') { await api('POST', '/api/admin/staff', formData(e.target)); await reload('security'); flash('Staff login added.'); }
+      if (id === 'pk-points-form') { await api('POST', '/api/admin/points', formData(e.target)); await reload('customers'); flash('Points saved.'); return; }
+      if (id === 'pk-sales-form') { const d = formData(e.target); if (d.from && d.to) { A.sales = { from: d.from <= d.to ? d.from : d.to, to: d.from <= d.to ? d.to : d.from }; await reload('sales'); } return; }
+      if (id === 'pk-tables-form') { const d = formData(e.target); A.tables = d.n; A.tableBase = String(d.base || '').trim() || location.origin; show('tables', true); return; }
+      if (id === 'pk-newrev') { await api('POST', '/api/admin/reviews', formData(e.target)); await reload('reviews'); flash('Review added.'); }
+      if (id === 'pk-pass-form') { await api('POST', '/api/admin/password', formData(e.target)); await reload('security'); flash('Password changed. Other devices are signed out.'); }
+      if (id === 'pk-staff-form') { await api('POST', '/api/admin/staff', formData(e.target)); await reload('security'); flash('Staff login added.'); }
     } catch (err) { flash(err.message, true); }
   });
   window.addEventListener('message', (e) => {
@@ -1401,15 +1401,15 @@
   function login() {
     clearInterval(A.poll);
     A.content = null;
-    const msg = h('p', { class: 'ad-login-msg', role: 'alert' });
-    const pass = h('input', { type: 'password', id: 'ad-pass', autocomplete: 'current-password', required: true });
-    const keep = h('input', { type: 'checkbox', id: 'ad-keep', checked: true });
-    root.replaceChildren(h('form', { class: 'ad-login', onsubmit: async (e) => {
+    const msg = h('p', { class: 'pk-login-msg', role: 'alert' });
+    const pass = h('input', { type: 'password', id: 'pk-pass', autocomplete: 'current-password', required: true });
+    const keep = h('input', { type: 'checkbox', id: 'pk-keep', checked: true });
+    root.replaceChildren(h('form', { class: 'pk-login', onsubmit: async (e) => {
       e.preventDefault();
       try { await api('POST', '/api/auth/login', { password: pass.value, remember: keep.checked }); boot(); } catch (err) { msg.textContent = err.message; }
-    } }, h('h1', {}, 'Pick Me Cafe admin'), h('label', { for: 'ad-pass' }, 'Owner password'), pass,
-    h('label', { class: 'ad-check', for: 'ad-keep' }, keep, h('span', {}, 'Keep me signed in on this device')), msg,
-    h('button', { class: 'ad-btn ad-btn--main', type: 'submit' }, 'Log in'),
+    } }, h('h1', {}, 'Pick Me Cafe admin'), h('label', { for: 'pk-pass' }, 'Owner password'), pass,
+    h('label', { class: 'pk-check', for: 'pk-keep' }, keep, h('span', {}, 'Keep me signed in on this device')), msg,
+    h('button', { class: 'pk-btn pk-btn--main', type: 'submit' }, 'Log in'),
     h('a', { href: '/counter' }, 'Staff? Go to the counter screen'), h('a', { href: '/' }, 'Back to the website')));
     pass.focus();
   }
