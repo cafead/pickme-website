@@ -10,11 +10,26 @@
       "supportsTablet": false,
       "bundleIdentifier": "np.com.pickmecafe.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Pick Me Cafe uses your location to put the delivery pin on your door, and for our delivery driver to show customers where their delivery is.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Only for Pick Me Cafe's delivery driver: while he delivers, his location is shared so the customer can follow the delivery, also with the screen off. Customers are never tracked.",
+        "NSPhotoLibraryUsageDescription": "Choose a picture of the cake you want, so the cafe can make one like it.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.869345460609-8hf0t5vcv1ijshkqf8juo06tal6pfi83"
+            ]
+          }
+        ]
       },
       "config": {
         "usesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "np.com.pickmecafe.app",
@@ -24,7 +39,16 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -50,13 +74,42 @@
           "resizeMode": "contain",
           "backgroundColor": "#FAF6EF"
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Only for Pick Me Cafe's delivery driver: while he delivers, his location is shared so the customer can follow the delivery, also with the screen off. Customers are never tracked.",
+          "locationWhenInUsePermission": "Pick Me Cafe uses your location to put the delivery pin on your door, and for our delivery driver to show customers where their delivery is.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a picture of the cake you want, so the cafe can make one like it.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-apple-authentication",
+      "expo-web-browser",
+      "expo-updates"
     ],
     "owner": "pick-me-cafe",
     "extra": {
       "eas": {
         "projectId": "65c356fa-9c37-43fa-967e-fdd35d474e56"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/65c356fa-9c37-43fa-967e-fdd35d474e56",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

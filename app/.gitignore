@@ -6,3 +6,7 @@ android/
 ios/
 *.apk
 *.aab
+
+# Firebase: google-services.json is committed (its key is public inside every APK anyway, as Firebase says).
+# The private service-account key must never be committed.
+*firebase-adminsdk*.json

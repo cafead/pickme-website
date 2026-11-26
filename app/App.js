@@ -13,6 +13,10 @@ import Cake from './src/Cake';
 import Book from './src/Book';
 import Orders, { OrderSheet } from './src/Orders';
 import Checkout from './src/Checkout';
+import Account from './src/Account';
+import Staff from './src/Staff';
+import Driver from './src/Driver';
+import './src/driverTask'; // the driver's background location task must be known when the app starts
 
 const TABS = [
   { id: 'home', label: 'Home', icon: '⌂' },
@@ -20,6 +24,7 @@ const TABS = [
   { id: 'cake', label: 'Cakes', icon: '🎂' },
   { id: 'book', label: 'Book', icon: '🪑' },
   { id: 'orders', label: 'Orders', icon: '🧾' },
+  { id: 'me', label: 'Me', icon: '☺' },
 ];
 
 export default function App() {
@@ -35,9 +40,17 @@ export default function App() {
 }
 
 function Shell() {
-  const { content, loadError, refresh, ready, cart, addToCart, orders } = useApp();
+  const { content, loadError, refresh, ready, cart, addToCart, orders, staff } = useApp();
   const inset = useSafeAreaInsets();
-  const [tab, setTab] = useState('home');
+  const [tab, setTabState] = useState('home');
+  // The tabs the guest came through, so the Android Back button goes one tab back, then out of the app.
+  const tabs = useRef(['home']);
+  const setTab = useCallback((t) => {
+    setTabState((cur) => {
+      if (t !== cur) { tabs.current = [...tabs.current.filter((x) => x !== t), t].slice(-8); }
+      return t;
+    });
+  }, []);
   const [cakeId, setCakeId] = useState(null);
   const [pick, setPick] = useState(null);
   const [event, setEvent] = useState(null);
@@ -47,7 +60,7 @@ function Shell() {
   const [toast, setToast] = useState('');
   const fade = useRef(new Animated.Value(0)).current;
 
-  const go = useCallback((t, id) => { setTab(t); if (t === 'cake' && id) setCakeId(id); }, []);
+  const go = useCallback((t, id) => { setTab(t); if (t === 'cake' && id) setCakeId(id); }, [setTab]);
   const say = useCallback((text) => {
     setToast(text);
     Animated.sequence([Animated.timing(fade, { toValue: 1, duration: 180, useNativeDriver: true }), Animated.delay(1600), Animated.timing(fade, { toValue: 0, duration: 250, useNativeDriver: true })]).start();
@@ -57,7 +70,12 @@ function Shell() {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (pick || event || cartOpen || orderId) return false; // the open sheet closes itself
-      if (tab !== 'home') { setTab('home'); return true; }
+      if (tabs.current.length > 1) {
+        tabs.current = tabs.current.slice(0, -1);
+        setTabState(tabs.current[tabs.current.length - 1]);
+        return true;
+      }
+      if (tab !== 'home') { tabs.current = ['home']; setTabState('home'); return true; }
       return false;
     });
     return () => sub.remove();
@@ -78,6 +96,15 @@ function Shell() {
     );
   }
 
+  // Cafe staff and the delivery driver get their own screens after they log in (in the Me tab).
+  if (staff && staff.token) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: inset.top }}>
+        {staff.role === 'driver' ? <Driver inset={inset.bottom} /> : <Staff inset={inset.bottom} />}
+      </View>
+    );
+  }
+
   const count = cart.reduce((s, l) => s + l.qty, 0);
   const total = cart.reduce((s, l) => s + l.qty * l.price, 0);
   const live = orders.filter((o) => !['done', 'cancelled', 'declined'].includes(o.status)).length;
@@ -91,6 +118,7 @@ function Shell() {
         {tab === 'cake' ? <Cake preselect={cakeId} startCheckout={(line) => { addToCart(line); setCartStep('details'); setCartOpen(true); }} /> : null}
         {tab === 'book' ? <Book openOrder={(id) => { setTab('orders'); setOrderId(id); }} /> : null}
         {tab === 'orders' ? <Orders go={go} openOrder={setOrderId} /> : null}
+        {tab === 'me' ? <Account go={go} /> : null}
       </View>
 
       {count ? (

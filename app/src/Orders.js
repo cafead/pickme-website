@@ -3,10 +3,16 @@ import { View, Text, ScrollView, Pressable, StyleSheet, Linking, RefreshControl 
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import { STATUS, BOOKING_STATUS, rs, t12, finished } from './logic';
-import { Script, Title, Body, Small, Sheet, Button, Card } from './ui';
+import { Script, Title, Body, Small, Sheet, Button, Card, Note } from './ui';
+import { TrackMap } from './MapView';
+import { tableCall } from './api';
 
 const TYPE = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
-const statusOf = (o) => (o.kind === 'booking' ? BOOKING_STATUS : STATUS)[o.status] || { label: o.status || 'Sent', text: '' };
+const statusOf = (o) => {
+  // A delivery that has left the cafe reads "On the way", not "Ready".
+  if (o.kind !== 'booking' && o.type === 'delivery' && o.status === 'ready' && o.delivery && ['picked', 'onway'].includes(o.delivery.status)) return { label: 'On the way', text: 'Your order has left the cafe.' };
+  return (o.kind === 'booking' ? BOOKING_STATUS : STATUS)[o.status] || { label: o.status || 'Sent', text: '' };
+};
 const color = (o) => (['cancelled', 'declined'].includes(o.status) ? C.bad : ['ready', 'confirmed', 'done', 'seated'].includes(o.status) ? C.ok : C.goldDark);
 
 export default function Orders({ openOrder, go }) {
@@ -50,6 +56,9 @@ export function OrderSheet({ id, onClose }) {
   const steps = ['Received', 'Accepted', 'Preparing', 'Ready'];
   const at = o.kind === 'booking' ? -2 : (STATUS[o.status] || {}).step;
   const phone = (c.brand || {}).phone;
+  const d = o.delivery;
+  const DSTEP = { waiting: 'Waiting for a driver', assigned: 'A driver has your order', picked: 'Picked up from the cafe', onway: 'On the way to you', delivered: 'Delivered' };
+  const tableOn = ((c.features || {}).tableButtons !== false) && o.kind !== 'booking' && o.type === 'dinein' && o.tableNo && !finished(o);
   return (
     <Sheet open={Boolean(id)} onClose={onClose} title={o.kind === 'booking' ? 'Your table booking' : o.hasWhole ? 'Your cake order' : 'Your order'}
       footer={<View style={{ flexDirection: 'row', gap: 10 }}>
@@ -71,6 +80,14 @@ export function OrderSheet({ id, onClose }) {
           ))}
         </View>
       ) : null}
+      {o.type === 'delivery' && d && !finished(o) ? (
+        <Card style={{ marginTop: 14 }}>
+          <Text style={s.id}>🛵 {DSTEP[d.status] || 'Delivery'}{d.driver ? ` · ${d.driver.name}` : ''}</Text>
+          {d.destination || d.where ? <TrackMap id={o.id} orderKey={o.key} /> : null}
+          {d.driver && d.driver.phone ? <Button kind="soft" title={`Call ${d.driver.name}`} style={{ marginTop: 10 }} onPress={() => Linking.openURL(`tel:${d.driver.phone}`)} /> : null}
+        </Card>
+      ) : null}
+      {tableOn ? <TableButtons table={o.tableNo} /> : null}
       {o.kind === 'booking' ? (
         <Card style={{ marginTop: 14 }}>
           <Body>{o.people} people</Body>
@@ -81,10 +98,30 @@ export function OrderSheet({ id, onClose }) {
           {(o.lines || []).map((l, n) => <Body key={n}>{l.qty} × {l.name}{l.label ? ` (${l.label})` : ''}{(l.extras || []).length ? ` + ${l.extras.join(', ')}` : ''}</Body>)}
           {o.schedule ? <Small style={{ marginTop: 8 }}>For {o.schedule.bs || o.schedule.date} at {t12(o.schedule.time)}</Small> : null}
           <Text style={[s.money, { marginTop: 8 }]}>Total {rs(o.total)}{o.paid ? ' · Paid' : ''}</Text>
+          {o.pointsEarned ? <Small style={{ marginTop: 4 }}>🎁 This order gave you {o.pointsEarned} points.</Small> : o.pointsAsked ? <Small style={{ marginTop: 4 }}>🎁 Staff take {o.pointsAsked} points off at the counter.</Small> : null}
         </Card>
       )}
       <Small style={{ marginTop: 12 }}>This page updates by itself. You also get a notification when the status changes while the app is open or was used recently.</Small>
     </Sheet>
+  );
+}
+
+// Table guests: call staff, ask for the bill or water.
+function TableButtons({ table }) {
+  const [msg, setMsg] = useState('');
+  const send = async (kind, label) => {
+    try { await tableCall(table, kind); setMsg(`${label}: sent. Someone is coming to table ${table}.`); } catch (e) { setMsg(e.message); }
+  };
+  return (
+    <Card style={{ marginTop: 14 }}>
+      <Text style={s.id}>Table {table}</Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        <Button kind="soft" title="Call staff" style={{ flex: 1 }} onPress={() => send('staff', 'Call staff')} />
+        <Button kind="soft" title="The bill" style={{ flex: 1 }} onPress={() => send('bill', 'Bring the bill')} />
+        <Button kind="soft" title="Water" style={{ flex: 1 }} onPress={() => send('water', 'Water please')} />
+      </View>
+      {msg ? <View style={{ marginTop: 8 }}><Note kind="ok">{msg}</Note></View> : null}
+    </Card>
   );
 }
 
