@@ -225,6 +225,33 @@
       f('payment.esewa.enabled', 'Accept eSewa', 'toggle'), f('payment.esewa.qr', 'eSewa QR picture', 'image'), f('payment.esewa.account', 'eSewa name or number shown under the QR'),
       f('payment.fonepay.enabled', 'Accept Fonepay', 'toggle'), f('payment.fonepay.qr', 'Fonepay QR picture', 'image'), f('payment.fonepay.account', 'Fonepay name shown under the QR'),
     ] },
+    { title: 'New features: on or off', scroll: 'menu', note: 'Switch off any of these at once if something does not work as it should. Nothing is lost: switch it back on later.', fields: [
+      f('features.accounts', 'Customer accounts (sign up with email code, password, settings)', 'toggle'),
+      f('features.points', 'Loyalty points', 'toggle'),
+      f('features.liveStatus', 'Live order status for customers', 'toggle'),
+      f('features.orderAgain', '"Order again" button on past orders', 'toggle'),
+      f('features.tableButtons', 'Table buttons: Call staff, Bring the bill, Water please', 'toggle'),
+      f('features.soldOut', '"Sold out today" from the counter screen', 'toggle'),
+    ] },
+    { title: 'Loyalty points and accounts', scroll: 'menu', note: 'Points are added when an order is marked Done, and given back if a used order is cancelled. Every change is kept in Customers and points. Guests who are not signed in use points with staff approval at the counter.', fields: [
+      f('loyalty.percent', 'Points back, in % of each order (5 = 5%)', 'number', { step: 0.5 }),
+      f('loyalty.rupeesPerPoint', 'Rupees one point is worth', 'number'),
+      f('loyalty.minSpend', 'Points needed before they can be used', 'number'),
+      f('loyalty.expiryMonths', 'Points run out after how many months', 'number'),
+      f('loyalty.birthdayPoints', 'Birthday points (0 = none)', 'number'),
+      f('loyalty.birthdayDays', 'Birthday points last how many days', 'number'),
+      f('loyalty.title', 'Name of the points'), f('loyalty.text', 'Short explanation for customers', 'area'),
+      f('accounts.title', 'Account box title'), f('accounts.text', 'Account box text', 'area'),
+    ] },
+    { title: 'Table buttons and Wi-Fi', scroll: 'menu', note: 'Guests who scan the QR on their table see these at the top. Calls appear in red on the counter screen with a sound.', fields: [
+      f('tableHelp.show', 'Show Call staff, Bring the bill and Water please', 'toggle'),
+      f('tableHelp.wifiName', 'Wi-Fi name (leave empty to hide)'), f('tableHelp.wifiPassword', 'Wi-Fi password'),
+    ] },
+    { title: 'Get the app card (under the map)', scroll: 'visit', note: 'The QR always points to yourwebsite/app, which sends iPhones to the App Store and Android phones to Google Play (or the Android download while Google Play is not ready). For the official badges, download them from Apple and Google and upload them here.', fields: [
+      f('appCard.show', 'Show the card', 'toggle'), f('appCard.title', 'Title'), f('appCard.text', 'Text', 'area'), f('appCard.qrText', 'Text next to the QR'),
+      f('appCard.appStore', 'App Store link'), f('appCard.googlePlay', 'Google Play link (empty until the app is on Google Play)'), f('appCard.apk', 'Android download link while not on Google Play (optional)'),
+      f('appCard.appStoreBadge', 'Official App Store badge picture (optional)', 'image'), f('appCard.googlePlayBadge', 'Official Google Play badge picture (optional)', 'image'),
+    ] },
     { title: 'Footer', scroll: 'visit', fields: [f('footer.line', 'Closing line'), f('footer.note', 'Small note (optional)')] },
     { title: 'Google and link previews', scroll: 'hero', note: 'What Google shows for your website, and what a shared link shows on WhatsApp, Facebook and Viber. Your hours, address, phone and menu prices are sent to Google from the rest of the website by themselves. Changes can take a few days to appear on Google.', fields: [
       f('seo.title', 'Title in Google results (about 60 letters)'), f('seo.description', 'Description in Google results (about 150 letters)', 'area'),
@@ -1020,7 +1047,12 @@
             <label>Restore from a backup file (.zip)<input type="file" name="file" accept=".zip,application/zip" required></label>
             <footer><button class="ad-btn" type="submit">Restore</button><span class="ad-note">Nothing is deleted: the current website is kept in the list below, and orders are only added.</span></footer>
           </form>
-          <p class="ad-note">Passwords and staff logins are never put in a backup.</p>
+          <p class="ad-note">Passwords and staff logins are never put in a backup. Customer accounts go in without their passwords (customers choose "Forgot password" once after a restore).</p>
+        </div>
+        <div class="ad-card"><header><strong>Automatic backups (every night)</strong><button type="button" class="ad-btn ad-btn--quiet" data-do="backup-now">Make one now</button></header>
+          <p class="ad-note">Every night after 11 PM the website, orders, bookings, accounts and points are saved here (14 newest)${A.auto && A.auto.email ? ' and emailed to you, so a copy is kept outside the server' : '. To also get them by email (a copy outside the server), set RESEND_API_KEY and BACKUP_EMAIL on Railway'}. Photos are only in the manual website backup above.</p>
+          ${A.auto && A.auto.last ? `<p class="ad-note">Last: ${when(A.auto.last.at)}${A.auto.last.emailed ? ', emailed' : ''}.</p>` : ''}
+          ${A.auto && A.auto.files.length ? `<ul class="ad-staff">${A.auto.files.map((x) => `<li><span>${esc(x.file)} · ${Math.max(1, Math.round(x.bytes / 1024))} KB</span><a class="ad-btn ad-btn--quiet" href="/api/admin/auto-backups/${esc(x.file)}">Download</a></li>`).join('')}</ul>` : '<p class="ad-empty">None yet. The first one is made tonight.</p>'}
         </div>
         <p class="ad-note">Every time you press Save, the website is kept here. Open an older version to look at it in the editor; press Save if you want to use it again. Nothing changes until you save.</p>
         <div class="ad-card"><header><strong>Website versions</strong></header>
@@ -1038,6 +1070,45 @@
           <header><strong>Recent activity</strong></header>
           ${A.log.length ? `<div class="ad-log"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Number</th></tr></thead><tbody>${A.log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.ref)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">Nothing yet.</p>'}
         </div>`;
+    } else if (kind === 'customers') {
+      const C = A.cust || { customers: [], guests: [] };
+      const q = (A.custQ || '').toLowerCase();
+      const list = C.customers.filter((c) => !q || [c.name, c.email, c.phone, c.username].some((v) => String(v || '').toLowerCase().includes(q)));
+      const KIND = { earn: 'Earned', spend: 'Used', refund: 'Given back', reverse: 'Taken back', adjust: 'Changed by owner', birthday: 'Birthday', closed: 'Account closed' };
+      const L = A.content.loyalty || {};
+      box.innerHTML = `<h2>Customers and points</h2>
+        <p class="ad-note">${C.customers.length} account${C.customers.length === 1 ? '' : 's'}. Points: ${L.percent || 0}% back on finished orders, 1 point = Rs. ${L.rupeesPerPoint || 1}, usable from ${L.minSpend || 0} points, last ${L.expiryMonths || 12} months. Change these in Edit website, "Loyalty points and accounts".</p>
+        <form class="ad-card ad-form" id="ad-points-form"><header><strong>Add or take away points</strong></header>
+          <div class="ad-grid"><label>Phone number<input name="phone" type="tel" required></label><label>Points (minus to take away)<input name="amount" type="number" required></label><label>Reason (kept with the points)<input name="note" required maxlength="160"></label></div>
+          <footer><button class="ad-btn" type="submit">Save</button></footer></form>
+        <div class="ad-card"><header><strong>Accounts</strong><input type="search" id="ad-cust-q" placeholder="Search name, email or phone" value="${esc(A.custQ || '')}"></header>
+          ${list.length ? `<div class="ad-log"><table><thead><tr><th>Name</th><th>Sign in with</th><th>Phone</th><th>Points</th><th>Birthday</th><th>Since</th><th></th></tr></thead><tbody>${list.map((c) => `<tr>
+            <td>${esc(c.name || '—')}${c.prefs && c.prefs.offers ? ' <span class="ad-tag">offers ok</span>' : ''}</td><td>${esc([c.username, c.email].filter(Boolean).join(' · '))}${c.hasPassword ? '' : ' <span class="ad-tag">no password yet</span>'}</td>
+            <td>${esc(c.phone || '—')}${c.phone ? (c.phoneVerified ? ' ✓' : ` <button type="button" class="ad-btn ad-btn--quiet" data-cust="confirm" data-id="${esc(c.id)}">Confirm</button>`) : ''}</td>
+            <td>${c.points}</td><td>${esc(c.birthday || '—')} <button type="button" class="ad-btn ad-btn--quiet" data-cust="birthday" data-id="${esc(c.id)}">Change</button></td><td>${when(c.createdAt)}</td>
+            <td><button type="button" class="ad-btn ad-btn--quiet" data-cust="signout" data-id="${esc(c.id)}">Sign out</button><button type="button" class="ad-btn ad-btn--quiet" data-cust="delete" data-id="${esc(c.id)}">Delete</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">No accounts yet.</p>'}
+        </div>
+        ${C.guests.length ? `<div class="ad-card"><header><strong>Phone numbers with points but no account</strong></header><ul class="ad-staff">${C.guests.map((g) => `<li><span>${esc(g.phone)}</span><b>${g.points} points</b></li>`).join('')}</ul></div>` : ''}
+        <div class="ad-card"><header><strong>Every points change (newest first)</strong></header>
+          ${(A.ledger || []).length ? `<div class="ad-log"><table><thead><tr><th>When</th><th>Phone</th><th>What</th><th>Points</th><th>By</th></tr></thead><tbody>${A.ledger.slice(0, 200).map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.phone)}</td><td>${esc(KIND[l.kind] || l.kind)}${l.order ? ` · ${esc(l.order)}` : ''}${l.note ? ` · ${esc(l.note)}` : ''}</td><td>${l.amount > 0 ? '+' : ''}${l.amount}</td><td>${esc(l.by || '')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">No points yet. They are added when orders with a phone number are marked Done.</p>'}
+        </div>`;
+    } else if (kind === 'sales') {
+      const d = (A.sales && A.sales.data) || null;
+      const t = BS.todayAD();
+      const range = (label, from, to) => `<button type="button" class="ad-chip${A.sales && A.sales.from === from && A.sales.to === to ? ' is-on' : ''}" data-range="${from}|${to}">${label}</button>`;
+      const tile = (label, value, cls) => `<div class="ad-tile ${cls || ''}"><span>${label}</span><b>${value}</b></div>`;
+      const TYPEN = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
+      const maxH = d ? Math.max(1, ...d.hours) : 1;
+      const firstHour = d ? Math.max(0, d.hours.findIndex((n) => n > 0) - 1) : 7;
+      box.innerHTML = `<h2>Sales</h2>
+        <div class="ad-chips">${range('Today', t, t)}${range('Yesterday', addDays(t, -1), addDays(t, -1))}${range('Last 7 days', addDays(t, -6), t)}${range('Last 30 days', addDays(t, -29), t)}${range('Last 365 days', addDays(t, -364), t)}</div>
+        <form class="ad-card ad-dayform" id="ad-sales-form"><div class="ad-row"><label class="ad-inline">From <input type="date" name="from" value="${esc((A.sales || {}).from || t)}"></label><label class="ad-inline">To <input type="date" name="to" value="${esc((A.sales || {}).to || t)}"></label><button class="ad-btn" type="submit">Show</button></div></form>
+        ${d ? `<div class="ad-tiles">${tile('Orders', `${d.orders}${d.cancelled ? ` <small>(${d.cancelled} cancelled)</small>` : ''}`)}${tile('Total', rs(d.total))}${tile('Paid', rs(d.paid), 'is-paid')}${tile('Average order', rs(d.average))}${tile('Table bookings', d.bookings)}
+            ${d.byType.map((x) => tile(TYPEN[x.type], `${x.orders} · ${rs(x.total)}`)).join('')}${tile('From the app', d.bySource.find((x) => x.source === 'app').orders)}
+            ${tile('Points given', d.points.earned)}${tile('Points used', d.points.spent)}${tile('Points customers hold now', `${d.points.owed} <small>(${rs(d.points.value)})</small>`)}${tile('Customer accounts', d.customers)}</div>
+          <div class="ad-card"><header><strong>Best sellers</strong></header>${d.best.length ? `<div class="ad-log"><table><thead><tr><th>Item</th><th>Sold</th><th>Total</th></tr></thead><tbody>${d.best.map((b) => `<tr><td>${esc(b.name)}</td><td>${b.qty}</td><td>${rs(b.total)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="ad-empty">No orders in these days.</p>'}</div>
+          <div class="ad-card"><header><strong>Busiest hours (orders placed)</strong></header><div class="ad-hours">${d.hours.slice(firstHour, Math.max(firstHour + 6, 24 - [...d.hours].reverse().findIndex((n) => n > 0) + 1)).map((n, i) => `<div><i style="height:${Math.round((n / maxH) * 100)}%"></i><b>${n || ''}</b><span>${((firstHour + i) % 12) || 12}${firstHour + i < 12 ? 'a' : 'p'}</span></div>`).join('')}</div></div>
+          ${Object.keys(d.days).length > 1 ? `<div class="ad-card"><header><strong>Day by day</strong></header><div class="ad-log"><table><thead><tr><th>Day</th><th>Orders</th><th>Total</th></tr></thead><tbody>${Object.entries(d.days).sort((a, b) => b[0].localeCompare(a[0])).map(([day, v]) => `<tr><td>${esc(niceDate(day))}</td><td>${v.orders}</td><td>${rs(v.total)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}` : ''}`;
     } else if (kind === 'tables') {
       const base = location.origin;
       const n = Math.max(1, Math.min(60, Number(A.tables) || 10));
@@ -1101,11 +1172,19 @@
     if (A.dayBy === 'todo') { A.dayOrders = (await api('GET', '/api/desk/orders')).filter((o) => !['done', 'cancelled'].includes(o.status)); return; }
     A.dayOrders = await api('GET', `/api/desk/orders?date=${A.day || BS.todayAD()}&by=${A.dayBy}`);
   }
+  async function loadCustomers() {
+    [A.cust, A.ledger] = await Promise.all([api('GET', '/api/admin/customers'), api('GET', '/api/admin/points')]);
+  }
+  async function loadSales() {
+    const t = BS.todayAD();
+    A.sales = A.sales || { from: t, to: t };
+    A.sales.data = await api('GET', `/api/admin/summary?from=${A.sales.from}&to=${A.sales.to}`);
+  }
   async function loadSecurity() {
     A.staff = await api('GET', '/api/admin/staff');
   }
   async function loadHistory() {
-    [A.history, A.bin, A.log] = await Promise.all([api('GET', '/api/admin/history'), api('GET', '/api/admin/bin'), api('GET', '/api/admin/audit')]);
+    [A.history, A.bin, A.log, A.auto] = await Promise.all([api('GET', '/api/admin/history'), api('GET', '/api/admin/bin'), api('GET', '/api/admin/audit'), api('GET', '/api/admin/auto-backups').catch(() => null)]);
   }
   function show(view, force) {
     A.view = view;
@@ -1119,6 +1198,8 @@
     if (view === 'security') await loadSecurity();
     else if (view === 'history') await loadHistory();
     else if (view === 'orders') await Promise.all([loadLists(), loadDay()]);
+    else if (view === 'customers') await loadCustomers();
+    else if (view === 'sales') await loadSales();
     else if (view !== 'tables') await loadLists();
     show(view, true);
   }
@@ -1128,11 +1209,11 @@
       if (view !== 'edit' && A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) return;
       if (view === 'edit') return show('edit', true);
       try { await reload(view); } catch (e) { flash(e.message, true); }
-    } }, label, !/edit|security|history|tables/.test(view) && h('span', { class: 'ad-count', 'data-count': view, hidden: true }, '0'));
+    } }, label, !/edit|security|history|tables|customers|sales/.test(view) && h('span', { class: 'ad-count', 'data-count': view, hidden: true }, '0'));
     root.replaceChildren(
       h('header', { class: 'ad-top' },
         h('strong', { class: 'ad-name' }, 'Pick Me Cafe admin'),
-        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
+        h('nav', { class: 'ad-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('customers', 'Customers and points'), tab('sales', 'Sales'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
           h('a', { class: 'ad-tablink', href: '/admin/print-menu', onclick: (e) => { if (A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) e.preventDefault(); } }, 'Print menu')),
         h('span', { class: 'ad-right' },
           h('span', { id: 'ad-status', class: 'ad-status' }, 'All changes saved'),
@@ -1177,6 +1258,12 @@
   }
 
   const formData = (form) => Object.fromEntries(new FormData(form).entries());
+  root.addEventListener('input', (e) => {
+    if (e.target.id !== 'ad-cust-q') return;
+    A.custQ = e.target.value;
+    clearTimeout(A.custT);
+    A.custT = setTimeout(() => { const pos = e.target.selectionStart; show('customers', true); const q = document.getElementById('ad-cust-q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }, 250);
+  });
   root.addEventListener('change', async (e) => {
     const t = e.target;
     if (t.closest && t.closest('#ad-day-form')) {
@@ -1229,6 +1316,20 @@
         return;
       }
       if (doIt && doIt.dataset.do === 'print') { window.print(); return; }
+      if (doIt && doIt.dataset.do === 'backup-now') { await api('POST', '/api/admin/auto-backups/now'); await reload('history'); flash('Backup made.'); return; }
+      const rangeBtn = e.target.closest('[data-range]');
+      if (rangeBtn) { const [from, to] = rangeBtn.dataset.range.split('|'); A.sales = { from, to }; await reload('sales'); return; }
+      const cust = e.target.closest('[data-cust]');
+      if (cust) {
+        const id = cust.dataset.id;
+        const act = cust.dataset.cust;
+        if (act === 'confirm') await api('PATCH', `/api/admin/customers/${id}`, { phoneVerified: true });
+        else if (act === 'signout') { await api('PATCH', `/api/admin/customers/${id}`, { signOut: true }); flash('Signed out on every device.'); }
+        else if (act === 'birthday') { const b = window.prompt('Birthday as month-day, for example 03-14 for 14 March (empty to clear):'); if (b === null) return; await api('PATCH', `/api/admin/customers/${id}`, { birthday: b.trim() }); }
+        else if (act === 'delete') { if (!window.confirm('Delete this account? Their orders stay; their login is removed.')) return; await api('DELETE', `/api/admin/customers/${id}`); }
+        await reload('customers');
+        return;
+      }
       if (del && window.confirm('Delete this for good?')) {
         await api('DELETE', `/api/admin/${del.dataset.del}/${del.dataset.id}`);
         await reload(A.view);
@@ -1252,7 +1353,7 @@
   });
   root.addEventListener('submit', async (e) => {
     const id = e.target.id;
-    if (!/^ad-(newrev|pass-form|staff-form|tables-form|restore-form|day-form)$/.test(id)) return;
+    if (!/^ad-(newrev|pass-form|staff-form|tables-form|restore-form|day-form|points-form|sales-form)$/.test(id)) return;
     e.preventDefault();
     if (id === 'ad-day-form') return;
     try {
@@ -1267,6 +1368,8 @@
         await afterRestore(res);
         return;
       }
+      if (id === 'ad-points-form') { await api('POST', '/api/admin/points', formData(e.target)); await reload('customers'); flash('Points saved.'); return; }
+      if (id === 'ad-sales-form') { const d = formData(e.target); if (d.from && d.to) { A.sales = { from: d.from <= d.to ? d.from : d.to, to: d.from <= d.to ? d.to : d.from }; await reload('sales'); } return; }
       if (id === 'ad-tables-form') { const d = formData(e.target); A.tables = d.n; A.tableBase = String(d.base || '').trim() || location.origin; show('tables', true); return; }
       if (id === 'ad-newrev') { await api('POST', '/api/admin/reviews', formData(e.target)); await reload('reviews'); flash('Review added.'); }
       if (id === 'ad-pass-form') { await api('POST', '/api/admin/password', formData(e.target)); await reload('security'); flash('Password changed. Other devices are signed out.'); }

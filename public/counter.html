@@ -77,6 +77,28 @@
   #toast { position: fixed; left: 50%; bottom: 22px; z-index: 50; transform: translate(-50%, 40px); opacity: 0; padding: 11px 20px; border-radius: 10px; background: var(--ink); color: #fff; transition: transform .3s, opacity .3s; pointer-events: none; }
   #toast.on { transform: translate(-50%, 0); opacity: 1; }
   #slip { display: none; }
+  /* version 11 */
+  .calls { display: grid; gap: 8px; margin-bottom: 12px; }
+  .call { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; border-radius: 12px; background: var(--new); color: #fff; font-weight: 600; font-size: 1.05rem; }
+  .call small { font-weight: 400; opacity: .85; }
+  .call button { margin-left: auto; background: #fff; color: var(--new); border-color: #fff; }
+  .ptsbox { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #EAF3E6; border: 1px solid #9CC79A; }
+  .ptsbox p { font-weight: 600; color: #1B5532; }
+  .ptsbox div { display: flex; flex-wrap: wrap; gap: 8px; }
+  .card.pts-ask { border-left-color: #2E8B57; }
+  .sound-off { background: #FFD27A !important; color: var(--ink) !important; border-color: #FFD27A !important; }
+  body.flash .bar { animation: flash 1s steps(2) 6; }
+  @keyframes flash { 50% { background: var(--new); } }
+  .so-group { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .so-group h2 { font-size: 1rem; margin-bottom: 8px; }
+  .so-items { display: flex; flex-wrap: wrap; gap: 8px; }
+  .so-items button.out { background: var(--new); border-color: var(--new); color: #fff; text-decoration: line-through; }
+  .so-items button[disabled] { opacity: .45; cursor: default; }
+  .lookup { display: grid; gap: 12px; max-width: 640px; }
+  .lookup form { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lookup table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+  .lookup td, .lookup th { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: .9rem; }
+  .big { font-size: 1.6rem; font-weight: 700; }
   @media print {
     body { background: #fff; }
     .bar, .wrap, #gate, #viewer, #toast { display: none !important; }
@@ -104,6 +126,7 @@
 <header class="bar">
   <h1>Pick Me Cafe counter <small id="who"></small></h1>
   <div class="right">
+    <button type="button" id="sound" class="sound-off" title="New orders and table calls make a sound">Turn sound on</button>
     <small id="sync">Connecting</small>
     <button type="button" id="refresh">Refresh now</button>
     <a class="btn" href="/" target="_blank" rel="noopener">Website</a>
@@ -118,6 +141,8 @@
       <button type="button" data-tab="orders" class="on">Orders <span class="count" id="n-orders">0</span></button>
       <button type="button" data-tab="cakes">Cake pre-orders <span class="count" id="n-cakes">0</span></button>
       <button type="button" data-tab="tables">Table bookings <span class="count" id="n-tables">0</span></button>
+      <button type="button" data-tab="soldout">Sold out</button>
+      <button type="button" data-tab="points">Points</button>
     </div>
     <div class="filters">
       <input type="search" id="search" placeholder="Search number, name or phone" aria-label="Search">
@@ -125,13 +150,16 @@
         <option value="active">Active only</option>
         <option value="pending">Pending only</option>
         <option value="check">Payment to check</option>
+        <option value="points">Points to approve</option>
         <option value="unpaid">Not paid</option>
         <option value="all">Everything</option>
         <option value="closed">Finished or cancelled</option>
       </select>
     </div>
   </div>
+  <div class="calls" id="calls" aria-live="assertive"></div>
   <p class="alert" id="to-check" role="status"></p>
+  <p class="alert" id="to-points" role="status"></p>
   <p class="today" id="today"></p>
   <div class="grid" id="grid"></div>
 </main>
@@ -163,7 +191,7 @@
   const TABLE_STEPS = ['pending', 'confirmed', 'seated', 'done', 'declined'];
   const CLOSED = ['done', 'cancelled', 'declined'];
   const NAMES = { pending: 'Pending', acknowledged: 'Acknowledged', preparing: 'Preparing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled', confirmed: 'Confirmed', seated: 'Seated', declined: 'Declined' };
-  const S = { tab: 'orders', orders: [], bookings: [], known: null, timer: null, cafe: 'Pick Me Cafe' };
+  const S = { tab: 'orders', orders: [], bookings: [], calls: [], menu: [], known: null, knownCalls: null, timer: null, cafe: 'Pick Me Cafe', sound: false, look: null };
 
   function toast(msg, ms) {
     const t = $('toast');
@@ -204,10 +232,22 @@
           <button type="button" class="main" data-confirm="${esc(o.id)}">Payment confirmed, send the order</button></div>
       </div>`;
   }
+  // A guest asked to use points at checkout without a confirmed account: staff check and approve here.
+  const askPts = (o) => o.points && o.points.asked && o.points.approved === null && !CLOSED.includes(o.status);
+  function ptsBox(o) {
+    if (askPts(o)) {
+      return `<div class="ptsbox"><p>Wants to use ${o.points.asked} points (${rs(o.points.asked)} off) with phone ${esc(o.phone)}. Check it is their phone (call it or see it), then approve.</p>
+        <div>${o.phone ? `<a class="btn" href="tel:${esc(o.phone)}">Call ${esc(o.phone)}</a>` : ''}<button type="button" class="main" data-pts="${esc(o.id)}" data-ok="1">Approve: take ${rs(o.points.asked)} off</button><button type="button" data-pts="${esc(o.id)}" data-ok="0">Don't use points</button></div></div>`;
+    }
+    const bits = [];
+    if (o.points && o.points.used) bits.push(`${o.points.used} points used (${rs(o.points.value || o.points.used)} off)`);
+    if (o.pointsEarned) bits.push(`${o.pointsEarned} points earned`);
+    return bits.length ? `<p><b>Points:</b> ${esc(bits.join(' · '))}</p>` : '';
+  }
   function orderCard(o) {
-    return `<article class="card ${esc(o.status)}${toCheck(o) ? ' to-check' : ''}">
+    return `<article class="card ${esc(o.status)}${toCheck(o) ? ' to-check' : ''}${askPts(o) ? ' pts-ask' : ''}">
       <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="step step--${esc(o.status)}">${NAMES[o.status] || esc(o.status)}</span><span class="step ${o.paid ? 'step--done' : ''}">${o.paid ? 'Paid' : 'Not paid'}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
-      ${checkBox(o)}
+      ${checkBox(o)}${ptsBox(o)}
       <p>${contact(o)}</p>
       <p><b>For:</b> ${forWhen(o)}</p>
       ${line('Address', o.address)}
@@ -257,11 +297,19 @@
     const checks = S.orders.filter(toCheck);
     $('to-check').classList.toggle('on', checks.length > 0);
     $('to-check').textContent = checks.length ? `${checks.length} online payment${checks.length === 1 ? '' : 's'} to check: ${checks.map((o) => o.id).join(', ')}. Tap to see.` : '';
+    const asks = S.orders.filter(askPts);
+    $('to-points').classList.toggle('on', asks.length > 0);
+    $('to-points').textContent = asks.length ? `${asks.length} guest${asks.length === 1 ? ' wants' : 's want'} to use points: ${asks.map((o) => o.id).join(', ')}. Tap to see.` : '';
+    drawCalls();
+    $('search').parentElement.hidden = S.tab === 'soldout' || S.tab === 'points';
+    if (S.tab === 'soldout') return drawSoldOut();
+    if (S.tab === 'points') { if (document.activeElement && document.activeElement.id === 'pts-phone') return; return drawPoints(); }
     const q = $('search').value.trim().toLowerCase();
     const f = $('filter').value;
     const rows = all[S.tab].filter((x) => {
       const closed = CLOSED.includes(x.status);
       if (f === 'check' && !toCheck(x)) return false;
+      if (f === 'points' && !askPts(x)) return false;
       if ((f === 'active' && closed) || (f === 'closed' && !closed) || (f === 'pending' && x.status !== 'pending') || (f === 'unpaid' && (x.paid || !x.lines || x.status === 'cancelled'))) return false;
       return !q || [x.id, x.name, x.phone, x.address, x.cakeMessage, x.bs].some((v) => String(v || '').toLowerCase().includes(q));
     });
@@ -271,14 +319,22 @@
   }
   async function load(quiet) {
     try {
-      const [o, b] = await Promise.all([api('GET', '/api/desk/orders'), api('GET', '/api/desk/bookings')]);
-      S.orders = o; S.bookings = b;
+      const [o, b, calls] = await Promise.all([api('GET', '/api/desk/orders'), api('GET', '/api/desk/bookings'), api('GET', '/api/desk/calls').catch(() => [])]);
+      S.orders = o; S.bookings = b; S.calls = calls;
       const ids = new Set([...o, ...b].map((x) => x.id));
+      const callIds = new Set(calls.map((c) => c.id));
       if (S.known) {
         const fresh = [...o, ...b].filter((x) => !S.known.has(x.id));
+        const freshCalls = calls.filter((c) => !S.knownCalls.has(c.id));
         if (fresh.length) toast(`New: ${fresh.map((x) => x.id).join(', ')}`, 8000);
+        if (freshCalls.length) toast(freshCalls.map((c) => `Table ${c.table}: ${c.label}`).join(' · '), 9000);
+        if (fresh.length || freshCalls.length) alertNew(fresh.length ? `New order ${fresh[0].id}` : `Table ${freshCalls[0].table}: ${freshCalls[0].label}`);
       }
+      // A soft reminder every 30 seconds while an order waits over a minute to be acknowledged, or a table call is open.
+      const waiting = o.some((x) => x.status === 'pending' && Date.now() - Date.parse(x.createdAt) > 60e3) || calls.some((c) => Date.now() - Date.parse(c.at) > 45e3);
+      if (waiting && Date.now() - (S.nag || 0) > 30e3) { S.nag = Date.now(); ring(true); }
       S.known = ids;
+      S.knownCalls = callIds;
       $('sync').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
       draw();
     } catch (e) { if (!quiet && e.message !== 'login') toast(e.message); }
@@ -290,10 +346,82 @@
     S.cafe = me.cafe || S.cafe;
     $('who').textContent = '· ' + me.name;
     $('to-admin').hidden = me.role !== 'admin';
+    paintSound();
     load(false);
     clearInterval(S.timer);
-    S.timer = setInterval(() => { if (!document.hidden) load(true); }, 12000);
+    // Keeps checking even when the tab is in the background, so the sound still plays.
+    S.timer = setInterval(() => load(true), 8000);
   }
+
+  /* sound and flashing for new orders and table calls (browsers need one tap first: "Turn sound on") */
+  let audio = null;
+  function ring(soft) {
+    if (!S.sound || !audio) return;
+    const t = audio.currentTime;
+    const notes = soft ? [880] : [880, 1175, 1568];
+    notes.forEach((f, i) => {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + i * 0.18);
+      g.gain.exponentialRampToValueAtTime(soft ? 0.15 : 0.35, t + i * 0.18 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.18 + 0.4);
+      o.connect(g).connect(audio.destination);
+      o.start(t + i * 0.18); o.stop(t + i * 0.18 + 0.45);
+    });
+  }
+  function alertNew(text) {
+    ring(false);
+    setTimeout(() => ring(false), 1500);
+    document.body.classList.remove('flash'); void document.body.offsetWidth; document.body.classList.add('flash');
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(text, { body: S.cafe + ' counter', icon: '/img/logo.png', tag: 'pm-counter' }); } catch (e) { /* not allowed here */ }
+    }
+  }
+  $('sound').addEventListener('click', () => {
+    S.sound = !S.sound;
+    try { localStorage.setItem('pm_counter_sound', S.sound ? '1' : '0'); } catch (e) { /* no storage */ }
+    if (S.sound) {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      audio.resume();
+      ring(false);
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+    }
+    paintSound();
+  });
+  function paintSound() { $('sound').textContent = S.sound ? 'Sound on' : 'Turn sound on'; $('sound').classList.toggle('sound-off', !S.sound); }
+  // The browser only allows sound after a tap: the first tap anywhere turns it back on if it was on before.
+  document.addEventListener('pointerdown', () => {
+    let want = false;
+    try { want = localStorage.getItem('pm_counter_sound') === '1'; } catch (e) { /* no storage */ }
+    if (want && !S.sound) { S.sound = true; audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); paintSound(); }
+  }, { once: true });
+
+  const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60e3); return m < 1 ? 'just now' : `${m} min ago`; };
+  function drawCalls() {
+    $('calls').innerHTML = S.calls.map((c) => `<div class="call">Table ${esc(c.table)}: ${esc(c.label)} <small>${ago(c.at)}</small><button type="button" data-calldone="${esc(c.id)}">Done</button></div>`).join('');
+  }
+  async function loadMenu() { S.menu = await api('GET', '/api/desk/menu'); }
+  function drawSoldOut() {
+    const out = S.menu.flatMap((g) => g.items.filter((i) => i.out));
+    $('grid').innerHTML = `<p class="empty" style="grid-column:1/-1;padding:14px">Tap an item when it runs out. It is hidden on the website and app for today and comes back by itself tomorrow morning. ${out.length ? `Sold out now: <b>${out.map((i) => esc(i.name)).join(', ')}</b>` : 'Nothing is sold out.'}</p>`
+      + S.menu.map((g) => `<section class="so-group"><h2>${esc(g.name)}</h2><div class="so-items">${g.items.map((i) => `<button type="button" class="${i.out ? 'out' : ''}" data-soldout="${esc(i.id)}" data-out="${i.out ? '0' : '1'}"${i.off ? ' disabled title="Switched off in admin"' : ''}>${esc(i.name)}</button>`).join('')}</div></section>`).join('');
+  }
+  function drawPoints() {
+    const L = S.look;
+    $('grid').innerHTML = `<div class="lookup" style="grid-column:1/-1">
+      <form id="pts-form"><input type="tel" id="pts-phone" placeholder="Guest's phone number" inputmode="tel" value="${esc(L ? L.phone : '')}" required><button class="main" type="submit">Show points</button></form>
+      ${L ? `<p><span class="big">${L.balance}</span> points = ${rs(L.balance)} off${L.next && L.balance ? ` · ${L.next.amount} run out on ${new Date(L.next.exp).toLocaleDateString('en-GB')}` : ''}</p>
+        ${L.account ? `<p>Account: <b>${esc(L.account.name || 'no name')}</b> · phone ${L.account.phoneVerified ? 'confirmed' : `<b>not confirmed</b> <button type="button" class="main" data-confirmphone="${esc(L.account.id)}">This is their phone: confirm it</button>`}</p>` : '<p>No account (points by phone number only).</p>'}
+        <table><thead><tr><th>When</th><th>What</th><th>Points</th><th>By</th></tr></thead><tbody>${L.lines.map((l) => `<tr><td>${when(l.at)}</td><td>${esc({ earn: 'Earned', spend: 'Used', refund: 'Given back', reverse: 'Taken back', adjust: 'Changed by owner', birthday: 'Birthday', closed: 'Account closed' }[l.kind] || l.kind)}${l.order ? ` · ${esc(l.order)}` : ''}${l.note ? ` · ${esc(l.note)}` : ''}</td><td>${l.amount > 0 ? '+' : ''}${l.amount}</td><td>${esc(l.by || '')}</td></tr>`).join('') || '<tr><td colspan="4">Nothing yet.</td></tr>'}</tbody></table>` : '<p>Type a phone number to see its points. Points are added by themselves when an order is marked done.</p>'}
+    </div>`;
+  }
+  document.addEventListener('submit', async (e) => {
+    if (e.target.id !== 'pts-form') return;
+    e.preventDefault();
+    try { S.look = await api('GET', '/api/desk/points/' + encodeURIComponent($('pts-phone').value.trim())); $('pts-phone').blur(); draw(); } catch (err) { if (err.message !== 'login') toast(err.message); }
+  });
 
   function printSlip(id) {
     const o = S.orders.find((x) => x.id === id);
@@ -327,9 +455,19 @@
     const tab = e.target.closest('[data-tab]');
     if (tab) {
       S.tab = tab.dataset.tab;
+      if (S.tab === 'soldout') loadMenu().then(draw).catch((err) => toast(err.message));
       document.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b === tab));
       return draw();
     }
+    const cd = e.target.closest('[data-calldone]');
+    if (cd) { api('POST', `/api/desk/calls/${cd.dataset.calldone}/done`).then(() => load(true)).catch((err) => toast(err.message)); return; }
+    const so = e.target.closest('[data-soldout]');
+    if (so) { api('POST', '/api/desk/soldout', { itemId: so.dataset.soldout, out: so.dataset.out === '1' }).then(async () => { await loadMenu(); draw(); toast(so.dataset.out === '1' ? 'Marked sold out for today.' : 'Back on the menu.'); }).catch((err) => toast(err.message)); return; }
+    const pts = e.target.closest('[data-pts]');
+    if (pts) { api('POST', `/api/desk/orders/${pts.dataset.pts}/points`, { approve: pts.dataset.ok === '1' }).then(() => { toast(pts.dataset.ok === '1' ? 'Points taken off. The total is updated.' : 'Points not used.'); load(true); }).catch((err) => toast(err.message)); return; }
+    const cp = e.target.closest('[data-confirmphone]');
+    if (cp) { api('POST', `/api/desk/customers/${cp.dataset.confirmphone}/confirm-phone`).then(async () => { S.look = await api('GET', '/api/desk/points/' + S.look.phone); draw(); toast('Phone confirmed. They can use points from checkout now.'); }).catch((err) => toast(err.message)); return; }
+    if (e.target.closest('#to-points')) { $('filter').value = 'points'; S.tab = 'orders'; document.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === 'orders')); return draw(); }
     const pic = e.target.closest('[data-pic]');
     if (pic) { $('viewer-img').src = '/api/desk/proof/' + pic.dataset.pic; $('viewer').hidden = false; }
     const print = e.target.closest('[data-print]');

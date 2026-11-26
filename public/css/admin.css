@@ -249,3 +249,10 @@
 @media (max-width: 480px) { .ad-evphoto { grid-template-columns: 64px minmax(0, 1fr); } .ad-evphoto img { width: 64px; height: 64px; } }
 .ad-range { grid-template-columns: 1fr 52px; }
 .ad-evphoto-title textarea { width: 100%; resize: vertical; }
+/* version 11: sales hours chart */
+.ad-hours { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 18px; overflow-x: auto; }
+.ad-hours div { position: relative; flex: 1 0 26px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.ad-hours i { display: block; width: 100%; min-height: 2px; border-radius: 6px 6px 2px 2px; background: #A8843A; }
+.ad-hours b { position: absolute; top: -16px; font-size: .75rem; }
+.ad-hours span { font-size: .72rem; color: #6F5B48; }
+#ad-cust-q { min-height: 36px; padding: 4px 10px; border: 1px solid #D8CDBD; border-radius: 8px; }
