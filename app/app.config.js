@@ -4,8 +4,8 @@
 const STORE_VERSION = '1.0.2';
 const fs = require('fs');
 const path = require('path');
-// Android push (Firebase): google-services.json is not kept in this public repository. EAS builds get it from the
-// EAS file variable GOOGLE_SERVICES_JSON; the GitHub test build writes it from a GitHub secret into app/.
+// Android push (Firebase project pick-me-cafe): app/google-services.json. Its API key is not a secret (it is inside
+// every APK); the private service-account key is only in EAS (FCM V1, uploaded 26 Nov 2026), never in the repo.
 const googleServices = process.env.GOOGLE_SERVICES_JSON || (fs.existsSync(path.join(__dirname, 'google-services.json')) ? './google-services.json' : undefined);
 // APP_VARIANT=test makes "Pick Me Test", a separate app that installs next to the real one (for staff and the
 // driver to try a version before the stores approve it).

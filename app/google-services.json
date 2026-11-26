@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "869345460609",
+    "project_id": "pick-me-cafe",
+    "storage_bucket": "pick-me-cafe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:869345460609:android:d88f92324ffb1b99b7a880",
+        "android_client_info": {
+          "package_name": "np.com.pickmecafe.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "869345460609-mqub1hupti4qup92theh3nsei9aadl7t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEJe_4wJXh-9hT73Ay70yb6jGzRMnAdMk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "869345460609-mqub1hupti4qup92theh3nsei9aadl7t.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "869345460609-8hf0t5vcv1ijshkqf8juo06tal6pfi83.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "np.com.pickmecafe.app",
+                "app_store_id": "6838835257"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
