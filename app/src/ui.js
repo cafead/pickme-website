@@ -41,7 +41,7 @@ export function Photo({ uri, style, round }) {
   return <Image source={{ uri: src }} style={[style, { backgroundColor: C.goldSoft }, round && { borderRadius: 999 }]} resizeMode="cover" />;
 }
 
-export function Field({ label, value, onChangeText, placeholder, keyboardType, multiline, maxLength, hint, autoCapitalize }) {
+export function Field({ label, value, onChangeText, placeholder, keyboardType, multiline, maxLength, hint, autoCapitalize, secure, autoComplete, textContentType }) {
   return (
     <View style={{ marginBottom: 14 }}>
       {label ? <Label>{label}</Label> : null}
@@ -54,6 +54,10 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType, m
         multiline={multiline}
         maxLength={maxLength}
         autoCapitalize={autoCapitalize}
+        secureTextEntry={Boolean(secure)}
+        autoComplete={autoComplete}
+        textContentType={textContentType}
+        autoCorrect={secure || autoComplete ? false : undefined}
         style={[s.input, multiline && { minHeight: 84, textAlignVertical: 'top', paddingTop: 12 }]}
       />
       {hint ? <Small style={{ marginTop: 4 }}>{hint}</Small> : null}

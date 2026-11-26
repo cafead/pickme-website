@@ -1,6 +1,11 @@
-// Notifications on the phone when an order or booking changes ("Your order is ready").
+// Notifications on the phone: local ones when the app sees a change itself ("Your order is ready"), and
+// push notifications from the cafe's server (new orders for staff, new deliveries for drivers, order updates
+// for customers) once push is set up for the app (Apple push key and Firebase in EAS).
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
+import { registerPush } from './api';
 
 let ready = false;
 
@@ -14,6 +19,12 @@ export async function setupNotifications() {
       name: 'Order and booking updates',
       importance: Notifications.AndroidImportance.HIGH,
       lightColor: '#A8843A',
+    });
+    await Notifications.setNotificationChannelAsync('deliveries', {
+      name: 'New deliveries (drivers)',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 400, 200, 400],
+      lightColor: '#1D5FA8',
     });
     ready = true;
   } catch (e) { /* notifications are a bonus; the app works without them */ }
@@ -37,4 +48,17 @@ export async function notify(title, body) {
       trigger: null,
     });
   } catch (e) { /* ignore */ }
+}
+
+// Sends this phone's push token to the cafe's server. The server knows from the login whether it is a
+// customer, staff or a driver. Quietly does nothing when push is not set up yet or not allowed.
+export async function registerForPush(device) {
+  if (Platform.OS === 'web' || !Device.isDevice) return;
+  try {
+    const perm = await Notifications.getPermissionsAsync();
+    if (!perm.granted) return;
+    const projectId = (Constants.expoConfig && Constants.expoConfig.extra && Constants.expoConfig.extra.eas && Constants.expoConfig.extra.eas.projectId) || (Constants.easConfig && Constants.easConfig.projectId);
+    const t = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    if (t && t.data) await registerPush(t.data, device, Platform.OS);
+  } catch (e) { /* push not set up yet (Apple key / Firebase), or offline */ }
 }

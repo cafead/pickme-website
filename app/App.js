@@ -13,6 +13,10 @@ import Cake from './src/Cake';
 import Book from './src/Book';
 import Orders, { OrderSheet } from './src/Orders';
 import Checkout from './src/Checkout';
+import Account from './src/Account';
+import Staff from './src/Staff';
+import Driver from './src/Driver';
+import './src/driverTask'; // the driver's background location task must be known when the app starts
 
 const TABS = [
   { id: 'home', label: 'Home', icon: '⌂' },
@@ -20,6 +24,7 @@ const TABS = [
   { id: 'cake', label: 'Cakes', icon: '🎂' },
   { id: 'book', label: 'Book', icon: '🪑' },
   { id: 'orders', label: 'Orders', icon: '🧾' },
+  { id: 'me', label: 'Me', icon: '☺' },
 ];
 
 export default function App() {
@@ -35,7 +40,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { content, loadError, refresh, ready, cart, addToCart, orders } = useApp();
+  const { content, loadError, refresh, ready, cart, addToCart, orders, staff } = useApp();
   const inset = useSafeAreaInsets();
   const [tab, setTab] = useState('home');
   const [cakeId, setCakeId] = useState(null);
@@ -78,6 +83,15 @@ function Shell() {
     );
   }
 
+  // Cafe staff and the delivery driver get their own screens after they log in (in the Me tab).
+  if (staff && staff.token) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: inset.top }}>
+        {staff.role === 'driver' ? <Driver inset={inset.bottom} /> : <Staff inset={inset.bottom} />}
+      </View>
+    );
+  }
+
   const count = cart.reduce((s, l) => s + l.qty, 0);
   const total = cart.reduce((s, l) => s + l.qty * l.price, 0);
   const live = orders.filter((o) => !['done', 'cancelled', 'declined'].includes(o.status)).length;
@@ -91,6 +105,7 @@ function Shell() {
         {tab === 'cake' ? <Cake preselect={cakeId} startCheckout={(line) => { addToCart(line); setCartStep('details'); setCartOpen(true); }} /> : null}
         {tab === 'book' ? <Book openOrder={(id) => { setTab('orders'); setOrderId(id); }} /> : null}
         {tab === 'orders' ? <Orders go={go} openOrder={setOrderId} /> : null}
+        {tab === 'me' ? <Account go={go} /> : null}
       </View>
 
       {count ? (
