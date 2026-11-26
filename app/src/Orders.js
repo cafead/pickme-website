@@ -8,7 +8,11 @@ import { TrackMap } from './MapView';
 import { tableCall } from './api';
 
 const TYPE = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
-const statusOf = (o) => (o.kind === 'booking' ? BOOKING_STATUS : STATUS)[o.status] || { label: o.status || 'Sent', text: '' };
+const statusOf = (o) => {
+  // A delivery that has left the cafe reads "On the way", not "Ready".
+  if (o.kind !== 'booking' && o.type === 'delivery' && o.status === 'ready' && o.delivery && ['picked', 'onway'].includes(o.delivery.status)) return { label: 'On the way', text: 'Your order has left the cafe.' };
+  return (o.kind === 'booking' ? BOOKING_STATUS : STATUS)[o.status] || { label: o.status || 'Sent', text: '' };
+};
 const color = (o) => (['cancelled', 'declined'].includes(o.status) ? C.bad : ['ready', 'confirmed', 'done', 'seated'].includes(o.status) ? C.ok : C.goldDark);
 
 export default function Orders({ openOrder, go }) {
