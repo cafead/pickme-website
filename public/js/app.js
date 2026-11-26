@@ -2095,7 +2095,7 @@
         <p class="form-msg" role="alert"></p><button class="btn" type="submit"><span>Save my details</span></button></form>
       <form class="form set-group" data-form="password" novalidate><h3>Password</h3>
         ${me.hasPassword ? '<label class="f"><span>Current password</span><input name="current" type="password" autocomplete="current-password" required></label>' : ''}
-        <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" required></label>
+        <label class="f"><span>New password</span><input name="password" type="password" autocomplete="new-password" required minlength="4" placeholder="At least 4 characters"></label>
         <p class="form-msg" role="alert"></p><button class="btn btn--ghost" type="submit"><span>Change password</span></button></form>
       <form class="form set-group" data-form="newemail" novalidate><h3>Email</h3>
         <p class="hint">${me.email ? `Now: <b>${esc(me.email)}</b>` : 'No email yet.'}</p>
@@ -2133,7 +2133,7 @@
         <label class="f"><span>Your name</span><input name="name" maxlength="80" autocomplete="name"></label>
         ${st.kind === 'phone' ? '' : `<label class="f"><span>Phone number (for points)</span><input name="phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" value="${esc(ph)}" placeholder="98XXXXXXXX"></label>`}
         <label class="f"><span>Login ID (optional, any name you like)</span><input name="username" maxlength="60" autocapitalize="off" autocomplete="username"></label>
-        <label class="f"><span>Password</span><input name="password" type="password" autocomplete="new-password" required></label>
+        <label class="f"><span>Password</span><input name="password" type="password" autocomplete="new-password" required minlength="4" placeholder="At least 4 characters"></label>
         <label class="set-check f--wide"><input type="checkbox" name="offers"><span>Tell me about offers and new specials</span></label>` : '';
     return `<form class="form" data-form="signup" novalidate>${!st.to ? googleHtml() : ''}${codeSteps('signup')}${more}
         <p class="form-msg f--wide" role="alert"></p>
@@ -2144,7 +2144,7 @@
   function resetHtml() {
     const st = A.su.reset || {};
     return `<form class="form" data-form="reset" novalidate>${codeSteps('reset')}
-        ${st.ticket ? '<label class="f f--wide"><span>New password</span><input name="password" type="password" autocomplete="new-password" required autofocus></label>' : ''}
+        ${st.ticket ? '<label class="f f--wide"><span>New password</span><input name="password" type="password" autocomplete="new-password" required minlength="4" placeholder="At least 4 characters" autofocus></label>' : ''}
         <p class="form-msg f--wide" role="alert"></p>
         <button class="btn f--wide" type="submit"><span>${!st.to ? 'Send me a code' : !st.ticket ? 'Check the code' : 'Save the new password'}</span></button>
         <button type="button" class="link-btn f--wide" data-act="account" data-id="signin"><span>Back</span></button>

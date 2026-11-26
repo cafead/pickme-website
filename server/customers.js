@@ -86,6 +86,9 @@ module.exports = function customers(x) {
   const earnFor = (o) => Math.floor(Math.max(0, Number(o.subtotal || 0) - Number((o.points && o.points.used) || 0)) * Number(L().percent) / 100 / (Number(L().rupeesPerPoint) || 1));
 
   /* ---------- customer sessions ---------- */
+  // New passwords need at least 4 characters (26 Nov 2026: points are worth money). Older shorter ones still work.
+  const MIN_PW = 4;
+  const SHORT_PW = 'Please choose a password of at least 4 characters.';
   const custPublic = (c) => ({
     id: c.id, username: c.username || '', email: c.email || '', phone: c.phone || '', name: c.name || '', address: c.address || '',
     birthday: c.birthday || '', emailVerified: Boolean(c.emailVerified), phoneVerified: Boolean(c.phoneVerified),
@@ -287,6 +290,7 @@ module.exports = function customers(x) {
     if (!t) return bad(res, 'Please verify your email or phone again (the code was more than 30 minutes ago).');
     const password = typeof req.body.password === 'string' ? req.body.password : '';
     if (!password) return bad(res, 'Please choose a password.');
+    if (password.length < MIN_PW) return bad(res, SHORT_PW);
     if (password.length > 200) return bad(res, 'That password is too long.');
     const username = str(req.body.username, 60).toLowerCase();
     const list = people.get();
@@ -342,6 +346,7 @@ module.exports = function customers(x) {
     const c = people.get().find((y) => (t.kind === 'email' ? y.email === t.to : y.phone === t.to));
     if (!c) return bad(res, 'We could not find that account.');
     if (typeof req.body.password !== 'string' || !req.body.password) return bad(res, 'Please choose a new password.');
+    if (req.body.password.length < MIN_PW) return bad(res, SHORT_PW);
     Object.assign(c, makeHash(req.body.password));
     c.v = (c.v || 0) + 1;
     if (t.kind === 'email') c.emailVerified = true; else c.phoneVerified = true;
@@ -415,6 +420,7 @@ module.exports = function customers(x) {
     }
     if (b.prefs && typeof b.prefs === 'object') c.prefs = { orderUpdates: b.prefs.orderUpdates !== false, offers: Boolean(b.prefs.offers) };
     if (typeof b.password === 'string' && b.password) {
+      if (b.password.length < MIN_PW) return bad(res, SHORT_PW);
       if (c.hash && !checkHash(c, b.current)) return res.status(401).json({ error: 'Your current password is not right.' });
       Object.assign(c, makeHash(b.password));
       c.v = (c.v || 0) + 1;
