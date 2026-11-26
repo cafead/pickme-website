@@ -430,7 +430,9 @@ module.exports = {
   },
   // Sizes set by dragging in admin ("Edit layout"), and photo positions and zoom.
   // Version 11: switches for the new parts, so any of them can be turned off from admin without a new version.
-  features: { accounts: true, points: true, tableButtons: true, soldOut: true, liveStatus: true, orderAgain: true },
+  features: { accounts: true, points: true, tableButtons: true, soldOut: true, liveStatus: true, orderAgain: true, googleSignIn: true, cod: true, mapPin: true, driverTracking: true },
+  // Version 12: where the cafe is and how far it delivers (Hetauda only). The map pin must be inside the circle.
+  delivery: { lat: 27.4287, lng: 85.0322, radiusKm: 9, note: 'We deliver inside Hetauda.' },
   // Loyalty points: a share of each finished order comes back as points (1 point = Rs. 1 by default).
   loyalty: {
     percent: 5, rupeesPerPoint: 1, minSpend: 50, expiryMonths: 12, birthdayPoints: 100, birthdayDays: 7,

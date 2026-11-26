@@ -89,7 +89,7 @@ module.exports = function customers(x) {
   const custPublic = (c) => ({
     id: c.id, username: c.username || '', email: c.email || '', phone: c.phone || '', name: c.name || '', address: c.address || '',
     birthday: c.birthday || '', emailVerified: Boolean(c.emailVerified), phoneVerified: Boolean(c.phoneVerified),
-    hasPassword: Boolean(c.hash), prefs: Object.assign({ orderUpdates: true, offers: false }, c.prefs || {}), createdAt: c.createdAt,
+    hasPassword: Boolean(c.hash), google: Boolean(c.google), apple: Boolean(c.apple), prefs: Object.assign({ orderUpdates: true, offers: false }, c.prefs || {}), createdAt: c.createdAt,
   });
   function issueCust(c) {
     const body = Buffer.from(JSON.stringify({ c: c.id, v: c.v || 0, exp: Date.now() + 180 * 864e5 })).toString('base64url');
@@ -168,8 +168,75 @@ module.exports = function customers(x) {
     try { const p = JSON.parse(Buffer.from(body, 'base64url').toString()); return p.exp > Date.now() && p.purpose === purpose ? p : null; } catch { return null; }
   }
 
+  const googleIds = () => String(process.env.GOOGLE_CLIENT_ID || '').split(',').map((v) => v.trim()).filter(Boolean);
   app.get('/api/account/config', (req, res) => {
-    res.json({ on: feature('accounts'), email: emailOn(), sms: smsOn(), points: pointsOn(), loyalty: L() });
+    res.json({ on: feature('accounts'), email: emailOn(), sms: smsOn(), points: pointsOn(), loyalty: L(), google: feature('accounts') && feature('googleSignIn') && googleIds().length ? googleIds()[0] : '' });
+  });
+
+  /* ---------- Sign in with Google (website now, app later) and Sign in with Apple (app) ----------
+   * The browser or app gets a signed ID token from Google or Apple; the server checks its signature with their
+   * public keys, the audience (our client id / app id) and the issuer, then signs the person in. A first sign-in
+   * makes an account with the verified email (no password: one can be set later in Settings). */
+  const jwksCache = new Map();
+  async function jwks(url) {
+    const hit = jwksCache.get(url);
+    if (hit && hit.until > Date.now()) return hit.keys;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('keys');
+    const keys = (await r.json()).keys || [];
+    jwksCache.set(url, { keys, until: Date.now() + 6 * 3600e3 });
+    return keys;
+  }
+  const b64json = (part) => JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
+  async function verifyIdToken(token, url, issuers, audiences) {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) throw new Error('bad token');
+    const head = b64json(parts[0]);
+    const body = b64json(parts[1]);
+    if (head.alg !== 'RS256') throw new Error('bad alg');
+    let key = (await jwks(url)).find((k) => k.kid === head.kid);
+    if (!key) { jwksCache.delete(url); key = (await jwks(url)).find((k) => k.kid === head.kid); }
+    if (!key) throw new Error('unknown key');
+    const ok = crypto.verify('RSA-SHA256', Buffer.from(`${parts[0]}.${parts[1]}`), crypto.createPublicKey({ key, format: 'jwk' }), Buffer.from(parts[2], 'base64url'));
+    if (!ok) throw new Error('bad signature');
+    const aud = Array.isArray(body.aud) ? body.aud : [body.aud];
+    if (!issuers.includes(body.iss) || !aud.some((a) => audiences.includes(a)) || !(body.exp * 1000 > Date.now() - 60e3)) throw new Error('not for us');
+    return body;
+  }
+  async function signInWith(provider, sub, email, name, req, res) {
+    const list = people.get();
+    let c = list.find((y) => y[provider] === sub) || (email ? list.find((y) => y.email === email) : null);
+    if (!c) {
+      c = { id: 'c_' + crypto.randomBytes(8).toString('hex'), username: '', email: email || '', phone: '', name: name || '', address: '', birthday: '', emailVerified: Boolean(email), phoneVerified: false, v: 1, createdAt: new Date().toISOString(), prefs: { orderUpdates: true, offers: false } };
+      list.push(c);
+      audit('customer:' + c.id, `account-created-${provider}`, email || '');
+    }
+    c[provider] = sub;
+    if (email && !c.email) c.email = email;
+    if (email && c.email === email) c.emailVerified = true;
+    if (name && !c.name) c.name = name;
+    c.lastLoginAt = new Date().toISOString();
+    await people.set(list);
+    const token = issueCust(c);
+    custCookie(req, res, token);
+    res.json({ ok: true, token, me: custPublic(c) });
+  }
+  app.post('/api/account/google', limit('google', 40, 15 * 60e3), json, async (req, res) => {
+    if (!feature('accounts') || !feature('googleSignIn') || !googleIds().length) return bad(res, 'Google sign-in is not on at the moment.');
+    try {
+      const t = await verifyIdToken(req.body.credential, 'https://www.googleapis.com/oauth2/v3/certs', ['accounts.google.com', 'https://accounts.google.com'], googleIds());
+      if (!t.email || t.email_verified === false) return bad(res, 'Your Google account has no confirmed email.');
+      await signInWith('google', String(t.sub), normEmail(t.email), str(t.name, 80), req, res);
+    } catch (e) { console.error('Google sign-in:', e.message); bad(res, 'Google sign-in did not work. Please try again.'); }
+  });
+  // Sign in with Apple (phone app). The audience is the app's bundle id.
+  app.post('/api/account/apple', limit('apple', 40, 15 * 60e3), json, async (req, res) => {
+    if (!feature('accounts')) return bad(res, 'Accounts are switched off at the moment.');
+    try {
+      const t = await verifyIdToken(req.body.identityToken, 'https://appleid.apple.com/auth/keys', ['https://appleid.apple.com'], [process.env.APPLE_BUNDLE_ID || 'np.com.pickmecafe.app']);
+      const name = str([req.body.givenName, req.body.familyName].filter(Boolean).join(' '), 80);
+      await signInWith('apple', String(t.sub), normEmail(t.email), name, req, res);
+    } catch (e) { console.error('Apple sign-in:', e.message); bad(res, 'Sign in with Apple did not work. Please try again.'); }
   });
   // Step 1: send a 6-digit code to an email (or phone, when SMS is on).
   app.post('/api/account/code', limit('code', 12, 60 * 60e3), json, async (req, res) => {
@@ -525,6 +592,7 @@ module.exports = function customers(x) {
     if (open) return res.json({ ok: true, id: open.id, again: true });
     const call = { id: rid('call'), at: new Date().toISOString(), table, kind, label: CALLS[kind], doneAt: '', by: '' };
     await calls.set([call, ...list].slice(0, 300));
+    if (x.onTableCall) x.onTableCall(call);
     res.json({ ok: true, id: call.id });
   });
   app.get('/api/table-call/:id', limit('callstatus', 300, 15 * 60e3), (req, res) => {

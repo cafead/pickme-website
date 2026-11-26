@@ -684,6 +684,7 @@
           <label class="f"><span>How many cakes</span><input name="qty" id="cake-qty" type="number" min="1" max="20" value="1" inputmode="numeric" required></label>
           <label class="f"><span>Occasion (optional)</span><input name="occasion" id="cake-occasion" maxlength="80" placeholder="Birthday, anniversary"></label>
           <label class="f f--wide"><span>Name or message on the cake (optional)</span><input name="cakeMessage" id="cake-msg" maxlength="120" placeholder="Happy Birthday Aarav"></label>
+          <label class="f f--wide cake-ref"><span>Have a picture of the cake you want? (optional)</span><input type="file" id="cake-ref" accept="image/png,image/jpeg,image/webp"><small class="hint">A photo from the internet, or one made with AI. We will make a cake like it.</small><small id="cake-photo-state" class="hint" aria-live="polite"></small></label>
           <div class="f"><span>Date</span><div data-bsp="date" data-value="${slot.date}"></div></div>
           <label class="f"><span>Time</span><select name="time" id="cake-time" required>${timeOptions(c, slot.time)}</select></label>
           <p class="hint f--wide" id="cake-notice">We need at least ${esc(k.noticeHours)} hours to prepare a whole cake.</p>
@@ -1169,7 +1170,7 @@
 
   /* ---------- cart drawer and checkout ---------- */
   const layer = () => $('#layer');
-  function closeLayer() { if ($('form[data-form=checkout]', layer())) saveDraft(false); closeQrFull(); layer().innerHTML = ''; document.body.classList.remove('lock'); }
+  function closeLayer() { if ($('form[data-form=checkout]', layer())) saveDraft(false); closeQrFull(); if (typeof closeMapPicker === 'function') closeMapPicker(); layer().innerHTML = ''; document.body.classList.remove('lock'); }
   function openLayer(html) {
     const t = $('#toast');
     if (t) t.classList.remove('is-on');
@@ -1295,7 +1296,7 @@
   // What the guest typed at checkout is kept for this visit, so it survives a trip to the payment app
   // (phones often reload the page on the way back).
   const DRAFT = 'pm_checkout';
-  const DRAFT_KEYS = ['type', 'phone', 'name', 'address', 'tableNo', 'notes', 'method', 'txn', 'when'];
+  const DRAFT_KEYS = ['type', 'phone', 'name', 'address', 'tableNo', 'notes', 'method', 'txn', 'when', 'change'];
   function saveDraft(open) {
     const f = $('form[data-form=checkout]');
     try {
@@ -1315,7 +1316,7 @@
       const el = d[k] && $(`input[name=${k}][value="${String(d[k]).replace(/"/g, '')}"]`, f);
       if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }
     }
-    for (const k of ['phone', 'name', 'address', 'tableNo', 'notes', 'txn']) { const el = f.elements[k]; if (el && d[k] && !(k === 'tableNo' && TABLE)) el.value = d[k]; }
+    for (const k of ['phone', 'name', 'address', 'tableNo', 'notes', 'txn', 'change']) { const el = f.elements[k]; if (el && d[k] && !(k === 'tableNo' && TABLE)) el.value = d[k]; }
   }
   function checkoutHtml() {
     const c = S.c;
@@ -1344,6 +1345,7 @@
           <label class="f"><span id="co-phone-label">${phoneNeeded ? 'Phone' : 'Phone (optional)'}</span><input name="phone" id="co-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="98XXXXXXXX"${phoneNeeded ? ' required' : ''}></label>
           <label class="f"><span>Your name (optional)</span><input name="name" id="co-name" autocomplete="name" maxlength="80"></label>
           <label class="f f--wide" id="co-addr"${type === 'delivery' ? '' : ' hidden'}><span>Delivery address (optional, we will call if it is missing)</span><textarea name="address" id="co-address" rows="2" maxlength="300" placeholder="Tole, landmark, ward"></textarea><small class="hint">${esc(c.payment.deliveryNote)}</small></label>
+          <div class="f f--wide" id="co-pin-wrap"${type === 'delivery' ? '' : ' hidden'}><div id="co-pin"></div></div>
           <fieldset class="f f--wide seg"><legend>When?</legend>
             ${hasWhole ? '' : `<input type="radio" name="when" id="co-now" value="now"${later ? '' : ' checked'}><label for="co-now">Now</label>`}
             <input type="radio" name="when" id="co-later" value="later"${later ? ' checked' : ''}><label for="co-later">Later</label>
@@ -1355,13 +1357,16 @@
           </div>
           ${hasWhole ? `<label class="f"><span>Name or message on the cake (optional)</span><input name="cakeMessage" id="co-cake" maxlength="120" value="${esc(pre.cakeMessage || '')}"></label>
             <label class="f"><span>Occasion (optional)</span><input name="occasion" id="co-occasion" maxlength="80" value="${esc(pre.occasion || '')}"></label>
-            <label class="f f--wide"><span>${wantsPhoto ? 'Photo to print on the cake' : 'Photo of the cake design you want (optional)'}</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
+            ${(pre.refPhoto || S.cakePhoto) && !wantsPhoto ? '<p class="hint f--wide pin-set" id="co-ref-done">✓ Your cake photo is added. We will make one like it. <button type="button" class="link-btn" data-act="cake-photo-clear">Remove</button></p>' : ''}
+            <label class="f f--wide"${(pre.refPhoto || S.cakePhoto) && !wantsPhoto ? ' hidden' : ''}><span>${wantsPhoto ? 'Photo to print on the cake' : 'Photo of a cake you like (downloaded or made with AI), optional: we make one like it'}</span><input type="file" name="ref" id="co-ref" accept="image/png,image/jpeg,image/webp"></label>` : ''}
           <label class="f f--wide"><span>Notes for us (optional)</span><textarea name="notes" id="co-notes" rows="2" maxlength="500" placeholder="Less sugar, extra ice"></textarea></label>
           <div class="f--wide" id="co-points"></div>
           <fieldset class="f f--wide seg"><legend>Payment</legend>
             <input type="radio" name="method" id="co-later-pay" value="later" checked><label for="co-later-pay">Pay later</label>
+            <input type="radio" name="method" id="co-cod" value="cod" hidden><label for="co-cod" hidden>Cash on delivery</label>
             ${methods.map((m) => `<input type="radio" name="method" id="co-${m}" value="${m}"><label for="co-${m}">Pay now with ${esc(c.payment[m].name)}</label>`).join('')}
           </fieldset>
+          <label class="f" id="co-change" hidden><span>Bring change for (optional)</span><select name="change" id="co-change-sel"><option value="0">No change needed</option><option value="500">A Rs. 500 note</option><option value="1000">A Rs. 1000 note</option></select></label>
           <p class="hint f--wide" id="co-later-note">Pay at the counter, or when your order arrives.</p>
           <div class="f--wide pay" id="co-pay" hidden>
             <div id="co-qr"></div>
@@ -1381,6 +1386,9 @@
     $$('[data-bsp]', layer()).forEach((el) => BS.mount(el, { name: el.dataset.bsp, value: pre.date || el.dataset.value }));
     restoreDraft(readDraft());
     fillKnown();
+    try { S.coLoc = S.coLoc || JSON.parse(sessionStorage.getItem('pm_pin') || 'null'); } catch (e) { /* no storage */ }
+    paintPin();
+    paintPay($('form[data-form=checkout]'));
     saveDraft(true);
   }
   function doneHtml(title, lines, text) {
@@ -1410,7 +1418,7 @@
   const FORMS = {
     async login(d) {
       const r = await post('/api/auth/login', { username: (d.username || '').trim(), password: d.password || '', remember: Boolean(d.remember) });
-      location.href = r.role === 'staff' ? '/counter' : '/admin';
+      location.href = r.role === 'driver' ? '/driver' : r.role === 'staff' ? '/counter' : '/admin';
       return 'Signed in. Opening...';
     },
     extras(d, form) {
@@ -1427,7 +1435,7 @@
       if (!d.date || !d.time) throw new Error('Please choose a date and time.');
       const opts = $$('input[name=opt]:checked', form).map((el) => el.value);
       addToCart(d.cakeId, d.size, Math.max(1, Math.min(20, Number(d.qty) || 1)), true, opts);
-      S.preset = { when: 'later', type: 'pickup', date: d.date, time: d.time, cakeMessage: d.cakeMessage, occasion: d.occasion };
+      S.preset = { when: 'later', type: 'pickup', date: d.date, time: d.time, cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto: S.cakePhoto || '' };
       openCheckout();
     },
     async booking(d, form) {
@@ -1452,17 +1460,19 @@
       return 'WhatsApp is opening with your message. Press send there.';
     },
     async checkout(d, form) {
-      const payNow = d.method && d.method !== 'later';
+      const payNow = d.method && !['later', 'cod'].includes(d.method);
       const file = payNow ? form.elements.proof.files[0] : null;
       if (d.type !== 'dinein' && !String(d.phone || '').trim()) throw new Error('Please enter your phone number so we can reach you.');
       if (payNow && !String(d.phone || '').trim()) { const ph = $('#co-phone'); if (ph) ph.focus(); throw new Error('Please enter your phone number: we call you to confirm the payment.'); }
       if (d.when === 'later' && (!d.date || !d.time)) throw new Error('Please choose a date and time.');
       const cartSnapshot = cartLines();
       const proof = await sendPicture(file);
-      const refPhoto = form.elements.ref ? await sendPicture(form.elements.ref.files[0]) : '';
+      const picked = form.elements.ref && form.elements.ref.files[0];
+      const refPhoto = picked ? await sendPicture(picked) : ((S.preset && S.preset.refPhoto) || S.cakePhoto || '');
       const res = await post('/api/orders', {
         name: d.name, phone: d.phone, type: d.type, address: d.address, tableNo: d.tableNo, when: d.when, date: d.date, dateBs: d.dateBs, time: d.time,
         cakeMessage: d.cakeMessage, occasion: d.occasion, refPhoto, notes: d.notes, method: d.method, proof, txn: payNow ? d.txn : '',
+        location: d.type === 'delivery' && S.coLoc ? S.coLoc : null, change: d.method === 'cod' ? Number(d.change) || 0 : 0,
         device: DEVICE, usePoints: form.elements.usePoints && form.elements.usePoints.checked ? Number(form.elements.usePoints.value) || 0 : 0,
         lines: cartLines().map((l) => ({ itemId: l.itemId, label: l.label, qty: l.qty, extras: l.extras })),
       });
@@ -1472,6 +1482,8 @@
       dropDraft();
       try { localStorage.setItem('pm_last_order', JSON.stringify({ id: res.id, at: Date.now(), item: (cartSnapshot[0] || {}).name || '' })); } catch (e) { /* no storage */ }
       rememberOrder(res);
+      S.coLoc = null; S.cakePhoto = '';
+      try { sessionStorage.removeItem('pm_pin'); } catch (e) { /* no storage */ }
       if (normPhone(d.phone)) store.set('pm_phone', normPhone(d.phone));
       S.coPts = 0;
       startLive();
@@ -1519,13 +1531,15 @@
       $('#co-sum').innerHTML = sumHtml(t);
       $('#co-addr').hidden = t !== 'delivery';
       $('#co-table').hidden = t !== 'dinein';
+      paintPay(form);
       phoneRule(form);
       const m = $('input[name=method]:checked', form);
-      if (m && m.value !== 'later') $('#co-steps').innerHTML = paySteps('', payTotal());
+      if (m && !['later', 'cod'].includes(m.value)) $('#co-steps').innerHTML = paySteps('', payTotal());
     }
     if (e.target.name === 'when') $('#co-when').hidden = e.target.value !== 'later';
     if (e.target.name === 'method') {
-      const now = e.target.value !== 'later';
+      const now = !['later', 'cod'].includes(e.target.value);
+      paintPay(form);
       $('#co-pay').hidden = !now;
       $('#co-later-note').hidden = now;
       if (now) { $('#co-qr').innerHTML = qrHtml(e.target.value); $('#co-steps').innerHTML = paySteps('', payTotal()); }
@@ -1537,9 +1551,10 @@
   function phoneRule(form) {
     const t = ($('input[name=type]:checked', form) || {}).value;
     const m = ($('input[name=method]:checked', form) || {}).value;
-    const need = t !== 'dinein' || (m && m !== 'later');
+    const payNow = m && !['later', 'cod'].includes(m);
+    const need = t !== 'dinein' || payNow;
     $('#co-phone').required = need;
-    $('#co-phone-label').textContent = need ? (m && m !== 'later' ? 'Phone (we call to confirm the payment)' : 'Phone') : 'Phone (optional)';
+    $('#co-phone-label').textContent = need ? (payNow ? 'Phone (we call to confirm the payment)' : 'Phone') : 'Phone (optional)';
   }
   let searchTimer = null;
   document.addEventListener('input', (e) => {
@@ -1940,13 +1955,14 @@
     if (!pill) { pill = document.createElement('button'); pill.type = 'button'; pill.id = 'os-pill'; pill.className = 'os-pill'; pill.dataset.act = 'account'; pill.dataset.id = 'orders'; document.body.appendChild(pill); }
     const s = live[0];
     const i = Math.max(0, FLOW.indexOf(s.status));
-    pill.innerHTML = `<span class="os-dots" aria-hidden="true">${FLOW.slice(0, 4).map((x, n) => `<i class="${n <= i ? 'on' : ''}"></i>`).join('')}</span><span>Order ${esc(s.id)}: <b>${esc(STEP_TEXT[s.status] || s.status)}</b>${live.length > 1 ? ` · +${live.length - 1} more` : ''}</span>`;
+    const dl = s.delivery && ['picked', 'onway'].includes(s.delivery.status) ? ' · 🛵 on the way' : '';
+    pill.innerHTML = `<span class="os-dots" aria-hidden="true">${FLOW.slice(0, 4).map((x, n) => `<i class="${n <= i ? 'on' : ''}"></i>`).join('')}</span><span>Order ${esc(s.id)}: <b>${esc(STEP_TEXT[s.status] || s.status)}</b>${dl}${live.length > 1 ? ` · +${live.length - 1} more` : ''}</span>`;
   }
   function startLive() {
     clearInterval(A.timer);
     if (!myOrders().length || PREVIEW) return;
     refreshLive();
-    A.timer = setInterval(() => { if (!document.hidden) refreshLive(); }, 15000);
+    A.timer = setInterval(() => { if (!document.hidden) refreshLive(); }, 10000);
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && myOrders().length) refreshLive(); });
 
@@ -1986,6 +2002,7 @@
       <header><strong>${esc(o.id)}</strong><span>${esc(dateText(o.createdAt))}</span><b>${rs(o.total)}</b></header>
       <p class="ocard-type">${esc(TYPE_TEXT[o.type] || '')}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}${o.paid ? ' · paid' : ''}</p>
       ${o.status === 'cancelled' ? '<p class="ocard-step is-cancel">Cancelled</p>' : `<ol class="steps" aria-label="Order status: ${esc(STEP_TEXT[o.status] || o.status)}">${FLOW.map((x, n) => `<li class="${n < i ? 'was' : n === i ? 'now' : ''}"><i></i><span>${STEP_TEXT[x]}</span></li>`).join('')}</ol>`}
+      ${trackHtml(o)}
       <ul class="ocard-lines">${(o.lines || []).map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` <small>(${esc(l.label)})</small>` : ''}${l.extras && l.extras.length ? ` <small>+ ${esc(l.extras.join(', '))}</small>` : ''}</li>`).join('')}</ul>
       ${pts}${o.pointsEarned ? `<p class="hint ocard-earned">${ICON.gift}<span>${o.pointsEarned} points earned</span></p>` : ''}
       <div class="row">
@@ -2023,6 +2040,8 @@
     else if (A.view === 'settings') body = tabsHtml() + settingsHtml();
     else body = tabsHtml() + ordersViewHtml();
     box.innerHTML = top + body;
+    if (A.view === 'signin' || A.view === 'signup') paintGoogle();
+    if (A.view === 'orders') paintTracks();
   }
   function ordersViewHtml() {
     const list = allOrders();
@@ -2089,7 +2108,7 @@
       </section>${general}`;
   }
   function signinHtml() {
-    return `<form class="form" data-form="signin" novalidate>
+    return `<form class="form" data-form="signin" novalidate>${googleHtml()}
         <label class="f f--wide"><span>Login ID, email or phone</span><input name="id" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" maxlength="120" required autofocus></label>
         <label class="f f--wide"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label>
         <p class="form-msg f--wide" role="alert"></p>
@@ -2116,7 +2135,7 @@
         <label class="f"><span>Login ID (optional, any name you like)</span><input name="username" maxlength="60" autocapitalize="off" autocomplete="username"></label>
         <label class="f"><span>Password</span><input name="password" type="password" autocomplete="new-password" required></label>
         <label class="set-check f--wide"><input type="checkbox" name="offers"><span>Tell me about offers and new specials</span></label>` : '';
-    return `<form class="form" data-form="signup" novalidate>${codeSteps('signup')}${more}
+    return `<form class="form" data-form="signup" novalidate>${!st.to ? googleHtml() : ''}${codeSteps('signup')}${more}
         <p class="form-msg f--wide" role="alert"></p>
         <button class="btn f--wide" type="submit"><span>${!st.to ? 'Send me a code' : !st.ticket ? 'Check the code' : 'Create my account'}</span></button>
         <button type="button" class="link-btn f--wide" data-act="account" data-id="signin"><span>I already have an account</span></button>
@@ -2280,7 +2299,7 @@
     const use = Math.min(bal, Math.floor(sub / value));
     const was = $('input[name=usePoints]', box);
     const ticked = was ? was.checked : false;
-    const canUse = use >= (Number(L.minSpend) || 0) && use > 0 && (sure || method === 'later');
+    const canUse = use >= (Number(L.minSpend) || 0) && use > 0 && (sure || method === 'later' || method === 'cod');
     box.innerHTML = `${canUse ? `<label class="pts-use"><input type="checkbox" name="usePoints" value="${use}"${ticked ? ' checked' : ''}><span>${ICON.gift}<span>Use ${use} of my ${bal} points <b>${rs(use * value)} off</b>${sure ? '' : '<small>Staff take them off at the counter.</small>'}</span></span></label>`
       : bal > 0 ? `<p class="hint">${ICON.gift} This number has ${bal} points.${use < (Number(L.minSpend) || 0) ? ` You can use them from ${Number(L.minSpend) || 0} points.` : ' To use them with Pay now, sign in first, or choose Pay later.'}</p>` : ''}
       ${earn > 0 ? `<p class="hint pts-earn">${phone ? `This order gives ${earn} points to ${esc(phone)} when it is done.` : `Add your phone number to get ${earn} points for this order.`}</p>` : ''}`;
@@ -2343,6 +2362,218 @@
     if (!out.size) return;
     for (const g of c.menu.categories || []) for (const it of g.items || []) if (out.has(it.id)) { it.available = false; it.soldOut = true; }
   }
+
+
+  /* ---------- version 12: Google sign-in, map pin, cash on delivery, live driver map ---------- */
+  // Leaflet (free map library, copied into /vendor) with OpenStreetMap tiles. Loaded only when a map is needed.
+  let leafletReady = null;
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    if (leafletReady) return leafletReady;
+    const v = window.PM_V || '';
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = `/vendor/leaflet/leaflet.css?v=${v}`;
+    document.head.appendChild(css);
+    leafletReady = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = `/vendor/leaflet/leaflet.js?v=${v}`;
+      s.onload = () => res(window.L);
+      s.onerror = () => { leafletReady = null; rej(new Error('The map could not load. Please check your internet.')); };
+      document.head.appendChild(s);
+    });
+    return leafletReady;
+  }
+  const tiles = (L) => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
+  const AREA = () => Object.assign({ lat: 27.4287, lng: 85.0322, radiusKm: 9 }, (S.c && S.c.delivery) || {});
+  function kmBetween(a, b) {
+    const r = (d) => (d * Math.PI) / 180;
+    const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+    return 6371 * 2 * Math.asin(Math.sqrt(h));
+  }
+  const pinIcon = (L, cls, label) => L.divIcon({ className: `pin pin--${cls}`, html: `<span>${label || ''}</span>`, iconSize: [34, 34], iconAnchor: [17, 34] });
+
+  // Choose the delivery spot: a full-screen map with a pin that can be dragged, and "Use my location".
+  async function openMapPicker() {
+    let L;
+    try { L = await loadLeaflet(); } catch (e) { return toast(e.message); }
+    closeMapPicker();
+    const area = AREA();
+    const start = S.coLoc || { lat: area.lat, lng: area.lng };
+    const box = document.createElement('div');
+    box.id = 'map-pick';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', 'Choose the delivery spot');
+    box.innerHTML = `<div class="mp-top"><strong>Where should we deliver?</strong><span>Drag the map so the pin sits on your door, or use your location.</span></div>
+      <div id="mp-map"></div>
+      <div class="mp-foot"><p class="hint" id="mp-info"></p>
+        <div class="row"><button type="button" class="btn btn--ghost" data-act="mp-gps">${ICON.pin}<span>Use my location</span></button>
+        <button type="button" class="btn" data-act="mp-ok"><span>Deliver here</span></button>
+        <button type="button" class="btn btn--ghost" data-act="mp-close"><span>Cancel</span></button></div></div>`;
+    document.body.appendChild(box);
+    const map = L.map('mp-map', { zoomControl: true }).setView([start.lat, start.lng], S.coLoc ? 17 : 14);
+    tiles(L).addTo(map);
+    L.circle([area.lat, area.lng], { radius: (Number(area.radiusKm) || 7) * 1000, color: '#A8843A', weight: 1.5, fillOpacity: 0.04 }).addTo(map);
+    L.marker([area.lat, area.lng], { icon: pinIcon(L, 'cafe', '☕'), interactive: false }).addTo(map);
+    const pin = L.marker([start.lat, start.lng], { icon: pinIcon(L, 'home', ''), draggable: true, autoPan: true }).addTo(map);
+    const info = () => {
+      const p = pin.getLatLng();
+      const km = kmBetween({ lat: p.lat, lng: p.lng }, area);
+      const out = Number(area.radiusKm) > 0 && km > Number(area.radiusKm);
+      $('#mp-info').innerHTML = out ? `<b class="bad">${km.toFixed(1)} km away: outside our delivery area (Hetauda, up to ${area.radiusKm} km).</b>` : `${km.toFixed(1)} km from the cafe.`;
+      $('[data-act=mp-ok]', box).disabled = out;
+    };
+    // Tapping the map moves the pin there; moving the map keeps the pin in the middle.
+    map.on('click', (e) => { pin.setLatLng(e.latlng); info(); });
+    map.on('move', () => { if (!S.mpDrag) pin.setLatLng(map.getCenter()); });
+    map.on('moveend', info);
+    pin.on('dragstart', () => { S.mpDrag = true; });
+    pin.on('dragend', () => { S.mpDrag = false; map.panTo(pin.getLatLng()); info(); });
+    S.mp = { map, pin, acc: 0 };
+    info();
+    setTimeout(() => map.invalidateSize(), 50);
+    if (!S.coLoc) ACT['mp-gps'](true);
+  }
+  function closeMapPicker() {
+    const b = $('#map-pick');
+    if (S.mp && S.mp.map) S.mp.map.remove();
+    S.mp = null;
+    if (b) b.remove();
+  }
+  function paintPin() {
+    const box = $('#co-pin');
+    if (!box) return;
+    const on = FEATURE('mapPin');
+    box.hidden = !on;
+    if (!on) return;
+    const area = AREA();
+    box.innerHTML = S.coLoc
+      ? `<p class="pin-set">${ICON.pin}<span>Delivery spot set on the map · ${kmBetween(S.coLoc, area).toFixed(1)} km from the cafe</span></p><button type="button" class="btn btn--ghost btn--small" data-act="mp-open"><span>Change the spot</span></button>`
+      : `<button type="button" class="btn btn--ghost" data-act="mp-open">${ICON.pin}<span>Choose the delivery spot on the map</span></button><p class="hint">Helps our driver find you. You can also just write the address.</p>`;
+  }
+  // Cash on delivery for deliveries (with change for one note); "Pay later" for the cafe and pickup.
+  function paintPay(form) {
+    const t = ($('input[name=type]:checked', form) || {}).value;
+    const deliver = t === 'delivery' && FEATURE('cod');
+    const later = $('#co-later-pay', form);
+    const cod = $('#co-cod', form);
+    if (!later || !cod) return;
+    later.hidden = deliver; $('label[for=co-later-pay]', form).hidden = deliver;
+    cod.hidden = !deliver; $('label[for=co-cod]', form).hidden = !deliver;
+    if (deliver && later.checked) { cod.checked = true; }
+    if (!deliver && cod.checked) { later.checked = true; }
+    const m = ($('input[name=method]:checked', form) || {}).value;
+    $('#co-change').hidden = m !== 'cod';
+    $('#co-later-note').textContent = m === 'cod' ? 'Pay the driver in cash when your order arrives.' : 'Pay at the counter, or when your order arrives.';
+    $('#co-pin-wrap').hidden = t !== 'delivery';
+  }
+  Object.assign(ACT, {
+    'mp-open'() { openMapPicker(); },
+    'mp-close'() { closeMapPicker(); },
+    'mp-ok'() {
+      if (!S.mp) return;
+      const p = S.mp.pin.getLatLng();
+      S.coLoc = { lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6, acc: Math.round(S.mp.acc || 0) };
+      try { sessionStorage.setItem('pm_pin', JSON.stringify(S.coLoc)); } catch (e) { /* no storage */ }
+      closeMapPicker();
+      paintPin();
+    },
+    'mp-gps'(quiet) {
+      if (!navigator.geolocation || !S.mp) { if (quiet !== true) toast('This browser cannot find your location. Move the map instead.'); return; }
+      navigator.geolocation.getCurrentPosition((pos) => {
+        if (!S.mp) return;
+        S.mp.acc = pos.coords.accuracy;
+        S.mp.map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+        S.mp.pin.setLatLng([pos.coords.latitude, pos.coords.longitude]);
+      }, (err) => { if (quiet !== true) toast(err.code === 1 ? 'Location is blocked for this site. Move the map to your door instead.' : 'We could not find your location. Move the map instead.'); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+    },
+    async 'cake-photo-clear'() { if (S.preset) S.preset.refPhoto = ''; S.cakePhoto = ''; const b = $('#cake-photo-state'); if (b) b.innerHTML = ''; const i = $('#cake-ref'); if (i) i.value = ''; const c = $('#co-ref-done'); if (c) c.remove(); const f = $('#co-ref'); if (f) f.closest('label').hidden = false; },
+  });
+
+  // The cake picture (downloaded or made with AI) is sent as soon as it is chosen on the cake form.
+  document.addEventListener('change', async (e) => {
+    if (e.target.id !== 'cake-ref' || !e.target.files[0]) return;
+    const state = $('#cake-photo-state');
+    try {
+      if (state) state.textContent = 'Adding your photo...';
+      S.cakePhoto = await sendPicture(e.target.files[0]);
+      if (state) state.innerHTML = `<span class="ok">Photo added. We will make a cake like it.</span> <button type="button" class="link-btn" data-act="cake-photo-clear">Remove</button>`;
+    } catch (err) { if (state) state.textContent = err.message; S.cakePhoto = ''; }
+  });
+
+  /* live delivery on the customer's order: driver on a map */
+  const liveMaps = new Map();
+  async function paintTracks() {
+    const boxes = $$('.track-map');
+    if (!boxes.length) { liveMaps.forEach((m) => m.map.remove()); liveMaps.clear(); return; }
+    let L;
+    try { L = await loadLeaflet(); } catch (e) { return; }
+    for (const el of boxes) {
+      const o = allOrders().find((x) => x.id === el.dataset.id);
+      if (!o || !o.delivery) continue;
+      const d = o.delivery;
+      let m = liveMaps.get(o.id);
+      if (m && m.el !== el) { m.map.remove(); liveMaps.delete(o.id); m = null; }
+      if (!m) {
+        const map = L.map(el, { zoomControl: false, attributionControl: true, dragging: true, scrollWheelZoom: false });
+        tiles(L).addTo(map);
+        m = { el, map, driver: null, dest: null };
+        if (d.destination) m.dest = L.marker([d.destination.lat, d.destination.lng], { icon: pinIcon(L, 'home', '') }).addTo(map);
+        liveMaps.set(o.id, m);
+      }
+      if (d.where) {
+        if (!m.driver) m.driver = L.marker([d.where.lat, d.where.lng], { icon: pinIcon(L, 'bike', '🛵') }).addTo(m.map);
+        else m.driver.setLatLng([d.where.lat, d.where.lng]);
+      }
+      const pts = [d.where, d.destination].filter(Boolean).map((p) => [p.lat, p.lng]);
+      if (pts.length > 1) m.map.fitBounds(pts, { padding: [36, 36], maxZoom: 17 });
+      else if (pts.length) m.map.setView(pts[0], 16);
+      else if (d.cafe && d.cafe.lat) m.map.setView([d.cafe.lat, d.cafe.lng], 14);
+      setTimeout(() => m.map.invalidateSize(), 30);
+    }
+    for (const [id, m] of liveMaps) if (!document.body.contains(m.el)) { m.map.remove(); liveMaps.delete(id); }
+  }
+  const DSTEP = { waiting: 'Waiting for a driver', assigned: 'A driver has your order', picked: 'Picked up from the cafe', onway: 'On the way to you', delivered: 'Delivered' };
+  function trackHtml(o) {
+    const d = o.delivery;
+    if (!d || o.type !== 'delivery' || ['done', 'cancelled'].includes(o.status)) return '';
+    const moving = ['picked', 'onway'].includes(d.status);
+    return `<div class="track"><p class="track-line">🛵 <b>${esc(DSTEP[d.status] || '')}</b>${d.driver ? ` · ${esc(d.driver.name)}` : ''}${d.driver && d.driver.phone ? ` · <a href="tel:${esc(d.driver.phone)}">Call the driver</a>` : ''}</p>
+      ${moving && FEATURE('driverTracking') ? `<div class="track-map" data-id="${esc(o.id)}" aria-label="Map showing your delivery"></div>${d.where ? `<p class="hint">Updated ${Math.max(0, Math.round((Date.now() - Date.parse(d.where.at)) / 1000))} seconds ago</p>` : '<p class="hint">The driver\'s location shows here once his phone shares it.</p>'}` : ''}</div>`;
+  }
+
+  /* Sign in with Google (Google Identity Services: Google's own button and sign-in window) */
+  let gisReady = null;
+  function loadGis() {
+    if (window.google && window.google.accounts) return Promise.resolve();
+    if (gisReady) return gisReady;
+    gisReady = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.onload = res;
+      s.onerror = () => { gisReady = null; rej(new Error('Google sign-in could not load.')); };
+      document.head.appendChild(s);
+    });
+    return gisReady;
+  }
+  async function paintGoogle() {
+    const box = $('#g-signin');
+    if (!box || !A.cfg || !A.cfg.google) return;
+    try {
+      await loadGis();
+      window.google.accounts.id.initialize({
+        client_id: A.cfg.google,
+        ux_mode: 'popup',
+        callback: async (r) => {
+          try { const res = await call('POST', '/api/account/google', { credential: r.credential }); await signedInNow(res); } catch (e) { toast(e.message); }
+        },
+      });
+      box.innerHTML = '';
+      window.google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', width: Math.min(320, box.clientWidth || 320) });
+    } catch (e) { box.innerHTML = ''; }
+  }
+  const googleHtml = () => (A.cfg && A.cfg.google ? '<div class="g-signin-wrap f--wide"><div id="g-signin"></div><p class="or"><span>or</span></p></div>' : '');
 
   /* ---------- start ---------- */
   async function start() {

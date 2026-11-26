@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#2B2118">
+<title>Deliveries | Pick Me Cafe</title>
+<link rel="icon" href="/img/logo.png">
+<style>
+  :root { --ink: #2B2118; --soft: #5F5243; --line: #D8CDBD; --bg: #F4F0EA; --main: #7A5A22; --new: #B3371F; --go: #1D5FA8; --ok: #24693F; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; padding-bottom: env(safe-area-inset-bottom); }
+  h1, h2, p { margin: 0; }
+  button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .main { background: var(--main); border-color: var(--main); color: #fff; }
+  .go { background: var(--go); border-color: var(--go); color: #fff; }
+  .ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+  input { min-height: 48px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; background: #fff; }
+  .bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; background: var(--ink); color: #fff; }
+  .bar h1 { font-size: 1.05rem; flex: 1; }
+  .bar button { min-height: 38px; padding: 0 12px; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; font-size: .9rem; }
+  .wrap { padding: 12px; display: grid; gap: 12px; max-width: 640px; margin: 0 auto; }
+  .share { display: grid; gap: 8px; padding: 14px; border-radius: 14px; background: #fff; border: 2px solid var(--line); }
+  .share.on { border-color: var(--ok); background: #EEF7F0; }
+  .share p { font-size: .92rem; color: var(--soft); }
+  .card { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: #fff; border: 1px solid var(--line); border-left: 6px solid var(--go); }
+  .card.assigned { border-left-color: var(--new); }
+  .card header { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .card header strong { font-family: ui-monospace, Menlo, monospace; }
+  .card header b { margin-left: auto; font-size: 1.1rem; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #F3EADB; font-size: .85rem; font-weight: 600; }
+  .cash { background: #FFF3D6; border: 1px solid #E6C77A; padding: 8px 12px; border-radius: 10px; font-weight: 700; color: #6A4A0C; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row > * { flex: 1 1 140px; }
+  ul { margin: 0; padding-left: 1.1em; }
+  .empty { padding: 30px 14px; text-align: center; color: var(--soft); background: #fff; border: 1px dashed var(--line); border-radius: 14px; }
+  #gate { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: var(--bg); }
+  #gate form { display: grid; gap: 12px; width: min(380px, 100%); padding: 24px; border-radius: 16px; background: #fff; border: 1px solid var(--line); }
+  #gate label { display: grid; gap: 4px; font-size: .9rem; color: var(--soft); }
+  #msg { color: var(--new); min-height: 1.3em; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 40px); opacity: 0; padding: 12px 18px; border-radius: 12px; background: var(--ink); color: #fff; transition: .3s; pointer-events: none; z-index: 30; max-width: 92vw; }
+  #toast.on { transform: translate(-50%, 0); opacity: 1; }
+  details summary { cursor: pointer; color: var(--soft); }
+</style>
+</head>
+<body>
+<div id="gate" hidden>
+  <form id="gate-form">
+    <h2>Pick Me Cafe deliveries</h2>
+    <label>Login ID<input id="lg-user" autocomplete="username" autocapitalize="none" required></label>
+    <label>Password<input id="lg-pass" type="password" autocomplete="current-password" required></label>
+    <p id="msg" role="alert"></p>
+    <button class="main" type="submit">Log in</button>
+  </form>
+</div>
+<header class="bar"><h1 id="who">Deliveries</h1><button type="button" id="refresh">Refresh</button><button type="button" id="logout">Log out</button></header>
+<main class="wrap">
+  <section class="share" id="share">
+    <strong id="share-title">Location sharing is off</strong>
+    <p id="share-text">When you pick up a delivery, your location is shared with that customer until it is delivered. Keep this page open (screen on) while you ride. The Pick Me app does this in the background once it is updated.</p>
+    <button type="button" id="share-btn" class="go">Start sharing my location</button>
+  </section>
+  <div id="list"></div>
+  <details><summary>Delivered today</summary><div id="done" class="wrap" style="padding:8px 0"></div></details>
+</main>
+<div id="toast" role="status"></div>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const rs = (n) => 'Rs. ' + Number(n || 0).toLocaleString('en-IN');
+  const S = { active: [], done: [], known: null, watch: null, last: 0, wake: null, timer: null };
+  function toast(t, ms) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), ms || 3500); }
+  async function api(method, url, body) {
+    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401) { gate(); throw new Error('login'); }
+    if (!r.ok) throw new Error(d.error || 'Something went wrong.');
+    return d;
+  }
+  function gate(m) { clearInterval(S.timer); stopShare(); $('gate').hidden = false; $('msg').textContent = m || ''; }
+  let audio = null;
+  function ring() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const t = audio.currentTime;
+      [988, 1319, 988, 1319].forEach((f, i) => { const o = audio.createOscillator(); const g = audio.createGain(); o.frequency.value = f; g.gain.setValueAtTime(0.3, t + i * 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.2 + 0.18); o.connect(g).connect(audio.destination); o.start(t + i * 0.2); o.stop(t + i * 0.2 + 0.2); });
+    } catch (e) { /* no sound */ }
+    if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+  }
+  const STEP = { assigned: 'New for you', picked: 'Picked up', onway: 'On the way', delivered: 'Delivered' };
+  const dir = (o) => (o.location ? `https://www.google.com/maps/dir/?api=1&destination=${o.location.lat},${o.location.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((o.address || '') + ' Hetauda')}`);
+  function card(o) {
+    const st = (o.delivery && o.delivery.status) || 'assigned';
+    const cod = o.payment.method === 'cod';
+    const next = st === 'assigned' ? ['picked', 'Picked up from the cafe', 'main'] : st === 'picked' ? ['onway', 'Start: on the way', 'go'] : st === 'onway' ? ['delivered', 'Delivered', 'ok'] : null;
+    return `<article class="card ${st}">
+      <header><strong>${esc(o.id)}</strong><span class="tag">${STEP[st]}</span><b>${rs(o.total)}</b></header>
+      ${cod ? `<p class="cash">Cash on delivery: collect ${rs(o.total)}${o.payment.change ? ` · bring change for Rs. ${o.payment.change}` : ''}</p>` : `<p class="tag">${o.paid ? 'Already paid' : 'Not paid yet: collect ' + rs(o.total)}</p>`}
+      <p><b>${esc(o.name || 'Guest')}</b>${o.phone ? ` · ${esc(o.phone)}` : ''}</p>
+      ${o.address ? `<p>${esc(o.address)}</p>` : ''}${o.notes ? `<p><i>${esc(o.notes)}</i></p>` : ''}
+      <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras.length ? ` + ${esc(l.extras.join(', '))}` : ''}</li>`).join('')}</ul>
+      <div class="row">${o.phone ? `<a class="btn" href="tel:${esc(o.phone)}">Call</a>` : ''}<a class="btn" href="${esc(dir(o))}" target="_blank" rel="noopener">${o.location ? 'Map to the pin' : 'Find address'}</a></div>
+      ${next ? `<div class="row">${next[0] === 'delivered' && (cod || !o.paid) ? `<button type="button" class="ok" data-step="delivered" data-id="${esc(o.id)}" data-cash="1">Delivered + cash collected</button>` : ''}<button type="button" class="${next[2]}" data-step="${next[0]}" data-id="${esc(o.id)}">${next[1]}</button></div>` : ''}
+    </article>`;
+  }
+  function draw() {
+    $('list').innerHTML = S.active.length ? S.active.map(card).join('') : '<p class="empty">No deliveries for you right now. New ones ring here.</p>';
+    $('done').innerHTML = S.done.length ? S.done.map((o) => `<p>${esc(o.id)} · ${esc(o.name || 'Guest')} · ${rs(o.total)}${o.paid ? ' · paid' : ''}</p>`).join('') : '<p>None yet.</p>';
+    const moving = S.active.some((o) => o.delivery && ['picked', 'onway'].includes(o.delivery.status));
+    if (moving && !S.watch) startShare(true);
+    if (!moving && S.watch) stopShare();
+  }
+  async function load() {
+    try {
+      const d = await api('GET', '/api/driver/orders');
+      $('who').textContent = `Deliveries · ${d.me.name || ''}`;
+      const ids = new Set(d.active.map((o) => o.id));
+      if (S.known) { const fresh = d.active.filter((o) => !S.known.has(o.id)); if (fresh.length) { ring(); toast(`New delivery: ${fresh.map((o) => o.id).join(', ')}`, 8000); notifyMe(`New delivery ${fresh[0].id}`); } }
+      S.known = ids; S.active = d.active; S.done = d.done;
+      draw();
+    } catch (e) { if (e.message !== 'login') toast(e.message); }
+  }
+  function notifyMe(t) { if (document.hidden && 'Notification' in window && Notification.permission === 'granted') { try { new Notification(t, { icon: '/img/logo.png' }); } catch (e) { /* not here */ } } }
+  /* location sharing while this page is open */
+  async function send(p) {
+    const now = Date.now();
+    if (now - S.last < 7000) return;
+    S.last = now;
+    try { await api('POST', '/api/driver/location', { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, heading: p.coords.heading, speed: p.coords.speed }); } catch (e) { /* try again next time */ }
+  }
+  function startShare(auto) {
+    if (!navigator.geolocation) return toast('This phone cannot share its location here.');
+    if (S.watch) return;
+    S.watch = navigator.geolocation.watchPosition(send, (err) => { toast(err.code === 1 ? 'Please allow location for this page (browser settings).' : 'Location not found yet.'); }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+    if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then((w) => { S.wake = w; }).catch(() => {});
+    $('share').classList.add('on');
+    $('share-title').textContent = 'Sharing your location';
+    $('share-btn').textContent = 'Stop sharing';
+    if (!auto) toast('Sharing your location while you deliver.');
+  }
+  function stopShare() {
+    if (S.watch != null) navigator.geolocation.clearWatch(S.watch);
+    S.watch = null;
+    if (S.wake) { S.wake.release().catch(() => {}); S.wake = null; }
+    fetch('/api/driver/stop', { method: 'POST' }).catch(() => {});
+    $('share').classList.remove('on');
+    $('share-title').textContent = 'Location sharing is off';
+    $('share-btn').textContent = 'Start sharing my location';
+  }
+  $('share-btn').addEventListener('click', () => { if (S.watch) stopShare(); else startShare(false); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.watch && 'wakeLock' in navigator && !S.wake) navigator.wakeLock.request('screen').then((w) => { S.wake = w; }).catch(() => {}); if (!document.hidden) load(); });
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-step]');
+    if (!b) return;
+    b.disabled = true;
+    try {
+      await api('POST', `/api/driver/orders/${b.dataset.id}/step`, { step: b.dataset.step, cash: b.dataset.cash === '1' });
+      toast(b.dataset.step === 'delivered' ? 'Delivered. Thank you!' : 'Updated.');
+      if (b.dataset.step === 'picked') startShare(true);
+      load();
+    } catch (err) { if (err.message !== 'login') toast(err.message); b.disabled = false; }
+  });
+  $('gate-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await api('POST', '/api/auth/login', { username: $('lg-user').value.trim(), password: $('lg-pass').value, remember: true }); $('lg-pass').value = ''; start(); } catch (err) { $('msg').textContent = err.message === 'login' ? 'Wrong login ID or password.' : err.message; }
+  });
+  $('logout').addEventListener('click', async () => { stopShare(); await api('POST', '/api/auth/logout').catch(() => {}); S.known = null; gate(); });
+  $('refresh').addEventListener('click', load);
+  async function start() {
+    const me = await fetch('/api/auth/me').then((r) => r.json()).catch(() => ({}));
+    if (!me.role) return gate();
+    $('gate').hidden = true;
+    if ('Notification' in window && Notification.permission === 'default') document.addEventListener('pointerdown', () => Notification.requestPermission().catch(() => {}), { once: true });
+    document.addEventListener('pointerdown', () => { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) { /* no sound */ } }, { once: true });
+    load();
+    clearInterval(S.timer);
+    S.timer = setInterval(load, 10000);
+  }
+  start();
+})();
+</script>
+</body>
+</html>

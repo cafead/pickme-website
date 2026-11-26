@@ -232,6 +232,14 @@
       f('features.orderAgain', '"Order again" button on past orders', 'toggle'),
       f('features.tableButtons', 'Table buttons: Call staff, Bring the bill, Water please', 'toggle'),
       f('features.soldOut', '"Sold out today" from the counter screen', 'toggle'),
+      f('features.googleSignIn', 'Sign in with Google (needs the Google client id on Railway)', 'toggle'),
+      f('features.cod', 'Cash on delivery (with change for one note)', 'toggle'),
+      f('features.mapPin', 'Customers choose the delivery spot on a map', 'toggle'),
+      f('features.driverTracking', 'Customers see the driver on a map while he is on the way', 'toggle'),
+    ] },
+    { title: 'Delivery area and drivers', scroll: 'visit', note: 'Map pins outside this circle are refused (Hetauda only). The centre is the cafe. Find the numbers in Google Maps: press and hold on the cafe, the first line is latitude, longitude. Add driver logins in Security (role: Delivery driver). Drivers use yourwebsite/driver on their phone, or the app once it is updated.', fields: [
+      f('delivery.lat', 'Cafe latitude', 'number', { step: 0.000001 }), f('delivery.lng', 'Cafe longitude', 'number', { step: 0.000001 }),
+      f('delivery.radiusKm', 'Delivers up to how many km', 'number', { step: 0.5 }), f('payment.deliveryFee', 'Delivery charge in NPR', 'number'),
     ] },
     { title: 'Loyalty points and accounts', scroll: 'menu', note: 'Points are added when an order is marked Done, and given back if a used order is cancelled. Every change is kept in Customers and points. Guests who are not signed in use points with staff approval at the counter.', fields: [
       f('loyalty.percent', 'Points back, in % of each order (5 = 5%)', 'number', { step: 0.5 }),
@@ -930,7 +938,8 @@
       <p><b>For:</b> ${o.schedule ? `${esc(o.schedule.bs || (/^\d{4}-\d{2}-\d{2}$/.test(o.schedule.date || '') ? BS.label(o.schedule.date) : o.schedule.date))} at ${esc(time12(o.schedule.time))}` : 'as soon as possible'}</p>
       ${line('Address', o.address)}
       <ul>${o.lines.map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` <em>+ ${esc(l.extras.join(', '))}</em>` : ''} <span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li>Delivery <span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
-      <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}</p>
+      <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : o.payment.method === 'cod' ? `cash on delivery${o.payment.change ? `, bring change for Rs. ${o.payment.change}` : ''}` : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}</p>
+      ${o.location ? `<p><a href="https://www.google.com/maps?q=${o.location.lat},${o.location.lng}" target="_blank" rel="noopener">Delivery pin on the map</a></p>` : ''}${o.driver ? `<p><b>Driver:</b> ${esc(o.driver.name)}${o.delivery && o.delivery.status ? ` · ${esc(o.delivery.status)}` : ''}</p>` : ''}
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
       <footer>
         ${quick('acknowledged', 'Acknowledge')}${quick('done', 'Mark done')}
@@ -1140,8 +1149,8 @@
         </form>
         <div class="pk-card">
           <header><strong>Staff logins for the counter screen</strong><a class="pk-btn pk-btn--quiet" href="/counter" target="_blank" rel="noopener">Open counter screen</a></header>
-          <p class="pk-note">Staff can see and update orders and bookings at /counter. They cannot edit the website.</p>
-          ${A.staff.length ? `<ul class="pk-staff">${A.staff.map((s) => `<li><span><b>${esc(s.name)}</b> · login ID ${esc(s.username)}${s.active ? '' : ' · switched off'}${s.lastLoginAt ? ` · last login ${when(s.lastLoginAt)}` : ''}</span>
+          <p class="pk-note">Counter staff see and update orders and bookings at /counter. Delivery drivers see only the deliveries given to them, at /driver (or in the app once it is updated). Nobody but you can edit the website.</p>
+          ${A.staff.length ? `<ul class="pk-staff">${A.staff.map((s) => `<li><span><b>${esc(s.name)}</b> · ${s.role === 'driver' ? '<span class="pk-tag">Delivery driver</span>' : 'Counter staff'} · login ID ${esc(s.username)}${s.phone ? ` · ${esc(s.phone)}` : ''}${s.active ? '' : ' · switched off'}${s.lastLoginAt ? ` · last login ${when(s.lastLoginAt)}` : ''}</span>
             <span class="pk-row"><button type="button" class="pk-btn pk-btn--quiet" data-staff="reset" data-id="${esc(s.id)}">New password</button>
             <button type="button" class="pk-btn pk-btn--quiet" data-staff="toggle" data-id="${esc(s.id)}" data-on="${s.active}">${s.active ? 'Switch off' : 'Switch on'}</button>
             <button type="button" class="pk-btn pk-btn--quiet" data-staff="remove" data-id="${esc(s.id)}">Remove</button></span></li>`).join('')}</ul>` : '<p class="pk-empty">No staff logins yet.</p>'}
@@ -1150,6 +1159,8 @@
               <label>Name<input name="name" required maxlength="80"></label>
               <label>Login ID<input name="username" required maxlength="30" autocapitalize="none" placeholder="e.g. sita"></label>
               <label>Password (6 or more)<input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
+              <label>Role<select name="role"><option value="staff">Counter staff (orders, bookings)</option><option value="driver">Delivery driver (only his deliveries)</option></select></label>
+              <label>Phone (drivers: customers can call it)<input name="phone" type="tel" maxlength="20"></label>
             </div>
             <footer><button class="pk-btn" type="submit">Add staff login</button></footer>
           </form>

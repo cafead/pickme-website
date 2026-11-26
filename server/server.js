@@ -220,6 +220,16 @@ function ensurePrintMenu(data) {
   return true;
 }
 if (ensurePrintMenu(content.data)) content.set(content.data);
+// Version 12: the delivery area starts at the cafe's map position from "Google and link previews", once.
+function deliveryCentre(data) {
+  data.fixes = data.fixes && typeof data.fixes === 'object' && !Array.isArray(data.fixes) ? data.fixes : {};
+  if (data.fixes.delivery12) return false;
+  const seo = data.seo || {};
+  if (Number(seo.lat) && Number(seo.lng) && data.delivery) { data.delivery.lat = Number(seo.lat); data.delivery.lng = Number(seo.lng); }
+  data.fixes.delivery12 = true;
+  return true;
+}
+if (deliveryCentre(content.data)) content.set(content.data);
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -239,6 +249,8 @@ const auth = new Store('auth.json', {});
 const trash = new Store('trash.json', []);
 // Version 11: accounts, points, table calls, sold out, sales, backups (server/customers.js, mounted below).
 let CUST = null;
+// Version 12: drivers, delivery tracking and push notifications (server/delivery.js).
+let DELIV = null;
 
 /* ---------- activity log ---------- */
 function audit(by, action, ref) {
@@ -357,15 +369,18 @@ const newSecret = () => crypto.randomBytes(48).toString('hex');
 
 const sign = (body) => crypto.createHmac('sha256', auth.get().secret).update(body).digest('base64url');
 function issue(role, remember, staff) {
+  // Staff and drivers both sign in with a staff login; the role decides which screen they get.
   const payload = { r: role, exp: Date.now() + (remember ? 30 * 864e5 : 12 * 3600e3) };
   if (staff) { payload.sid = staff.id; payload.v = staff.v || 0; }
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${body}.${sign(body)}`;
 }
 function readSession(req) {
+  // The website uses the pm_auth cookie; the phone app sends the same token in the X-PM-Auth header.
   const m = /(?:^|;\s*)pm_auth=([^;]+)/.exec(req.headers.cookie || '');
-  if (!m) return null;
-  const [body, sig] = m[1].split('.');
+  const raw = m ? m[1] : String(req.headers['x-pm-auth'] || '');
+  if (!raw) return null;
+  const [body, sig] = raw.split('.');
   if (!body || !sig) return null;
   const good = Buffer.from(sign(body));
   const given = Buffer.from(sig);
@@ -375,7 +390,8 @@ function readSession(req) {
     if (!p || !(p.exp > Date.now())) return null;
     if (p.r === 'admin') return { role: 'admin', name: 'Owner' };
     const st = auth.get().staff.find((x) => x.id === p.sid);
-    return st && st.active && (st.v || 0) === (p.v || 0) ? { role: 'staff', name: st.name, staff: st } : null;
+    if (!(st && st.active && (st.v || 0) === (p.v || 0))) return null;
+    return { role: st.role === 'driver' ? 'driver' : 'staff', name: st.name, staff: st };
   } catch { return null; }
 }
 const allow = (...roles) => (req, res, next) => {
@@ -385,8 +401,8 @@ const allow = (...roles) => (req, res, next) => {
 };
 const admin = allow('admin');
 const desk = allow('admin', 'staff');
-const who = (req) => (req.session && req.session.role === 'staff' ? 'staff:' + req.session.staff.username : 'owner');
-const staffPublic = (s) => ({ id: s.id, username: s.username, name: s.name, active: Boolean(s.active), createdAt: s.createdAt, lastLoginAt: s.lastLoginAt || '' });
+const who = (req) => (req.session && req.session.staff ? `${req.session.role === 'driver' ? 'driver' : 'staff'}:${req.session.staff.username}` : 'owner');
+const staffPublic = (s) => ({ id: s.id, username: s.username, name: s.name, role: s.role === 'driver' ? 'driver' : 'staff', phone: s.phone || '', active: Boolean(s.active), createdAt: s.createdAt, lastLoginAt: s.lastLoginAt || '' });
 function setCookie(req, res, token, remember) {
   const secure = req.secure ? '; Secure' : '';
   const age = token ? (remember ? `; Max-Age=${30 * 86400}` : '') : '; Max-Age=0';
@@ -470,7 +486,7 @@ async function notify(subject, text) {
 }
 
 const TYPE_LABEL = { dinein: 'Dine-in', pickup: 'Pickup', delivery: 'Delivery' };
-const PAY_LABEL = { later: 'Pay later', esewa: 'eSewa', fonepay: 'Fonepay' };
+const PAY_LABEL = { later: 'Pay later', esewa: 'eSewa', fonepay: 'Fonepay', cod: 'Cash on delivery' };
 const person = (x) => [x.name || 'Guest', x.phone].filter(Boolean).join(', ');
 function orderText(o) {
   return [
@@ -487,7 +503,8 @@ function orderText(o) {
     o.cakeMessage ? `On the cake: ${o.cakeMessage}` : null,
     o.occasion ? `Occasion: ${o.occasion}` : null,
     o.notes ? `Notes: ${o.notes}` : null,
-    `Payment: ${PAY_LABEL[o.payment.method] || o.payment.method}${o.payment.txn ? `, code ${o.payment.txn}` : ''}${o.payment.proof ? ', screenshot uploaded' : ''}`,
+    `Payment: ${PAY_LABEL[o.payment.method] || o.payment.method}${o.payment.change ? `, bring change for Rs. ${o.payment.change}` : ''}${o.payment.txn ? `, code ${o.payment.txn}` : ''}${o.payment.proof ? ', screenshot uploaded' : ''}`,
+    o.location ? `Map: https://www.google.com/maps?q=${o.location.lat},${o.location.lng}` : null,
   ].filter((x) => x !== null).join('\n');
 }
 function bookingText(b) {
@@ -538,6 +555,9 @@ const PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf
 const PRINT_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'print-menu.html'), 'utf8'));
 const COUNTER_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'counter.html'), 'utf8'));
 app.get(['/counter', '/counter/', '/counter.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(COUNTER_PAGE); });
+// The delivery driver's page (version 12): his deliveries, steps, and live location while the page is open.
+const DRIVER_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'driver.html'), 'utf8'));
+app.get(['/driver', '/driver/', '/driver.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.set('X-Robots-Tag', 'noindex, nofollow'); res.type('html').send(DRIVER_PAGE); });
 const attr = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const siteBase = (req) => `${req.protocol}://${req.get('host')}`;
 const absUrl = (base, u) => (/^https?:\/\//i.test(u || '') ? u : /^\/(?!\/)/.test(u || '') ? base + u : '');
@@ -712,7 +732,7 @@ for (const [key, pg] of Object.entries(PAGES)) {
   });
 }
 app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /counter\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /counter\nDisallow: /driver\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
 });
 app.get('/sitemap.xml', (req, res) => {
   const base = siteBase(req);
@@ -834,6 +854,15 @@ function checkSchedule(date, time, minLeadHours) {
   return null;
 }
 const PHONE = /^\+?\d[\d\s-]{6,17}$/;
+// Straight-line distance in km between two map points (for the delivery area).
+function distanceKm(a, b) {
+  if (!a || !b || !Number(b.lat) || !Number(b.lng)) return NaN;
+  const r = (d) => (d * Math.PI) / 180;
+  const dLat = r(b.lat - a.lat);
+  const dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
 
 // Many guests share the cafe Wi-Fi (one address), so the order limits are generous.
 app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) => {
@@ -846,6 +875,18 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   if (type !== 'dinein' && !PHONE.test(phone)) return bad(res, 'Please enter your phone number so we can reach you.');
   if (phone && !PHONE.test(phone)) return bad(res, 'That phone number does not look right. Please check it.');
   const address = type === 'delivery' ? str(b.address, 300) : '';
+  // The delivery spot chosen on the map (version 12). Deliveries are inside the delivery area only.
+  let location = null;
+  if (type === 'delivery' && b.location && typeof b.location === 'object') {
+    const lat = Number(b.location.lat);
+    const lng = Number(b.location.lng);
+    if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat || lng)) {
+      location = { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, acc: Math.round(Number(b.location.acc) || 0) };
+      const area = c.delivery || {};
+      const km = distanceKm(location, area);
+      if (Number(area.radiusKm) > 0 && Number.isFinite(km) && km > Number(area.radiusKm)) return bad(res, `That spot is ${km.toFixed(1)} km from us. We deliver inside Hetauda only (up to ${area.radiusKm} km). Please move the pin, or choose Pickup.`);
+    }
+  }
 
   if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 60) return bad(res, 'Your cart is empty.');
   const lines = [];
@@ -905,7 +946,10 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
 
   // Paying online is optional. Without it the order is "pay later" (at the counter or on delivery).
   let method = str(b.method, 20);
-  if (!['esewa', 'fonepay'].includes(method) || !c.payment[method] || c.payment[method].enabled === false) method = 'later';
+  // Cash on delivery (version 12) is for deliveries; the guest can ask us to bring change for one note.
+  const cod = method === 'cod' && type === 'delivery' && ((c.features || {}).cod !== false);
+  if (!cod && (!['esewa', 'fonepay'].includes(method) || !c.payment[method] || c.payment[method].enabled === false)) method = 'later';
+  const change = cod && [500, 1000].includes(Number(b.change)) ? Number(b.change) : 0;
   // Staff call the guest to confirm every online payment, so paying now needs a phone number.
   if (method !== 'later' && !PHONE.test(phone)) return bad(res, 'Please enter your phone number: we call you to confirm the payment.');
   const proof = method !== 'later' && proofExists(str(b.proof, 40)) ? str(b.proof, 40) : '';
@@ -932,13 +976,15 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
     occasion: hasWhole ? str(b.occasion, 80) : '',
     refPhoto,
     notes: str(b.notes, 500),
-    payment: { method, proof, txn },
+    payment: { method, proof, txn, ...(change ? { change } : {}) },
+    ...(location ? { location } : {}),
   };
   // Account and points (server/customers.js): links the order to a signed-in customer and takes points off.
   const pointsError = await CUST.onPlace(order, b, req);
   if (pointsError) return bad(res, pointsError);
   await orders.set([order, ...orders.get()]);
   await CUST.afterPlace(order);
+  DELIV.onNewOrder(order);
   audit('public', 'order-placed', order.id);
   notify(`New order ${order.id}: Rs. ${order.total}`, orderText(order));
   res.json({ ok: true, id: order.id, key: order.key, total: order.total, points: order.points || null, text: orderText(order) });
@@ -955,6 +1001,7 @@ app.get('/api/orders/:id/status', limit('status', 600, 15 * 60e3), (req, res) =>
     id: o.id, status: o.status, paid: Boolean(o.paid), type: o.type, total: o.total, createdAt: o.createdAt,
     updatedAt: last ? last.at : o.createdAt, schedule: o.schedule, hasWhole: Boolean(o.hasWhole), tableNo: o.tableNo || '',
     points: o.points ? { used: o.points.used || 0, asked: o.points.asked || 0, approved: o.points.approved } : null, pointsEarned: o.pointsEarned || 0,
+    payment: { method: o.payment.method, change: o.payment.change || 0 }, delivery: DELIV.trackFor(o),
     subtotal: o.subtotal, deliveryFee: o.deliveryFee || 0,
     lines: (o.lines || []).map((l) => ({ itemId: l.itemId, name: l.name, label: l.label, qty: l.qty, price: l.price, extras: l.extras || [], extraIds: l.extraIds || [], whole: Boolean(l.whole) })),
   });
@@ -1018,9 +1065,11 @@ app.post('/api/auth/login', json, async (req, res) => {
     }
     st.lastLoginAt = new Date().toISOString();
     await auth.set(a);
-    audit('staff:' + st.username, 'login');
-    setCookie(req, res, issue('staff', remember, st), remember);
-    return res.json({ ok: true, role: 'staff', name: st.name });
+    const role = st.role === 'driver' ? 'driver' : 'staff';
+    audit(`${role}:${st.username}`, 'login');
+    const token = issue('staff', remember || Boolean(req.body.app), st);
+    setCookie(req, res, token, remember);
+    return res.json({ ok: true, role, name: st.name, ...(req.body.app ? { token } : {}) });
   }
   if (!checkHash(a, req.body.password)) {
     loginFailed(req);
@@ -1028,8 +1077,9 @@ app.post('/api/auth/login', json, async (req, res) => {
     return res.status(401).json({ error: 'Wrong password.' });
   }
   audit('owner', 'login');
-  setCookie(req, res, issue('admin', remember), remember);
-  res.json({ ok: true, role: 'admin', name: 'Owner' });
+  const token = issue('admin', remember || Boolean(req.body.app));
+  setCookie(req, res, token, remember);
+  res.json({ ok: true, role: 'admin', name: 'Owner', ...(req.body.app ? { token } : {}) });
 });
 app.post('/api/auth/logout', (req, res) => { setCookie(req, res, '', false); res.json({ ok: true }); });
 app.get('/api/auth/me', (req, res) => {
@@ -1197,7 +1247,7 @@ app.post('/api/admin/staff', admin, json, async (req, res) => {
   if (a.staff.some((x) => x.username === username)) return bad(res, 'That login ID is already used.');
   if (typeof req.body.password !== 'string' || req.body.password.length < 6) return bad(res, 'The staff password needs at least 6 characters.');
   if (checkHash(a, req.body.password)) return bad(res, 'The staff password must be different from the owner password.');
-  const st = { id: 's_' + crypto.randomBytes(6).toString('hex'), username, name, ...makeHash(req.body.password), active: true, v: 1, createdAt: new Date().toISOString() };
+  const st = { id: 's_' + crypto.randomBytes(6).toString('hex'), username, name, role: req.body.role === 'driver' ? 'driver' : 'staff', phone: str(req.body.phone, 20), ...makeHash(req.body.password), active: true, v: 1, createdAt: new Date().toISOString() };
   a.staff.push(st);
   await auth.set(a);
   audit('owner', 'staff-added', username);
@@ -1214,6 +1264,8 @@ app.patch('/api/admin/staff/:id', admin, json, async (req, res) => {
     st.v = (st.v || 0) + 1;
     audit('owner', 'staff-password-reset', st.username);
   }
+  if (req.body.phone !== undefined) st.phone = str(req.body.phone, 20);
+  if (['staff', 'driver'].includes(req.body.role) && req.body.role !== (st.role || 'staff')) { st.role = req.body.role; st.v = (st.v || 0) + 1; audit('owner', 'staff-role', `${st.username} ${st.role}`); }
   if (typeof req.body.active === 'boolean' && req.body.active !== st.active) {
     st.active = req.body.active;
     st.v = (st.v || 0) + 1;
@@ -1271,7 +1323,7 @@ function listRoutes(base, name, store, fields, guard) {
         row.log.push({ at: row.updatedAt, by: who(req), what });
       }
     }
-    if (name === 'orders' && row.status !== before) await CUST.onStatus(row, before, who(req));
+    if (name === 'orders' && row.status !== before) { await CUST.onStatus(row, before, who(req)); DELIV.onStatus(row); }
     await store.set(list);
     audit(who(req), `${name}-updated ${done.join(' ')}`, row.id);
     res.json(row);
@@ -1336,6 +1388,12 @@ const meta = new Store('meta.json', {});
 CUST = require('./customers')({
   app, Store, json, str, bad, limit, content, orders, bookings, reviews, messages, audit, desk, admin, who, meta, AdmZip, notify,
   sign: (body) => sign(body), makeHash, checkHash, NP_OFFSET, DATA_DIR,
+  onTableCall: (c) => DELIV && DELIV.onTableCall(c),
+});
+DELIV = require('./delivery')({
+  app, Store, json, str, bad, limit, content, orders, auth, audit, allow, who, readSession, staffPublic,
+  readCust: (req) => CUST.readCust(req),
+  onStatusChange: (o, before, by) => CUST.onStatus(o, before, by),
 });
 function makeBackup(full) {
   const zip = new AdmZip();
@@ -1393,6 +1451,7 @@ async function restoreBackup(buf, by) {
     tidyEvents(next);
     ensurePrintMenu(next);
     cheesecakePounds(next);
+    deliveryCentre(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);

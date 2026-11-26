@@ -99,6 +99,10 @@
   .lookup table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
   .lookup td, .lookup th { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: .9rem; }
   .big { font-size: 1.6rem; font-weight: 700; }
+  .dlv { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #EAF1FA; border: 1px solid #A9C3E6; }
+  .dlv div { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .dlv select { min-width: 180px; }
+  .codbox { padding: 6px 10px; border-radius: 8px; background: #FFF3D6; border: 1px solid #E6C77A; font-weight: 600; color: #6A4A0C; }
   @media print {
     body { background: #fff; }
     .bar, .wrap, #gate, #viewer, #toast { display: none !important; }
@@ -191,7 +195,7 @@
   const TABLE_STEPS = ['pending', 'confirmed', 'seated', 'done', 'declined'];
   const CLOSED = ['done', 'cancelled', 'declined'];
   const NAMES = { pending: 'Pending', acknowledged: 'Acknowledged', preparing: 'Preparing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled', confirmed: 'Confirmed', seated: 'Seated', declined: 'Declined' };
-  const S = { tab: 'orders', orders: [], bookings: [], calls: [], menu: [], known: null, knownCalls: null, timer: null, cafe: 'Pick Me Cafe', sound: false, look: null };
+  const S = { tab: 'orders', orders: [], bookings: [], calls: [], menu: [], drivers: [], known: null, knownCalls: null, timer: null, cafe: 'Pick Me Cafe', sound: false, look: null };
 
   function toast(msg, ms) {
     const t = $('toast');
@@ -251,9 +255,10 @@
       <p>${contact(o)}</p>
       <p><b>For:</b> ${forWhen(o)}</p>
       ${line('Address', o.address)}
+      ${o.type === 'delivery' ? deliveryBox(o) : ''}
       <ul>${o.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` <em>+ ${esc(l.extras.join(', '))}</em>` : ''}</span><span>${rs(l.qty * l.price)}</span></li>`).join('')}${o.deliveryFee ? `<li><span>Delivery</span><span>${rs(o.deliveryFee)}</span></li>` : ''}</ul>
       ${line('On the cake', o.cakeMessage)}${line('Occasion', o.occasion)}${line('Notes', o.notes)}
-      <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}${o.paid ? ' · checked' : ''}</p>
+      <p><b>Payment:</b> ${o.payment.method === 'later' ? 'pay later' : o.payment.method === 'cod' ? '<span class="codbox">Cash on delivery' + (o.payment.change ? `, bring change for Rs. ${o.payment.change}` : '') + '</span>' : esc(o.payment.method)}${o.payment.txn ? `, code ${esc(o.payment.txn)}` : ''}${o.paid ? ' · checked' : ''}</p>
       <footer>
         ${quick('orders', o, 'acknowledged', 'Acknowledge', o.status === 'pending')}${quick('orders', o, 'done', 'Mark done')}
         ${o.paid ? '' : `<button type="button" class="main" data-paid="${esc(o.id)}">Mark paid</button>`}
@@ -265,6 +270,16 @@
         <button type="button" data-print="${esc(o.id)}">Print slip</button>
         ${waBtn(o, `Hello ${o.name || ''}, your ${S.cafe} order ${o.id} is now ${o.status.toUpperCase()}.`)}
       </footer></article>`;
+  }
+  // Delivery: the pin on the map, and which driver takes it (version 12).
+  const DSTEP = { assigned: 'given to the driver', picked: 'picked up', onway: 'on the way', delivered: 'delivered' };
+  function deliveryBox(o) {
+    const d = o.delivery || {};
+    const pin = o.location ? `<a class="btn" href="https://www.google.com/maps?q=${o.location.lat},${o.location.lng}" target="_blank" rel="noopener">Pin on the map</a>` : '<span>No map pin (address only)</span>';
+    const done = CLOSED.includes(o.status);
+    const opts = S.drivers.map((x) => `<option value="${esc(x.id)}"${o.driver && o.driver.id === x.id ? ' selected' : ''}>${esc(x.name)}${x.online ? ' (online)' : ''}${x.busy ? ` · ${x.busy} on hand` : ''}</option>`).join('');
+    return `<div class="dlv"><div>${pin}${o.driver ? `<span>Driver: <b>${esc(o.driver.name)}</b>${d.status ? ` · ${DSTEP[d.status] || d.status}` : ''}</span>` : ''}</div>
+      ${done ? '' : S.drivers.length ? `<div><label>Driver <select data-driver="${esc(o.id)}"><option value="">Choose a driver</option>${opts}</select></label></div>` : '<div><span>Add a driver login in Admin &gt; Security (role: Delivery driver).</span></div>'}</div>`;
   }
   function tableCard(b) {
     return `<article class="card ${esc(b.status)}">
@@ -319,8 +334,8 @@
   }
   async function load(quiet) {
     try {
-      const [o, b, calls] = await Promise.all([api('GET', '/api/desk/orders'), api('GET', '/api/desk/bookings'), api('GET', '/api/desk/calls').catch(() => [])]);
-      S.orders = o; S.bookings = b; S.calls = calls;
+      const [o, b, calls, drivers] = await Promise.all([api('GET', '/api/desk/orders'), api('GET', '/api/desk/bookings'), api('GET', '/api/desk/calls').catch(() => []), api('GET', '/api/desk/drivers').catch(() => [])]);
+      S.orders = o; S.bookings = b; S.calls = calls; S.drivers = drivers;
       const ids = new Set([...o, ...b].map((x) => x.id));
       const callIds = new Set(calls.map((c) => c.id));
       if (S.known) {
@@ -431,7 +446,8 @@
       <br>For: ${forWhen(o)}</p><hr>
       ${o.lines.map((l) => `<p>${l.qty} x ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}${l.extras && l.extras.length ? ` + ${esc(l.extras.join(', '))}` : ''} = ${rs(l.qty * l.price)}</p>`).join('')}
       ${o.deliveryFee ? `<p>Delivery = ${rs(o.deliveryFee)}</p>` : ''}<hr>
-      <p><b>TOTAL ${rs(o.total)}</b> · ${o.payment.method === 'later' ? 'pay later' : o.payment.method}${o.paid ? ', payment checked' : ''}</p>
+      <p><b>TOTAL ${rs(o.total)}</b> · ${o.payment.method === 'later' ? 'pay later' : o.payment.method === 'cod' ? 'CASH ON DELIVERY' : o.payment.method}${o.payment.change ? ` · change for Rs. ${o.payment.change}` : ''}${o.paid ? ', payment checked' : ''}</p>
+      ${o.driver ? `<p>Driver: ${esc(o.driver.name)}</p>` : ''}
       ${o.cakeMessage ? `<p>On the cake: <b>${esc(o.cakeMessage)}</b></p>` : ''}${o.occasion ? `<p>Occasion: ${esc(o.occasion)}</p>` : ''}${o.notes ? `<p>Notes: ${esc(o.notes)}</p>` : ''}`;
     window.print();
   }
@@ -492,6 +508,10 @@
   });
   document.addEventListener('change', async (e) => {
     const t = e.target;
+    if (t.dataset.driver) {
+      try { await api('POST', `/api/desk/orders/${t.dataset.driver}/driver`, { driverId: t.value }); toast(t.value ? 'Given to the driver. His phone rings.' : 'Taken back from the driver.'); t.blur(); load(true); } catch (err) { if (err.message !== 'login') toast(err.message); }
+      return;
+    }
     if (!t.dataset.patch) return;
     try {
       await api('PATCH', `/api/desk/${t.dataset.patch}/${t.dataset.id}`, { [t.dataset.key]: t.type === 'checkbox' ? t.checked : t.value });

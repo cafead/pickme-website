@@ -912,3 +912,34 @@ html.anim .os-dots i.on:last-of-type { animation: pulse 1.6s ease-in-out infinit
 .store-badge:has(img) { padding: 0; background: transparent; }
 @media (hover: none) and (max-width: 640px) { .get-app-card { display: none; } }
 .mi-off { font-size: .85rem; color: var(--muted); }
+
+/* ---------- version 12: map pin, live delivery map, Google button, cash on delivery ---------- */
+#map-pick { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--bg); }
+.mp-top { display: grid; gap: 2px; padding: calc(12px + env(safe-area-inset-top)) 16px 10px; border-bottom: 1px solid var(--line); }
+.mp-top span { color: var(--muted); font-size: .88rem; }
+#mp-map { flex: 1; min-height: 240px; }
+.mp-foot { display: grid; gap: 8px; padding: 12px 16px calc(14px + var(--safe-b, 0px)); border-top: 1px solid var(--line); background: var(--bg); }
+.mp-foot .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.mp-foot .btn { flex: 1 1 140px; }
+.mp-foot .bad { color: #8E2A1E; }
+.pin { background: none; border: 0; }
+.pin span { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--accent, #A8843A); box-shadow: 0 6px 14px -6px rgba(0, 0, 0, .55); font-size: 16px; }
+.pin span::after { content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.pin--cafe span, .pin--bike span { transform: none; border-radius: 50%; background: #fff; border: 2px solid var(--accent, #A8843A); }
+.pin--cafe span::after, .pin--bike span::after { display: none; }
+.pin--bike span { width: 38px; height: 38px; font-size: 20px; border-color: #1D5FA8; }
+.pin-set { display: flex; align-items: center; gap: 8px; margin: 0; color: #24693F; font-weight: 500; }
+.pin-set svg { flex: none; }
+#co-pin { display: grid; gap: 6px; }
+#co-pin .btn { justify-self: start; }
+.track { display: grid; gap: 6px; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, #1D5FA8 7%, var(--surface)); border: 1px solid color-mix(in srgb, #1D5FA8 25%, var(--line)); }
+.track-line { margin: 0; font-size: .92rem; }
+.track-map { height: 220px; border-radius: 12px; overflow: hidden; }
+.track .hint { margin: 0; }
+.g-signin-wrap { display: grid; justify-items: center; gap: 6px; }
+#g-signin { min-height: 44px; width: 100%; display: flex; justify-content: center; }
+.or { position: relative; width: 100%; margin: 4px 0 0; text-align: center; color: var(--muted); font-size: .85rem; }
+.or::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line); }
+.or span { position: relative; padding: 0 10px; background: var(--bg); }
+.cake-ref input[type=file] { padding: 8px 0; }
+.cake-ref .ok { color: #24693F; font-weight: 500; }
