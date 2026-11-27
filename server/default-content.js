@@ -448,7 +448,7 @@ module.exports = {
   tableHelp: { show: true, wifiName: '', wifiPassword: '' },
   // "Get the app" card under the map.
   appCard: {
-    show: true, soon: true, title: 'Get the app', text: 'Order, follow your order and collect points from your phone.',
+    show: true, soon: true, betaText: 'Want to try the app before the launch?', title: 'Get the app', text: 'Order, follow your order and collect points from your phone.',
     qrText: 'Scan with your phone to get the Pick Me Cafe app',
     appStore: 'https://apps.apple.com/app/id6838835257', googlePlay: '', apk: '',
   },

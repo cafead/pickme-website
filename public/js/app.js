@@ -2399,6 +2399,7 @@
         ${a.text ? `<p class="hint"${ed('appCard.text')}>${esc(a.text)}</p>` : ''}
         <div class="get-app-card"><div class="get-app-qrbox"><img class="get-app-qr" src="/api/app-qr.svg" alt="" width="120" height="120" loading="lazy"><b>Launching soon</b></div><p>The ${esc(c.brand.name)} app is launching soon on the App Store and Google Play.</p></div>
         <div class="store-badges">${soonBadge('App Store', APPLE)}${soonBadge('Google Play', PLAY)}</div>
+        ${a.betaText !== '' ? `<p class="get-app-beta"><span${ed('appCard.betaText')}>${esc(a.betaText || 'Want to try the app before the launch?')}</span> <a href="${esc(waLink(c, 'Hello ' + c.brand.name + ', I would like to be a beta tester of your app. My phone is: iPhone / Android'))}" target="_blank" rel="noopener">${ICON.whatsapp}<span>WhatsApp us to be a beta tester</span></a></p>` : ''}
       </div>`;
     }
     const badge = (url, img, label, icon) => (url ? `<a class="store-badge" href="${esc(url)}" target="_blank" rel="noopener">${safeUrl(img) ? `<img src="${esc(safeUrl(img))}" alt="${esc(label)}">` : `${icon}<span>${esc(label)}</span>`}</a>` : '');

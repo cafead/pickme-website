@@ -256,7 +256,7 @@
       f('tableHelp.wifiName', 'Wi-Fi name (leave empty to hide)'), f('tableHelp.wifiPassword', 'Wi-Fi password'),
     ] },
     { title: 'Get the app card (under the map)', scroll: 'visit', note: 'The QR always points to yourwebsite/app, which sends iPhones to the App Store and Android phones to Google Play (or the Android download while Google Play is not ready). For the official badges, download them from Apple and Google and upload them here.', fields: [
-      f('appCard.show', 'Show the card', 'toggle'), f('appCard.soon', 'Launching soon: blur the QR and show both store buttons without links (switch off when the app is out)', 'toggle'), f('appCard.title', 'Title'), f('appCard.text', 'Text', 'area'), f('appCard.qrText', 'Text next to the QR'),
+      f('appCard.show', 'Show the card', 'toggle'), f('appCard.soon', 'Launching soon: blur the QR and show both store buttons without links (switch off when the app is out)', 'toggle'), f('appCard.title', 'Title'), f('appCard.text', 'Text', 'area'), f('appCard.qrText', 'Text next to the QR'), f('appCard.betaText', 'Beta tester line while launching soon (the WhatsApp link follows it)'),
       f('appCard.appStore', 'App Store link'), f('appCard.googlePlay', 'Google Play link (empty until the app is on Google Play)'), f('appCard.apk', 'Android download link while not on Google Play (optional)'),
       f('appCard.appStoreBadge', 'Official App Store badge picture (optional)', 'image'), f('appCard.googlePlayBadge', 'Official Google Play badge picture (optional)', 'image'),
     ] },
