@@ -827,7 +827,7 @@
     return `<section id="visit" class="sec"><div class="wrap">
       ${head(v, 'visit')}
       <div class="visit">
-        <div class="map rv">${embed ? `<iframe src="${esc(embed)}" title="Map showing ${esc(c.brand.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>` : '<div class="pic pic--empty" data-alt="Add a Google Maps embed link in admin"></div>'}</div>
+        <div class="visit-left"><div class="map rv">${embed ? `<iframe src="${esc(embed)}" title="Map showing ${esc(c.brand.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>` : '<div class="pic pic--empty" data-alt="Add a Google Maps embed link in admin"></div>'}</div>${appCardHtml(c)}</div>
         <div class="visit-info rv">
           <ul class="facts">
             <li>${ICON.pin}<span${ed('brand.address')}>${esc(c.brand.address)}</span></li>
@@ -848,7 +848,7 @@
             <button class="btn" type="submit">${ICON.whatsapp}<span>Send on WhatsApp</span></button>
           </form>
         </div>
-      </div>${appCardHtml(c)}</div></section>`;
+      </div></div></section>`;
   };
 
   function nav(c) {
@@ -2386,7 +2386,21 @@
     const ios = ok(a.appStore);
     const play = ok(a.googlePlay);
     const apk = ok(a.apk);
-    if (a.show === false || !(ios || play || apk)) return '';
+    // "Launching soon" (27 Nov 2026, until the stores approve the app): the QR is blurred and both store
+    // buttons show without a link. Switch it off in admin (Get the app card) when the app is out.
+    const soon = a.soon !== false;
+    if (a.show === false || !(soon || ios || play || apk)) return '';
+    const soonBadge = (label, icon) => `<span class="store-badge store-badge--soon" role="img" aria-label="${esc(label)}: launching soon">${icon}<span><small>Launching soon</small>${esc(label)}</span></span>`;
+    const APPLE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.300 1.900-3.400 2-3.500-1.100-1.600-2.800-1.800-3.400-1.800-1.400-.1-2.800.9-3.500.9s-1.800-.9-3-.8c-1.500 0-3 .9-3.800 2.300-1.600 2.800-.4 7 1.200 9.200.8 1.100 1.700 2.400 2.900 2.300 1.200 0 1.600-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.800-2.200.9-1.300 1.300-2.500 1.300-2.600 0 0-2.500-1-2.500-3.800zM14.200 5.800c.6-.8 1.100-1.900 1-3-1 0-2.100.7-2.800 1.500-.6.700-1.200 1.800-1 2.900 1 .1 2.100-.6 2.800-1.400z"/></svg>';
+    const PLAY = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M4 2.800v18.400c0 .4.400.6.700.4L20.500 12.600c.3-.2.3-.7 0-.9L4.700 2.400C4.400 2.200 4 2.400 4 2.800z"/></svg>';
+    if (soon) {
+      return `<div class="get-app get-app--soon rv" id="get-app">
+        <h3${ed('appCard.title')}>${esc(a.title || 'Get the app')}</h3>
+        ${a.text ? `<p class="hint"${ed('appCard.text')}>${esc(a.text)}</p>` : ''}
+        <div class="get-app-card"><div class="get-app-qrbox"><img class="get-app-qr" src="/api/app-qr.svg" alt="" width="120" height="120" loading="lazy"><b>Launching soon</b></div><p>The ${esc(c.brand.name)} app is launching soon on the App Store and Google Play.</p></div>
+        <div class="store-badges">${soonBadge('App Store', APPLE)}${soonBadge('Google Play', PLAY)}</div>
+      </div>`;
+    }
     const badge = (url, img, label, icon) => (url ? `<a class="store-badge" href="${esc(url)}" target="_blank" rel="noopener">${safeUrl(img) ? `<img src="${esc(safeUrl(img))}" alt="${esc(label)}">` : `${icon}<span>${esc(label)}</span>`}</a>` : '');
     return `<div class="get-app rv" id="get-app">
         <h3${ed('appCard.title')}>${esc(a.title || 'Get the app')}</h3>

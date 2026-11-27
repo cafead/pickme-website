@@ -911,6 +911,16 @@ html.anim .os-dots i.on:last-of-type { animation: pulse 1.6s ease-in-out infinit
 .store-badge img { height: 48px; width: auto; display: block; }
 .store-badge:has(img) { padding: 0; background: transparent; }
 @media (hover: none) and (max-width: 640px) { .get-app-card { display: none; } }
+/* Get the app: under the map; "Launching soon" look (27 Nov 2026) */
+.visit-left { display: grid; gap: 0; min-width: 0; }
+.visit-left .get-app { margin-top: 26px; }
+.get-app-qrbox { position: relative; flex: none; width: 120px; height: 120px; display: grid; place-items: center; border-radius: 10px; overflow: hidden; }
+.get-app-qrbox .get-app-qr { filter: blur(7px); opacity: .7; }
+.get-app-qrbox b { position: absolute; padding: 5px 10px; border-radius: 999px; background: rgba(255, 253, 249, .94); border: 1px solid var(--line); font-size: .78rem; font-weight: 600; color: #3B2A1A; white-space: nowrap; }
+.store-badge--soon { cursor: default; opacity: .92; text-align: left; }
+.store-badge--soon > span { display: grid; line-height: 1.15; }
+.store-badge--soon small { font-size: .68rem; font-weight: 400; letter-spacing: .04em; text-transform: uppercase; opacity: .8; }
+
 .mi-off { font-size: .85rem; color: var(--muted); }
 
 /* ---------- version 12: map pin, live delivery map, Google button, cash on delivery ---------- */
