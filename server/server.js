@@ -230,6 +230,15 @@ function deliveryCentre(data) {
   return true;
 }
 if (deliveryCentre(content.data)) content.set(content.data);
+// The cafe's own "Ask for reviews" link from its Google Business Profile (27 Nov 2026), set once if still empty.
+function googleReviewLink(data) {
+  data.fixes = data.fixes && typeof data.fixes === 'object' && !Array.isArray(data.fixes) ? data.fixes : {};
+  if (data.fixes.googleLink27) return false;
+  if (data.reviews && !data.reviews.googleLink) data.reviews.googleLink = 'https://g.page/r/CckcWxfTyjsMEBM/review';
+  data.fixes.googleLink27 = true;
+  return true;
+}
+if (googleReviewLink(content.data)) content.set(content.data);
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -1462,6 +1471,7 @@ async function restoreBackup(buf, by) {
     ensurePrintMenu(next);
     cheesecakePounds(next);
     deliveryCentre(next);
+    googleReviewLink(next);
     next._rev = (current._rev || 1) + 1;
     const when = String(manifest.createdAt || '').slice(0, 10);
     await content.set(next);

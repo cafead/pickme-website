@@ -344,7 +344,7 @@ module.exports = {
     title: 'What our guests say',
     formTitle: 'Leave a review',
     // In Google Business Profile, "Ask for reviews" gives a link that opens the review box. Paste it here.
-    googleLink: '',
+    googleLink: 'https://g.page/r/CckcWxfTyjsMEBM/review',
     googleAsk: 'Enjoyed it? A Google review helps a small cafe a lot.',
     googleButton: 'Review us on Google',
     rating: '',
