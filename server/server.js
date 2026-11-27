@@ -258,6 +258,7 @@ const auth = new Store('auth.json', {});
 const trash = new Store('trash.json', []);
 // Version 11: accounts, points, table calls, sold out, sales, backups (server/customers.js, mounted below).
 let CUST = null;
+let BILLS = null; // billing and stock (version 13), set further down
 // Version 12: drivers, delivery tracking and push notifications (server/delivery.js).
 let DELIV = null;
 
@@ -379,7 +380,8 @@ const newSecret = () => crypto.randomBytes(48).toString('hex');
 const sign = (body) => crypto.createHmac('sha256', auth.get().secret).update(body).digest('base64url');
 function issue(role, remember, staff) {
   // Staff and drivers both sign in with a staff login; the role decides which screen they get.
-  const payload = { r: role, exp: Date.now() + (remember ? 30 * 864e5 : 12 * 3600e3) };
+  // The phone app keeps a staff login for 5 years (until Log out, a new password, or the login is switched off).
+  const payload = { r: role, exp: Date.now() + (remember === 'app' ? 5 * 365 * 864e5 : remember ? 30 * 864e5 : 12 * 3600e3) };
   if (staff) { payload.sid = staff.id; payload.v = staff.v || 0; }
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${body}.${sign(body)}`;
@@ -773,7 +775,8 @@ app.get('/manifest.webmanifest', (req, res) => {
 });
 
 /* public: content and reviews */
-app.get('/api/content', (req, res) => res.json(Object.assign({}, content.get(), { soldOut: CUST ? CUST.soldOutIds() : [] })));
+const soldOutNow = () => [...new Set([...(CUST ? CUST.soldOutIds() : []), ...(BILLS ? BILLS.stockOutIds() : [])])];
+app.get('/api/content', (req, res) => res.json(Object.assign({}, content.get(), { soldOut: soldOutNow() })));
 app.get('/api/reviews', (req, res) => {
   res.json(reviews.get().filter((r) => r.approved).map(({ id, name, rating, text, favorite, source, createdAt }) => ({ id, name, rating, text, favorite, source, createdAt })));
 });
@@ -819,7 +822,7 @@ function findPrice(itemId, label) {
       if (it.id !== itemId) continue;
       const p = (it.prices || []).find((x) => (x.label || '') === (label || ''));
       if (!p) return null;
-      const off = g.hidden || it.hidden || it.available === false || (CUST && CUST.soldOutIds().includes(it.id));
+      const off = g.hidden || it.hidden || it.available === false || (CUST && CUST.soldOutIds().includes(it.id)) || (BILLS && BILLS.stockZero(it.id, label));
       // An item (or its group) can be served only between two times, for example a morning combo.
       const hours = it.timeFrom || it.timeTo ? { from: it.timeFrom, to: it.timeTo } : (g.timeFrom || g.timeTo ? { from: g.timeFrom, to: g.timeTo } : null);
       return { item: Object.assign({}, it, { available: off ? false : it.available }), price: p, group: g.id, hours };
@@ -1006,6 +1009,7 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
   if (pointsError) return bad(res, pointsError);
   await orders.set([order, ...orders.get()]);
   await CUST.afterPlace(order);
+  if (BILLS) await BILLS.takeStock(order.lines.map((l) => ({ key: `${l.itemId}|${l.label || ''}`, qty: l.qty }))).catch(() => {});
   DELIV.onNewOrder(order);
   audit('public', 'order-placed', order.id);
   notify(`New order ${order.id}: Rs. ${order.total}`, orderText(order));
@@ -1089,7 +1093,7 @@ app.post('/api/auth/login', json, async (req, res) => {
     await auth.set(a);
     const role = st.role === 'driver' ? 'driver' : 'staff';
     audit(`${role}:${st.username}`, 'login');
-    const token = issue('staff', remember || Boolean(req.body.app), st);
+    const token = issue('staff', req.body.app ? 'app' : remember, st);
     setCookie(req, res, token, remember);
     return res.json({ ok: true, role, name: st.name, ...(req.body.app ? { token } : {}) });
   }
@@ -1418,7 +1422,13 @@ DELIV = require('./delivery')({
   onStatusChange: (o, before, by) => CUST.onStatus(o, before, by),
 });
 // Version 13: bills made at the counter (server/billing.js).
-const BILLS = require('./billing')({ app, Store, json, str, bad, content, orders, audit, desk, admin, who, NP_OFFSET });
+BILLS = require('./billing')({
+  app, Store, json, str, bad, content, orders, audit, desk, admin, who, NP_OFFSET,
+  isOwner: (req) => { const s = readSession(req); return Boolean(s && s.role === 'admin'); },
+  // The owner's password typed at the counter (for a big discount). Wrong tries count like wrong logins.
+  ownerOk: (req, pw) => { if (loginBlocked(req)) return false; const ok = checkHash(auth.get(), pw); if (!ok) loginFailed(req); return ok; },
+  loyalty: { on: () => CUST.pointsOn(), rules: () => CUST.loyaltyRules(), normPhone: (p) => CUST.normPhone(p), balance: (p) => CUST.pointsOf(p).balance, add: (...a) => CUST.addPoints(...a) },
+});
 function makeBackup(full) {
   const zip = new AdmZip();
   zip.addFile('manifest.json', Buffer.from(JSON.stringify({ kind: BACKUP_KIND, format: 1, createdAt: new Date().toISOString(), full: Boolean(full), cafe: content.get().brand.name }, null, 1)));

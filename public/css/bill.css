@@ -105,6 +105,10 @@ input[type=checkbox] { min-height: 0; width: 20px; height: 20px; accent-color: v
 .rc img { display: block; width: 34mm; max-width: 60%; margin: 0 auto 4px; }
 .rc h3 { font: 700 16px/1.2 Arial, Helvetica, sans-serif; text-align: center; }
 .rc hr { border: 0; border-top: 1px dashed #000; margin: 5px 0; }
+.rc .two { display: flex; justify-content: space-between; gap: 8px; }
+.rc .two span:last-child { text-align: right; white-space: nowrap; }
+.rc .two.big { font-weight: 700; font-size: 15px; padding-top: 3px; }
+.rc p { min-height: 1em; }
 .rc table { width: 100%; border-collapse: collapse; }
 .rc td { padding: 1px 0; vertical-align: top; }
 .rc td.r { text-align: right; white-space: nowrap; padding-left: 6px; }
@@ -122,6 +126,41 @@ input[type=checkbox] { min-height: 0; width: 20px; height: 20px; accent-color: v
   @page { margin: 0; }
   body { background: #fff; }
   .bar, .wrap, #gate, .sheet, .toast { display: none !important; }
-  #paper { display: block; width: 72mm; padding: 2mm 0 6mm; margin: 0; }
-  body.paper58 #paper { width: 48mm; }
+  #paper { display: block; width: 66mm; padding: 2mm 0 6mm; margin: 0 0 0 4mm; }
+  body.paper58 #paper { width: 44mm; margin-left: 2mm; }
+}
+
+/* Reworked 27 Nov 2026 evening: counts on the item buttons, the bill at the bottom on phones, tabs, stock. */
+.item .sizes button { position: relative; flex-wrap: wrap; }
+.item .sizes button.has { border-color: var(--gold); background: #F6E7C3; }
+.item .sizes button .n { position: absolute; top: -8px; right: -6px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: var(--new); color: #fff; font-size: .82rem; font-weight: 700; line-height: 24px; text-align: center; }
+.item .sizes button .left { flex-basis: 100%; font-style: normal; font-size: .72rem; color: var(--soft); line-height: 1.1; padding-bottom: 3px; }
+.item .sizes button.gone { opacity: .5; text-decoration: line-through; }
+.item .sizes { padding-top: 4px; }
+.tabchips { padding-top: 0; align-items: center; }
+.tabchips button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.cart h2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cart-x { display: none; min-height: 34px; }
+.warn { padding: 6px 10px; border-radius: 8px; background: #FBE3DE; color: #8E2A1E; font-size: .88rem; }
+.pts { padding: 6px 10px; border-radius: 8px; background: #E4F1E8; color: #1E5631; font-size: .92rem; }
+.fields label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: .95rem; }
+textarea { min-height: 76px; resize: vertical; }
+.actions button:only-child { grid-column: 1 / -1; }
+.stock td { padding: 4px 6px 4px 0; }
+.today button { min-height: 38px; }
+.dock { display: none; }
+@media (max-width: 899px) {
+  .wrap { margin-bottom: 110px; }
+  .dock { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 12; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; border: 0; border-radius: 14px; background: var(--ink); color: #fff; text-align: left; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); }
+  .dock:hover { background: var(--ink); }
+  .dock.empty { opacity: .85; }
+  .dock-n { flex: none; min-width: 30px; height: 30px; border-radius: 15px; background: var(--new); font-weight: 700; line-height: 30px; text-align: center; }
+  .dock-what { flex: 1; min-width: 0; font-size: .86rem; font-weight: 400; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .dock b { flex: none; font-size: 1.05rem; }
+  .dock-go { flex: none; padding: 6px 10px; border-radius: 9px; background: var(--gold); font-size: .86rem; }
+  .pos > .cart { display: none; }
+  body.cart-open .pos > .box:first-child, body.cart-open .dock, body.cart-open #tabstrip { display: none; }
+  body.cart-open .pos > .cart { display: block; }
+  .cart-x { display: inline-flex; }
+  .items { max-height: none; }
 }

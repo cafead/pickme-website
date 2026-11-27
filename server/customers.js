@@ -801,5 +801,5 @@ module.exports = function customers(x) {
     return out;
   }
 
-  return { onPlace, afterPlace, onStatus, soldOutIds, readCust, addToBackup, restoreFromBackup, normPhone, pointsOf };
+  return { onPlace, afterPlace, onStatus, soldOutIds, readCust, addToBackup, restoreFromBackup, normPhone, pointsOf, addPoints, pointsOn, loyaltyRules: L };
 };

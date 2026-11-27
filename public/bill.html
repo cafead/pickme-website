@@ -24,6 +24,7 @@
 <header class="bar">
   <h1>Billing <small id="who"></small></h1>
   <span class="right">
+    <button type="button" id="vibe" data-do="vibe" hidden>Vibration: on</button>
     <a class="btn" id="to-admin" href="/admin" hidden>Dashboard</a>
     <a class="btn" id="to-counter" href="/counter">Orders</a>
     <button type="button" id="logout">Log out</button>
@@ -33,8 +34,9 @@
 <main class="wrap">
   <nav class="tabs" id="tabs" aria-label="Billing sections">
     <button type="button" data-tab="new" class="on">New bill</button>
-    <button type="button" data-tab="orders">Unpaid orders <span class="count" id="n-orders" hidden>0</span></button>
+    <button type="button" data-tab="orders">Orders <span class="count" id="n-orders" hidden>0</span></button>
     <button type="button" data-tab="bills">Bills</button>
+    <button type="button" data-tab="stock">Stock</button>
     <button type="button" data-tab="setup" id="tab-setup" hidden>Set-up</button>
   </nav>
   <section id="view"></section>

@@ -12,7 +12,8 @@
 const crypto = require('crypto');
 
 module.exports = function billing(x) {
-  const { app, Store, json, str, bad, content, orders, audit, desk, admin, who, NP_OFFSET } = x;
+  const { app, Store, json, str, bad, content, orders, audit, desk, admin, who, NP_OFFSET, ownerOk, isOwner, loyalty } = x;
+  const tabs = new Store('bill-tabs.json', []);
   const book = new Store('bills.json', { next: 1, bills: [] });
   const setup = new Store('bill-setup.json', {});
   const SETUP = () => Object.assign({
@@ -21,7 +22,32 @@ module.exports = function billing(x) {
     payments: ['Cash', 'Card', 'eSewa', 'Fonepay'],
     items: [],
     paper: 80,
+    cols: 44,          // letters per line on the paper (48 fills an 80 mm roll edge to edge)
+    margin: 2,         // empty letters on the left, so nothing sits on the paper's edge
+    show: { address: true, phone: true, miti: true },
+    maxDiscount: 10,   // staff may give up to this many percent; more needs the owner
+    stock: {},         // "<item id>|<size>" -> how many are left (only counted items are listed)
   }, setup.get());
+  const stockKey = (v) => (typeof v === 'string' && v.length <= 200 && v.includes('|') ? v : '');
+  const stockLeft = (key) => { const n = SETUP().stock[key]; return Number.isFinite(n) ? n : null; };
+  // Website: a size with 0 left cannot be ordered; an item whose every size is counted and at 0 shows as sold out.
+  const stockZero = (itemId, label) => stockLeft(`${itemId}|${label || ''}`) === 0;
+  function stockOutIds() {
+    const st = SETUP().stock; const out = [];
+    (content.get().menu.categories || []).forEach((g) => (g.items || []).forEach((it) => {
+      const sizes = (it.prices || []).filter((p) => Number(p.price) > 0);
+      if (sizes.length && sizes.every((p) => st[`${it.id}|${p.label || ''}`] === 0)) out.push(it.id);
+    }));
+    return out;
+  }
+  // Takes sold things off the count (never below 0). Used by bills and by website and app orders.
+  async function takeStock(list) {
+    const cur = setup.get();
+    const st = Object.assign({}, SETUP().stock);
+    let changed = false;
+    (list || []).forEach((l) => { const k = stockKey(l.key); if (k && Number.isFinite(st[k])) { st[k] = Math.max(0, st[k] - (Number(l.qty) || 0)); changed = true; } });
+    if (changed) await setup.set(Object.assign({}, cur, { stock: st }));
+  }
   const day = (iso) => new Date(Date.parse(iso) + NP_OFFSET).toISOString().slice(0, 10);
   const money = (n) => Math.round(Number(n) * 100) / 100;
   const billNo = (n) => 'PM-' + String(n).padStart(5, '0');
@@ -30,9 +56,18 @@ module.exports = function billing(x) {
   app.put('/api/admin/bill-setup', admin, json, async (req, res) => {
     const b = req.body || {};
     const next = SETUP();
-    if (b.header !== undefined) next.header = str(b.header, 300);
-    if (b.footer !== undefined) next.footer = str(b.footer, 300);
+    if (b.header !== undefined) next.header = String(b.header || '').split(/\r?\n/).map((l) => str(l, 60)).filter(Boolean).slice(0, 6).join('\n');
+    if (b.footer !== undefined) next.footer = String(b.footer || '').split(/\r?\n/).map((l) => str(l, 60)).filter(Boolean).slice(0, 6).join('\n');
     if ([58, 80].includes(Number(b.paper))) next.paper = Number(b.paper);
+    if (b.cols !== undefined) { const n = Math.round(Number(b.cols)); if (!(n >= 24 && n <= 48)) return bad(res, 'Letters per line must be between 24 and 48.'); next.cols = n; }
+    if (b.margin !== undefined) { const n = Math.round(Number(b.margin)); if (!(n >= 0 && n <= 8)) return bad(res, 'The left margin must be between 0 and 8.'); next.margin = n; }
+    if (b.show && typeof b.show === 'object') next.show = { address: b.show.address !== false, phone: b.show.phone !== false, miti: b.show.miti !== false };
+    if (b.maxDiscount !== undefined) { const n = Number(b.maxDiscount); if (!(n >= 0 && n <= 100)) return bad(res, 'The staff discount limit must be between 0 and 100.'); next.maxDiscount = n; }
+    if (b.stock && typeof b.stock === 'object') {
+      const st = {};
+      Object.entries(b.stock).slice(0, 500).forEach(([k, v]) => { const n = Math.round(Number(v)); if (stockKey(k) && v !== '' && v !== null && n >= 0 && n <= 99999) st[k] = n; });
+      next.stock = st;
+    }
     if (Array.isArray(b.payments)) {
       const p = [...new Set(b.payments.map((v) => str(v, 30)).filter(Boolean))].slice(0, 10);
       if (!p.length) return bad(res, 'Keep at least one payment type.');
@@ -49,6 +84,40 @@ module.exports = function billing(x) {
     res.json(next);
   });
 
+  // Counting stock: staff type how many are left (a fresh tray of slices), or clear the count.
+  app.post('/api/desk/stock', desk, json, async (req, res) => {
+    const k = stockKey(req.body && req.body.key);
+    if (!k) return bad(res, 'Choose an item.');
+    const st = Object.assign({}, SETUP().stock);
+    if (req.body.left === null || req.body.left === '') delete st[k];
+    else { const n = Math.round(Number(req.body.left)); if (!(n >= 0 && n <= 99999)) return bad(res, 'Type how many are left.'); st[k] = n; }
+    await setup.set(Object.assign({}, setup.get(), { stock: st }));
+    audit(who(req), 'stock', `${k} = ${st[k] === undefined ? 'not counted' : st[k]}`);
+    res.json({ stock: st });
+  });
+
+  /* Open tabs: a table's bill that stays open while the guests keep ordering. */
+  app.get('/api/desk/tabs', desk, (req, res) => res.json(tabs.get()));
+  app.put('/api/desk/tabs/:id', desk, json, async (req, res) => {
+    if (!/^t_[a-z0-9]{6,30}$/.test(req.params.id)) return bad(res, 'Wrong tab.');
+    const b = req.body || {};
+    const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 200).map((l) => ({ key: stockKey(l && l.key), name: str(l && l.name, 100), label: str(l && l.label, 60), price: money(l && l.price), qty: Math.round(Number(l && l.qty)) })).filter((l) => l.name && l.qty >= 1 && l.price >= 0);
+    const title = str(b.title, 30);
+    if (!title) return bad(res, 'Give the tab a table number or a name.');
+    const list = tabs.get().slice();
+    const at = list.findIndex((t) => t.id === req.params.id);
+    if (at < 0 && list.length >= 100) return bad(res, 'Too many open tabs. Close some first.');
+    const tab = { id: req.params.id, title, lines, name: str(b.name, 80), pan: str(b.pan, 20), phone: str(b.phone, 20), note: str(b.note, 200), by: who(req), openedAt: at >= 0 ? list[at].openedAt : new Date().toISOString(), at: new Date().toISOString() };
+    if (at >= 0) list[at] = tab; else list.push(tab);
+    await tabs.set(list);
+    res.json(tab);
+  });
+  app.delete('/api/desk/tabs/:id', desk, async (req, res) => {
+    const t = tabs.get().find((v) => v.id === req.params.id);
+    if (t) { await tabs.set(tabs.get().filter((v) => v.id !== req.params.id)); audit(who(req), 'tab-dropped', `${t.title} (${t.lines.length} lines)`); }
+    res.json({ ok: true });
+  });
+
   // Bills of one day (Nepal time), newest first, with the day's totals.
   app.get('/api/desk/bills', desk, (req, res) => {
     const d = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? req.query.date : day(new Date().toISOString());
@@ -56,7 +125,7 @@ module.exports = function billing(x) {
     const good = list.filter((b) => !b.cancelled);
     const byPay = {};
     good.forEach((b) => { byPay[b.payment] = money((byPay[b.payment] || 0) + b.total); });
-    res.json({ date: d, bills: list, summary: { count: good.length, total: money(good.reduce((n, b) => n + b.total, 0)), discount: money(good.reduce((n, b) => n + b.discount.amount, 0)), byPayment: byPay, cancelled: list.length - good.length } });
+    res.json({ date: d, bills: list, summary: { count: good.length, total: money(good.reduce((n, b) => n + b.total, 0)), discount: money(good.reduce((n, b) => n + b.discount.amount, 0)), byPayment: byPay, cancelled: list.length - good.length, cancelledTotal: money(list.filter((b) => b.cancelled).reduce((n, b) => n + b.total, 0)), pointsUsed: good.reduce((n, b) => n + ((b.points && b.points.used) || 0), 0), first: list.length ? list[list.length - 1].no : '', last: list.length ? list[0].no : '' } });
   });
   app.get('/api/desk/bills/:id', desk, (req, res) => {
     const b = book.get().bills.find((v) => v.id === req.params.id);
@@ -67,7 +136,7 @@ module.exports = function billing(x) {
   app.post('/api/desk/bills', desk, json, async (req, res) => {
     const b = req.body || {};
     const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 200).map((l) => ({
-      name: str(l && l.name, 100), label: str(l && l.label, 60), price: money(l && l.price), qty: Math.round(Number(l && l.qty)),
+      key: stockKey(l && l.key), name: str(l && l.name, 100), label: str(l && l.label, 60), price: money(l && l.price), qty: Math.round(Number(l && l.qty)),
     })).filter((l) => l.name);
     if (!lines.length) return bad(res, 'Add at least one item to the bill.');
     if (lines.some((l) => !Number.isFinite(l.price) || l.price < 0 || l.price > 1e6 || !(l.qty >= 1 && l.qty <= 999))) return bad(res, 'One of the lines has a wrong price or quantity.');
@@ -76,9 +145,29 @@ module.exports = function billing(x) {
     const dValue = Math.max(0, Number(b.discount && b.discount.value) || 0);
     if (dKind === 'percent' && dValue > 100) return bad(res, 'A discount cannot be more than 100%.');
     const dAmount = Math.min(subtotal, money(dKind === 'percent' ? subtotal * dValue / 100 : dValue));
+    // Staff may give a discount up to the limit; a bigger one needs the owner (logged in, or the owner's password).
+    const cap = Number(SETUP().maxDiscount);
+    const share = subtotal > 0 ? dAmount / subtotal * 100 : 0;
+    if (share > cap + 1e-9 && !isOwner(req)) {
+      const pw = typeof b.ownerPassword === 'string' ? b.ownerPassword : '';
+      if (!pw) return res.status(403).json({ error: `A discount above ${cap}% needs the owner's password.`, code: 'owner' });
+      if (!ownerOk(req, pw)) { audit(who(req), 'discount-refused', `${share.toFixed(1)}%`); return res.status(403).json({ error: 'That is not the owner password.', code: 'owner' }); }
+    }
+    // Pick Me points: the guest's phone can spend points on the bill and earns points on what is paid in money.
+    const L = loyalty.on() ? loyalty.rules() : null;
+    const phone = loyalty.normPhone(b.customer && b.customer.phone);
+    let used = 0;
+    if (L && phone && Number(b.usePoints) > 0) {
+      used = Math.floor(Number(b.usePoints));
+      const have = loyalty.balance(phone);
+      if (used > have) return bad(res, `This number has only ${have} points.`);
+      if (used < Number(L.minSpend)) return bad(res, `Points can be used from ${L.minSpend} points.`);
+      used = Math.min(used, Math.floor((subtotal - dAmount) / (Number(L.rupeesPerPoint) || 1)));
+    }
+    const pointsValue = money(used * (L ? Number(L.rupeesPerPoint) || 1 : 1));
     const payments = SETUP().payments;
     const payment = payments.includes(b.payment) ? b.payment : payments[0];
-    const total = money(subtotal - dAmount);
+    const total = money(subtotal - dAmount - pointsValue);
     const received = Number(b.received) > 0 ? money(b.received) : 0;
     const pan = str(b.customer && b.customer.pan, 20).replace(/\s+/g, '');
     if (pan && !/^\d{9}$/.test(pan)) return bad(res, 'A PAN number has 9 digits. Check it, or leave it empty.');
@@ -88,17 +177,26 @@ module.exports = function billing(x) {
     const twin = ref && all.bills.find((v) => v.ref === ref);
     if (twin) return res.json(twin);
     const orderId = str(b.orderId, 40);
+    const tabId = /^t_[a-z0-9]{6,30}$/.test(b.tabId || '') ? b.tabId : '';
+    // A bill for a website or app order earns its points through the order itself, not twice.
+    const earn = L && phone && !orderId ? Math.floor(total * Number(L.percent) / 100 / (Number(L.rupeesPerPoint) || 1)) : 0;
     const bill = {
       id: 'bl_' + crypto.randomBytes(6).toString('hex'), ref, n: all.next, no: billNo(all.next), at: new Date().toISOString(), by: who(req),
       lines, subtotal, discount: { kind: dKind, value: dValue, amount: dAmount, reason: str(b.discount && b.discount.reason, 80) }, total,
       payment, received, change: received > total ? money(received - total) : 0,
       customer: { name: str(b.customer && b.customer.name, 80), pan, phone: str(b.customer && b.customer.phone, 20) },
       table: str(b.table, 12), note: str(b.note, 200), orderId,
+      ...(used || earn ? { points: { phone, used, value: pointsValue, earned: earn } } : {}),
     };
     all.next += 1;
     all.bills.push(bill);
     await book.set(all);
     audit(who(req), 'bill', `${bill.no} Rs ${bill.total}`);
+    if (used) await loyalty.add(phone, -used, 'spend', { by: who(req), note: `Bill ${bill.no}` });
+    if (earn) await loyalty.add(phone, earn, 'earn', { by: who(req), note: `Bill ${bill.no}` });
+    if (tabId) await tabs.set(tabs.get().filter((t) => t.id !== tabId));
+    // Counted items go down (an order's items were already taken off when it was placed).
+    if (!orderId) await takeStock(lines);
     // A bill made for a website or app order marks that order as paid.
     if (orderId) {
       const list = orders.get();
@@ -114,7 +212,12 @@ module.exports = function billing(x) {
     if (!b) return res.sendStatus(404);
     const reason = str(req.body && req.body.reason, 120);
     if (!reason) return bad(res, 'Write why this bill is cancelled.');
-    if (!b.cancelled) { b.cancelled = { at: new Date().toISOString(), by: who(req), reason }; await book.set(all); audit('owner', 'bill-cancelled', `${b.no} ${reason}`); }
+    if (!b.cancelled) {
+      b.cancelled = { at: new Date().toISOString(), by: who(req), reason }; await book.set(all); audit('owner', 'bill-cancelled', `${b.no} ${reason}`);
+      // Points go back the way they came.
+      if (b.points && b.points.used) await loyalty.add(b.points.phone, b.points.used, 'refund', { by: 'owner', note: `Bill ${b.no} cancelled` });
+      if (b.points && b.points.earned) await loyalty.add(b.points.phone, -b.points.earned, 'reverse', { by: 'owner', note: `Bill ${b.no} cancelled` });
+    }
     res.json(b);
   });
 
@@ -158,5 +261,5 @@ module.exports = function billing(x) {
     if (s && typeof s === 'object' && !Object.keys(setup.get()).length) await setup.set(s);
     return out;
   }
-  return { addToBackup, restoreFromBackup };
+  return { addToBackup, restoreFromBackup, stockZero, stockOutIds, takeStock };
 };

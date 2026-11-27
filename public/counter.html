@@ -269,6 +269,7 @@
       <footer>
         ${picture(o.payment.proof, 'Payment screenshot')}${picture(o.refPhoto, 'Cake design photo')}
         <button type="button" data-print="${esc(o.id)}">Print slip</button>
+        <a class="btn" href="/bill#order=${encodeURIComponent(o.id)}">Bill and receipt printer</a>
         ${waBtn(o, `Hello ${o.name || ''}, your ${S.cafe} order ${o.id} is now ${o.status.toUpperCase()}.`)}
       </footer></article>`;
   }

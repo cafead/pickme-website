@@ -1,24 +1,33 @@
-/* Billing at the counter (version 13): make a bill, print it on the 80 mm receipt printer, look up old bills.
+/* Billing at the counter (version 13, reworked 27 Nov 2026 evening): make a bill, print it on the 80 mm
+ * receipt printer, keep table tabs open, count stock, give and take Pick Me points, print the day's report.
  * Staff and the owner use it at /bill; the phone app shows the same page in its staff mode.
- * Printing: (1) Bluetooth straight from the page (Chrome on Android or a computer), (2) the phone app's own
- * Bluetooth printing when the page runs inside the app, (3) the browser's print window (USB / any printer),
- * (4) the RawBT printer app on Android. All four print the same bill. */
+ * Printing: (1) the phone app's Bluetooth printing when the page runs inside the app, (2) Bluetooth straight from
+ * the page (Chrome on Android or a computer), (3) the browser's print window (USB / any printer), (4) the RawBT
+ * printer app on Android. All four print the same paper. */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const rs = (n) => 'Rs ' + (Math.round(Number(n) * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
   const money = (n) => Math.round(Number(n) * 100) / 100;
+  const rs = (n) => 'Rs ' + money(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
   const IN_APP = Boolean(window.ReactNativeWebView);
-  const S = { me: null, content: null, setup: null, tab: 'new', cat: 'all', q: '', bill: fresh(), orders: [], day: null, bills: null, busy: false };
+  const toApp = (m) => window.ReactNativeWebView.postMessage(JSON.stringify(m));
+  const rid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const S = { me: null, content: null, setup: null, tab: 'new', cat: 'all', q: '', bill: fresh(), orders: [], tabs: [], bills: null, busy: false, pts: null, cartOpen: false, logo: null };
 
   function fresh() {
-    return { lines: [], dKind: 'amount', dValue: '', dReason: '', name: '', pan: '', phone: '', table: '', note: '', payment: '', received: '', orderId: '', orderCode: '', ref: Math.random().toString(36).slice(2) + Date.now().toString(36) };
+    return { lines: [], dKind: 'amount', dValue: '', dReason: '', name: '', pan: '', phone: '', table: '', note: '', payment: '', received: '', usePoints: '', orderId: '', tabId: '', tabTitle: '', ref: rid() };
+  }
+  /* A short buzz on every tap, so staff feel that the tap was taken (setting kept on this device). */
+  const vibeOn = () => { try { return localStorage.getItem('pm_vibe') !== 'off'; } catch (e) { return true; } };
+  function buzz() {
+    if (!vibeOn()) return;
+    if (IN_APP) toApp({ type: 'tap' }); else if (navigator.vibrate) { try { navigator.vibrate(15); } catch (e) { /* not allowed */ } }
   }
   function toast(msg, bad) {
     const t = $('toast');
     t.textContent = msg; t.className = 'toast on' + (bad ? ' bad' : '');
-    clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = 'toast'; }, bad ? 5000 : 2600);
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = 'toast'; }, bad ? 5000 : 2400);
   }
   async function api(method, url, body) {
     const headers = body ? { 'Content-Type': 'application/json' } : {};
@@ -27,7 +36,7 @@
     try { r = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined }); } catch (e) { throw new Error('No internet connection. Please check it and try again.'); }
     const data = await r.json().catch(() => ({}));
     if (r.status === 401 && !/auth\/login/.test(url)) { gate('Please log in.'); throw new Error('Please log in.'); }
-    if (!r.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+    if (!r.ok) { const e = new Error(data.error || 'Something went wrong. Please try again.'); e.code = data.code; throw e; }
     return data;
   }
   function gate(msg) {
@@ -40,28 +49,37 @@
     const out = [];
     ((S.content.menu || {}).categories || []).forEach((g) => (g.items || []).forEach((it) => {
       const prices = (it.prices || []).filter((p) => Number(p.price) > 0);
-      if (prices.length) out.push({ key: it.id, name: it.name, group: g.name, prices: prices.map((p) => ({ label: p.label || '', price: Number(p.price) })) });
+      if (prices.length) out.push({ id: it.id, name: it.name, group: g.name, prices: prices.map((p) => ({ label: p.label || '', price: Number(p.price), key: `${it.id}|${p.label || ''}` })) });
     }));
-    (S.setup.items || []).forEach((it) => out.push({ key: it.id, name: it.name, group: it.group || 'Other', prices: [{ label: '', price: Number(it.price) }] }));
+    (S.setup.items || []).forEach((it) => out.push({ id: it.id, name: it.name, group: it.group || 'Other', prices: [{ label: '', price: Number(it.price), key: `${it.id}|` }] }));
     return out;
   }
   const groups = () => [...new Set(catalogue().map((i) => i.group))];
-  function addLine(name, label, price) {
-    const l = S.bill.lines.find((v) => v.name === name && v.label === label && v.price === price);
-    if (l) l.qty += 1; else S.bill.lines.push({ name, label, price, qty: 1 });
-    paintCart();
+  const left = (key) => { const n = (S.setup.stock || {})[key]; return Number.isFinite(n) ? n : null; };
+  const onBill = (key) => S.bill.lines.filter((l) => l.key === key).reduce((n, l) => n + l.qty, 0);
+  function addLine(key, name, label, price) {
+    const l = S.bill.lines.find((v) => v.key === key && v.name === name && v.label === label && v.price === price);
+    if (l) l.qty += 1; else S.bill.lines.push({ key, name, label, price, qty: 1 });
+    changed();
   }
   function totals(b) {
     const subtotal = money(b.lines.reduce((n, l) => n + l.price * l.qty, 0));
     const v = Math.max(0, Number(b.dValue) || 0);
     const discount = Math.min(subtotal, money(b.dKind === 'percent' ? subtotal * Math.min(v, 100) / 100 : v));
-    return { subtotal, discount, total: money(subtotal - discount) };
+    const points = Math.min(Math.max(0, Math.floor(Number(b.usePoints) || 0)), Math.floor(subtotal - discount));
+    return { subtotal, discount, points, total: money(subtotal - discount - points), count: b.lines.reduce((n, l) => n + l.qty, 0) };
+  }
+  // After any change to the bill: redraw what shows it, and keep an open tab saved.
+  function changed() {
+    if (S.tab !== 'new') return;
+    paintCounts(); paintCart(); paintDock();
+    if (S.bill.tabId) { clearTimeout(S.tabT); S.tabT = setTimeout(saveTab, 700); }
   }
 
   /* ---------- New bill ---------- */
   function newView() {
     const gs = groups();
-    return `<div class="pos">
+    return `<div id="tabstrip"></div><div class="pos">
       <div class="box">
         <input id="q" type="search" placeholder="Search an item" value="${esc(S.q)}" autocomplete="off">
         <div class="chips" id="chips"><button type="button" data-cat="all" class="${S.cat === 'all' ? 'on' : ''}">All</button>${gs.map((g) => `<button type="button" data-cat="${esc(g)}" class="${S.cat === g ? 'on' : ''}">${esc(g)}</button>`).join('')}</div>
@@ -69,12 +87,34 @@
         <form class="typed" id="typed"><input name="name" placeholder="Something not on the list" maxlength="100" required><input name="price" type="number" inputmode="decimal" min="0" step="any" placeholder="Price" required><button type="submit">Add</button></form>
       </div>
       <div class="box cart" id="cart"></div>
-    </div>`;
+    </div>
+    <button type="button" class="dock" id="dock" data-do="open-cart"></button>`;
   }
   function paintItems() {
     const q = S.q.trim().toLowerCase();
     const list = catalogue().filter((i) => (q ? i.name.toLowerCase().includes(q) : S.cat === 'all' || i.group === S.cat));
-    $('items').innerHTML = list.length ? list.map((i) => `<div class="item"><b>${esc(i.name)}</b><div class="sizes">${i.prices.map((p, n) => `<button type="button" data-add="${esc(i.key)}" data-n="${n}">${p.label ? `<small>${esc(p.label)}</small>` : ''}${p.price}</button>`).join('')}</div></div>`).join('') : '<p class="soft">Nothing found. Type it in the box below with its price.</p>';
+    $('items').innerHTML = list.length ? list.map((i) => `<div class="item"><b>${esc(i.name)}</b><div class="sizes">${i.prices.map((p, n) => {
+      const have = left(p.key);
+      return `<button type="button" data-add="${esc(i.id)}" data-n="${n}" data-key="${esc(p.key)}"${have === 0 ? ' class="gone"' : ''}>${p.label ? `<small>${esc(p.label)}</small>` : ''}${p.price}${have !== null ? `<i class="left">${have === 0 ? 'none left' : have + ' left'}</i>` : ''}<span class="n" hidden></span></button>`;
+    }).join('')}</div></div>`).join('') : '<p class="soft">Nothing found. Type it in the box below with its price.</p>';
+    paintCounts();
+  }
+  // The number on each item button: how many of it are on this bill.
+  function paintCounts() {
+    document.querySelectorAll('#items [data-key]').forEach((b) => { const n = onBill(b.dataset.key); const tag = b.querySelector('.n'); tag.textContent = n; tag.hidden = !n; b.classList.toggle('has', n > 0); });
+  }
+  // Phones: the bill so far stays at the bottom of the screen; a tap opens the whole bill.
+  function paintDock() {
+    const d = $('dock'); if (!d) return;
+    const t = totals(S.bill);
+    const last = S.bill.lines.slice(-3).reverse().map((l) => `${l.qty}× ${esc(l.name)}`).join(', ');
+    d.innerHTML = t.count ? `<span class="dock-n">${t.count}</span><span class="dock-what">${last}${S.bill.lines.length > 3 ? '…' : ''}</span><b class="num">${rs(t.total)}</b><span class="dock-go">See bill</span>` : '<span class="dock-what">Tap items to add them to the bill</span>';
+    d.classList.toggle('empty', !t.count);
+    document.body.classList.toggle('cart-open', S.cartOpen);
+  }
+  function paintTabs() {
+    const el = $('tabstrip'); if (!el) return;
+    el.innerHTML = S.tabs.length || S.bill.tabId ? `<div class="chips tabchips"><span class="soft">Open tabs:</span>${S.tabs.map((t) => `<button type="button" data-tab-open="${esc(t.id)}" class="${S.bill.tabId === t.id ? 'on' : ''}">${esc(t.title)} · ${rs(t.lines.reduce((n, l) => n + l.price * l.qty, 0))}</button>`).join('')}${S.bill.tabId ? '<button type="button" data-do="leave-tab">+ New bill</button>' : ''}</div>` : '';
   }
   function paintCart() {
     const b = S.bill;
@@ -82,46 +122,81 @@
     const pays = S.setup.payments;
     if (!pays.includes(b.payment)) b.payment = pays[0];
     const change = Number(b.received) > t.total ? money(Number(b.received) - t.total) : 0;
-    $('cart').innerHTML = `<h2>This bill</h2>
-      ${b.orderId ? `<p class="from-order">For order ${esc(b.orderCode)}. Saving this bill marks the order paid.</p>` : ''}
+    const cap = Number(S.setup.maxDiscount);
+    const over = t.subtotal > 0 && t.discount / t.subtotal * 100 > cap + 1e-9 && S.me.role !== 'admin';
+    const L = S.content.loyalty || {};
+    const ptsOn = !(S.content.features && S.content.features.points === false);
+    const p = S.pts && S.pts.phone === (b.phone || '').replace(/\D/g, '').slice(-10) ? S.pts : null;
+    $('cart').innerHTML = `<h2>${b.tabId ? `Tab: ${esc(b.tabTitle)}` : 'This bill'}<button type="button" class="quiet cart-x" data-do="close-cart">Back to items</button></h2>
+      ${b.orderId ? `<p class="from-order">For order ${esc(b.orderId)}. Saving this bill marks the order paid.</p>` : ''}
       ${b.lines.length ? `<ul>${b.lines.map((l, i) => `<li><span class="nm">${esc(l.name)} ${l.label ? `<small>${esc(l.label)}</small>` : ''}</span><span class="amt num">${rs(l.price * l.qty)}</span>
         <span class="qty"><button type="button" data-qty="-1" data-i="${i}" aria-label="One less">−</button><span class="num">${l.qty}</span><button type="button" data-qty="1" data-i="${i}" aria-label="One more">+</button><small class="soft num">× ${l.price}</small></span>
         <button type="button" class="quiet danger" data-del="${i}">Remove</button></li>`).join('')}</ul>` : '<p class="empty">Tap items to add them to the bill.</p>'}
       <div class="fields">
         <label>Discount<select data-f="dKind"><option value="amount"${b.dKind === 'amount' ? ' selected' : ''}>Rs off</option><option value="percent"${b.dKind === 'percent' ? ' selected' : ''}>% off</option></select></label>
         <label>How much<input data-f="dValue" type="number" inputmode="decimal" min="0" step="any" value="${esc(b.dValue)}" placeholder="0"></label>
+        ${over ? `<p class="wide warn">More than ${cap}% off: the owner's password is asked when you save.</p>` : ''}
         <label class="wide">Customer name<input data-f="name" maxlength="80" value="${esc(b.name)}" autocomplete="off"></label>
         <label>Customer PAN (9 digits)<input data-f="pan" inputmode="numeric" maxlength="9" value="${esc(b.pan)}" autocomplete="off"></label>
-        <label>Phone<input data-f="phone" type="tel" maxlength="20" value="${esc(b.phone)}" autocomplete="off"></label>
+        <label>Phone (for points)<input data-f="phone" type="tel" maxlength="20" value="${esc(b.phone)}" autocomplete="off"></label>
+        ${ptsOn && p ? `<p class="wide pts">${esc(p.account && p.account.name ? p.account.name + ': ' : '')}<b>${p.balance}</b> points${b.orderId ? '' : ` · this bill earns <b>${Math.floor(t.total * Number(L.percent || 5) / 100)}</b>`}</p>${p.balance >= Number(L.minSpend || 50) && !b.orderId ? `<label class="wide">Use points (1 point = Rs ${Number(L.rupeesPerPoint || 1)})<input data-f="usePoints" type="number" inputmode="numeric" min="0" max="${p.balance}" step="1" value="${esc(b.usePoints)}" placeholder="0 to ${p.balance}"></label>` : ''}` : ''}
         <label>Table<input data-f="table" maxlength="12" value="${esc(b.table)}" autocomplete="off"></label>
         <label>Note on the bill<input data-f="note" maxlength="200" value="${esc(b.note)}" autocomplete="off"></label>
       </div>
-      <div class="sum num"><div><span>Subtotal</span><span>${rs(t.subtotal)}</span></div>${t.discount ? `<div><span>Discount</span><span>− ${rs(t.discount)}</span></div>` : ''}<div class="total"><span>Total</span><span>${rs(t.total)}</span></div></div>
+      <div class="sum num"><div><span>Subtotal</span><span>${rs(t.subtotal)}</span></div>${t.discount ? `<div><span>Discount</span><span>− ${rs(t.discount)}</span></div>` : ''}${t.points ? `<div><span>Points used</span><span>− ${rs(t.points)}</span></div>` : ''}<div class="total"><span>Total</span><span>${rs(t.total)}</span></div></div>
       <p class="soft" style="margin-bottom:6px">Paid by</p>
-      <div class="pay">${pays.map((p) => `<button type="button" data-pay="${esc(p)}" class="${b.payment === p ? 'on' : ''}">${esc(p)}</button>`).join('')}</div>
+      <div class="pay">${pays.map((x) => `<button type="button" data-pay="${esc(x)}" class="${b.payment === x ? 'on' : ''}">${esc(x)}</button>`).join('')}</div>
       <div class="fields" style="margin-top:10px"><label>Money received<input data-f="received" type="number" inputmode="decimal" min="0" step="any" value="${esc(b.received)}" placeholder="optional"></label><label>Change to give<input value="${change ? rs(change) : ''}" readonly tabindex="-1"></label></div>
-      <div class="actions" style="margin-top:12px"><button type="button" class="main" data-do="save-print"${b.lines.length ? '' : ' disabled'}>Save and print</button><button type="button" data-do="save"${b.lines.length ? '' : ' disabled'}>Save, no print</button><button type="button" class="danger" data-do="clear">Clear</button></div>`;
+      <div class="actions" style="margin-top:12px"><button type="button" class="main" data-do="save-print"${b.lines.length ? '' : ' disabled'}>Save and print</button><button type="button" data-do="save"${b.lines.length ? '' : ' disabled'}>Save, no print</button>
+        ${b.tabId ? '<button type="button" data-do="leave-tab">Keep the tab open</button><button type="button" class="danger" data-do="drop-tab">Delete this tab</button>' : `<button type="button" data-do="keep-tab"${b.lines.length && !b.orderId ? '' : ' disabled'}>Keep open as a table tab</button><button type="button" class="danger" data-do="clear">Clear</button>`}</div>`;
+    paintTabs();
   }
 
-  /* ---------- Unpaid website and app orders ---------- */
+  /* ---------- table tabs ---------- */
+  async function loadTabs() { try { S.tabs = await api('GET', '/api/desk/tabs'); paintTabs(); } catch (e) { /* next time */ } }
+  async function saveTab() {
+    const b = S.bill;
+    if (!b.tabId) return;
+    try { await api('PUT', `/api/desk/tabs/${b.tabId}`, { title: b.tabTitle, lines: b.lines, name: b.name, pan: b.pan, phone: b.phone, note: b.note }); await loadTabs(); } catch (e) { toast(e.message, true); }
+  }
+  function openTab(id) {
+    const t = S.tabs.find((v) => v.id === id); if (!t) return;
+    const b = fresh();
+    Object.assign(b, { lines: t.lines.map((l) => ({ ...l })), name: t.name || '', pan: t.pan || '', phone: t.phone || '', note: t.note || '', table: t.title, tabId: t.id, tabTitle: t.title });
+    S.bill = b; lookPoints(); changed();
+  }
+
+  /* ---------- Pick Me points for the guest's phone ---------- */
+  async function lookPoints() {
+    const digits = (S.bill.phone || '').replace(/\D/g, '');
+    if (digits.length < 10) { if (S.pts) { S.pts = null; S.bill.usePoints = ''; } return; }
+    const phone = digits.slice(-10);
+    if (S.pts && S.pts.phone === phone) return;
+    try { const r = await api('GET', `/api/desk/points/${phone}`); S.pts = { phone, balance: r.balance, account: r.account }; if (S.tab === 'new') paintCart(); } catch (e) { /* no points shown */ }
+  }
+
+  /* ---------- website and app orders ---------- */
   const TYPE = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
-  const unpaid = () => S.orders.filter((o) => !o.paid && !o.billNo && !['cancelled'].includes(o.status));
+  const NAMES = { pending: 'New', acknowledged: 'Acknowledged', preparing: 'Preparing', ready: 'Ready', done: 'Done' };
+  const nepalDay = (iso) => new Date(new Date(iso).getTime() + 345 * 60000).toISOString().slice(0, 10);
+  const toBill = (o) => !o.paid && !o.billNo && o.status !== 'cancelled';
+  const shownOrders = () => S.orders.filter((o) => o.status !== 'cancelled' && (toBill(o) || nepalDay(o.createdAt) === nepalDay(new Date().toISOString())));
   function ordersView() {
-    const list = unpaid();
-    return `<div class="list">${list.length ? list.map((o) => `<article class="row"><header><strong>${esc(o.id)}</strong><span>${esc(o.name || 'Guest')}</span><span class="tag">${esc(TYPE[o.type] || o.type)}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><b class="num">${rs(o.total)}</b></header>
+    const list = shownOrders();
+    return `<div class="list">${list.length ? list.map((o) => `<article class="row" id="o-${esc(o.id)}"><header><strong>${esc(o.id)}</strong><span>${esc(o.name || 'Guest')}</span><span class="tag">${esc(TYPE[o.type] || o.type)}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="tag">${esc(NAMES[o.status] || o.status)}</span><span class="tag${o.paid ? '' : ' bad'}">${o.paid ? (o.billNo ? `Bill ${esc(o.billNo)}` : 'Paid') : 'Not paid'}</span><b class="num">${rs(o.total)}</b></header>
       <p class="soft">${o.lines.map((l) => `${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}`).join(', ')}</p>
-      <footer><button type="button" class="main" data-bill-order="${esc(o.id)}">Make the bill</button></footer></article>`).join('') : '<p class="box soft">No unpaid website or app orders.</p>'}</div>`;
+      <footer>${toBill(o) ? `<button type="button" class="main" data-bill-order="${esc(o.id)}">Make the bill</button>` : ''}<button type="button" data-print-order="${esc(o.id)}">Print the order</button></footer></article>`).join('') : '<p class="box soft">No website or app orders today.</p>'}</div>`;
   }
   function billOrder(id) {
     const o = S.orders.find((v) => v.id === id);
     if (!o) return;
     const b = fresh();
-    b.lines = o.lines.map((l) => ({ name: l.name + (l.extras && l.extras.length ? ` + ${l.extras.join(', ')}` : ''), label: l.label || '', price: Number(l.price), qty: Number(l.qty) }));
-    if (o.deliveryFee) b.lines.push({ name: 'Delivery charge', label: '', price: Number(o.deliveryFee), qty: 1 });
+    b.lines = o.lines.map((l) => ({ key: '', name: l.name + (l.extras && l.extras.length ? ` + ${l.extras.join(', ')}` : ''), label: l.label || '', price: Number(l.price), qty: Number(l.qty) }));
+    if (o.deliveryFee) b.lines.push({ key: '', name: 'Delivery charge', label: '', price: Number(o.deliveryFee), qty: 1 });
     const used = o.points && Number(o.points.used) > 0 ? Number(o.points.value || o.points.used) : 0;
     if (used) { b.dKind = 'amount'; b.dValue = String(used); b.dReason = 'Pick Me points'; }
-    b.name = o.name || ''; b.phone = o.phone || ''; b.table = o.tableNo || ''; b.orderId = o.id; b.orderCode = o.id;
-    S.bill = b;
+    b.name = o.name || ''; b.phone = o.phone || ''; b.table = o.tableNo || ''; b.orderId = o.id;
+    S.bill = b; S.cartOpen = true;
     show('new');
   }
 
@@ -132,33 +207,52 @@
     if (!d) return '<p class="box soft">Loading…</p>';
     const s = d.summary;
     const owner = S.me.role === 'admin';
-    return `<div class="today"><label>Day <input type="date" id="day" value="${esc(d.date)}"></label><span><b class="num">${s.count}</b> bills</span><span>Total <b class="num">${rs(s.total)}</b></span>${Object.entries(s.byPayment).map(([k, v]) => `<span>${esc(k)} <b class="num">${rs(v)}</b></span>`).join('')}${s.discount ? `<span>Discounts <b class="num">${rs(s.discount)}</b></span>` : ''}${s.cancelled ? `<span>${s.cancelled} cancelled</span>` : ''}</div>
+    return `<div class="today"><label>Day <input type="date" id="day" value="${esc(d.date)}"></label><span><b class="num">${s.count}</b> bills</span><span>Total <b class="num">${rs(s.total)}</b></span>${Object.entries(s.byPayment).map(([k, v]) => `<span>${esc(k)} <b class="num">${rs(v)}</b></span>`).join('')}${s.discount ? `<span>Discounts <b class="num">${rs(s.discount)}</b></span>` : ''}${s.cancelled ? `<span>${s.cancelled} cancelled</span>` : ''}<button type="button" data-do="day-report">Print the day's report</button></div>
       <div class="list">${d.bills.length ? d.bills.map((b) => `<article class="row${b.cancelled ? ' off' : ''}"><header><strong>${esc(b.no)}</strong><span>${timeOf(b.at)}</span><span>${esc(b.customer.name || '')}${b.customer.pan ? ` · PAN ${esc(b.customer.pan)}` : ''}</span><span class="tag">${esc(b.payment)}</span>${b.cancelled ? '<span class="tag bad">Cancelled</span>' : ''}<b class="num">${rs(b.total)}</b></header>
         <p class="soft">${b.lines.map((l) => `${l.qty} × ${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}`).join(', ')}${b.cancelled ? ` · cancelled: ${esc(b.cancelled.reason)}` : ''}</p>
         <footer><button type="button" data-open="${esc(b.id)}">See and print</button>${owner && !b.cancelled ? `<button type="button" class="danger" data-cancel="${esc(b.id)}">Cancel this bill</button>` : ''}</footer></article>`).join('') : '<p class="box soft">No bills on this day.</p>'}</div>`;
   }
-  async function loadBills(date) {
-    S.bills = await api('GET', '/api/desk/bills' + (date ? `?date=${date}` : ''));
+  async function loadBills(date) { S.bills = await api('GET', '/api/desk/bills' + (date ? `?date=${date}` : '')); }
+
+  /* ---------- Stock: things that are counted ---------- */
+  function stockView() {
+    const st = S.setup.stock || {};
+    const all = [];
+    catalogue().forEach((i) => i.prices.forEach((p) => all.push({ key: p.key, name: i.name + (p.label ? ` (${p.label})` : '') })));
+    const counted = all.filter((x) => st[x.key] !== undefined);
+    return `<div class="setup"><div class="box"><h2>Counted items</h2>
+      <p class="help">Type how many are left of things you count, like cake slices. Every bill and every website or app order takes them off. At 0 the website and the app show it as sold out by themselves. Things that are not listed here are never counted.</p>
+      ${counted.length ? `<table class="stock"><tbody>${counted.map((x) => `<tr><td>${esc(x.name)}</td><td style="width:110px"><input type="number" min="0" step="1" inputmode="numeric" data-stock="${esc(x.key)}" value="${st[x.key]}" aria-label="Left"></td><td><button type="button" class="quiet danger" data-unstock="${esc(x.key)}" aria-label="Stop counting">✕</button></td></tr>`).join('')}</tbody></table>` : '<p class="soft">Nothing is counted yet.</p>'}
+      <form id="stock-form" class="typed" style="grid-template-columns:1fr 110px auto"><select name="key" required><option value="">Count another item…</option>${all.filter((x) => st[x.key] === undefined).map((x) => `<option value="${esc(x.key)}">${esc(x.name)}</option>`).join('')}</select><input name="left" type="number" min="0" step="1" inputmode="numeric" placeholder="How many" required><button type="submit">Add</button></form>
+    </div></div>`;
   }
 
   /* ---------- Set-up (owner) ---------- */
   function setupView() {
     const s = S.setup;
     const today = BS.todayAD();
+    const show = s.show || {};
     return `<div class="setup">
       <form class="box" id="setup-form"><h2>What is printed on every bill</h2>
+        <p class="help">The logo and the cafe's name are always printed. The name, address and phone come from the website (Edit website &gt; Cafe details).</p>
         <div class="fields">
-          <label class="wide">Top line (your PAN number)<input name="header" maxlength="300" value="${esc(s.header)}"></label>
-          <label class="wide">Bottom line<input name="footer" maxlength="300" value="${esc(s.footer)}"></label>
-          <label class="wide">Ways to pay (separate with commas)<input name="payments" maxlength="200" value="${esc(s.payments.join(', '))}"></label>
+          <label class="wide">Top lines, under the cafe's name (one per line, for example your PAN number)<textarea name="header" rows="3" maxlength="400">${esc(s.header)}</textarea></label>
+          <label class="wide">Bottom lines (one per line)<textarea name="footer" rows="3" maxlength="400">${esc(s.footer)}</textarea></label>
+          <label class="check"><input type="checkbox" name="address"${show.address !== false ? ' checked' : ''}> Print the address</label>
+          <label class="check"><input type="checkbox" name="phone"${show.phone !== false ? ' checked' : ''}> Print the phone number</label>
+          <label class="check"><input type="checkbox" name="miti"${show.miti !== false ? ' checked' : ''}> Print the Nepali date (Miti)</label>
+          <span></span>
           <label>Paper width<select name="paper"><option value="80"${s.paper === 80 ? ' selected' : ''}>80 mm (your ATPOS AT 402)</option><option value="58"${s.paper === 58 ? ' selected' : ''}>58 mm</option></select></label>
+          <label>Letters per line (fewer = wider right edge)<input name="cols" type="number" min="24" max="48" step="1" value="${esc(s.cols)}"></label>
+          <label>Empty space on the left (letters)<input name="margin" type="number" min="0" max="8" step="1" value="${esc(s.margin)}"></label>
+          <label>Ways to pay (separate with commas)<input name="payments" maxlength="200" value="${esc(s.payments.join(', '))}"></label>
+          <label class="wide">Biggest discount staff may give, in % (more needs your password or your login)<input name="maxDiscount" type="number" min="0" max="100" step="any" value="${esc(s.maxDiscount)}"></label>
         </div>
-        <p class="help">The cafe's name, address and phone come from the website (Edit website &gt; Cafe details).</p>
         <h2 style="margin-top:16px">Things sold only at the counter</h2>
-        <p class="help">Website menu items are already in billing with their website prices. Add here what is not on the website: candles, party items, hookah and so on.</p>
+        <p class="help">Website menu items are already in billing with their website prices, and a price changed on the website changes here within a minute. Add here what is not on the website: candles, party items and so on.</p>
         <table id="extra"><tbody>${(s.items || []).map(rowHtml).join('')}</tbody></table>
         <p style="margin:8px 0 14px"><button type="button" data-do="add-row">Add a line</button></p>
-        <button class="main" type="submit">Save the set-up</button>
+        <div class="actions"><button class="main" type="submit">Save the set-up</button><button type="button" data-do="test-print">Print a test bill</button></div>
       </form>
       <form class="box" id="csv-form"><h2>Download bills for your accountant</h2>
         <div class="fields"><label>From<input type="date" name="from" value="${today}"></label><label>To<input type="date" name="to" value="${today}"></label></div>
@@ -166,9 +260,9 @@
       </form>
       <div class="box"><h2>Connecting the printer</h2>
         <ul class="help">
+          <li><b>Phone app (Android, iPhone):</b> staff log in, open Billing, and the app prints by Bluetooth.</li>
           <li><b>Android phone or tablet, or a computer with Bluetooth:</b> open this page in Chrome, make a bill, and choose "Print by Bluetooth". The first time, pick the printer from the list.</li>
           <li><b>Computer with the USB cable:</b> choose "Print with this device's print window" and pick the receipt printer.</li>
-          <li><b>Phone app:</b> staff log in, open Billing, and the app prints by Bluetooth.</li>
           <li><b>iPhone in Safari:</b> Safari cannot use Bluetooth printers. Use the phone app instead.</li>
         </ul>
       </div>
@@ -176,67 +270,143 @@
   }
   const rowHtml = (it) => `<tr><td><input data-c="name" maxlength="80" placeholder="Name" value="${esc(it.name || '')}"></td><td><input data-c="group" maxlength="40" placeholder="Group" value="${esc(it.group || '')}"></td><td style="width:96px"><input data-c="price" type="number" min="0" step="any" placeholder="Price" value="${esc(it.price ?? '')}"><input data-c="id" type="hidden" value="${esc(it.id || '')}"></td><td><button type="button" class="quiet danger" data-do="del-row" aria-label="Remove this line">✕</button></td></tr>`;
 
-  /* ---------- the paper bill ---------- */
+  /* ---------- what goes on the paper ----------
+   * Every paper (bill, order, day report) is a list of rows; the same rows make the on-screen copy and the
+   * printer commands, so both always say the same thing.
+   * Rows: ['logo'] ['title', text] ['c', text] ['b', text] ['rule'] ['two', left, right] ['big', left, right] ['text', text] */
   function cafe() {
     const b = (S.content && S.content.brand) || {};
     return { name: (b.name || 'Pick Me Cafe').toUpperCase(), address: b.address || '', phone: b.phone || '' };
   }
+  const lines = (s) => String(s || '').split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
   function dates(iso) {
-    const ad = new Date(new Date(iso).getTime() + 345 * 60000).toISOString().slice(0, 10);
+    const ad = nepalDay(iso);
     let bs = '';
     try { const v = BS.toBS(ad); if (v) bs = `${v.y}-${String(v.m).padStart(2, '0')}-${String(v.d).padStart(2, '0')} BS`; } catch (e) { /* no BS date */ }
     return { ad, bs, time: timeOf(iso) };
   }
-  function receiptHtml(b, copy) {
-    const c = cafe(); const d = dates(b.at);
-    const row = (l, r, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${l}</td><td class="r">${r}</td></tr>`;
-    return `<div class="rc"><img src="/img/print-logo.png" alt=""><h3>${esc(c.name)}</h3>
-      <p class="c">${esc(c.address)}${c.phone ? `<br>Phone ${esc(c.phone)}` : ''}${S.setup.header ? `<br>${esc(S.setup.header)}` : ''}</p>
-      ${b.cancelled ? '<p class="void">CANCELLED BILL</p>' : ''}<hr>
-      <table>${row('Bill no', esc(b.no))}${row('Date', `${d.ad} ${d.time}`)}${d.bs ? row('Miti', d.bs) : ''}${b.table ? row('Table', esc(b.table)) : ''}${b.customer.name ? row('Customer', esc(b.customer.name)) : ''}${b.customer.pan ? row('Customer PAN', esc(b.customer.pan)) : ''}${b.customer.phone ? row('Phone', esc(b.customer.phone)) : ''}</table><hr>
-      <table>${b.lines.map((l) => `<tr><td colspan="2">${esc(l.name)}${l.label ? ` (${esc(l.label)})` : ''}</td></tr>${row(`&nbsp;&nbsp;${l.qty} x ${l.price}`, money(l.price * l.qty).toFixed(2))}`).join('')}</table><hr>
-      <table>${row('Subtotal', b.subtotal.toFixed(2))}${b.discount.amount ? row(`Discount${b.discount.kind === 'percent' ? ` ${b.discount.value}%` : ''}`, '-' + b.discount.amount.toFixed(2)) : ''}${row('TOTAL Rs', b.total.toFixed(2), 'big')}${row('Paid by', esc(b.payment))}${b.received ? row('Received', b.received.toFixed(2)) + row('Change', b.change.toFixed(2)) : ''}</table>
-      ${b.note ? `<hr><p>${esc(b.note)}</p>` : ''}<hr><p class="c">${esc(S.setup.footer)}</p>${copy ? '<p class="c">(Copy)</p>' : ''}</div>`;
+  function head(rows) {
+    const c = cafe(); const show = S.setup.show || {};
+    rows.push(['logo'], ['title', c.name]);
+    if (show.address !== false && c.address) rows.push(['c', c.address]);
+    if (show.phone !== false && c.phone) rows.push(['c', 'Phone ' + c.phone]);
+    lines(S.setup.header).forEach((l) => rows.push(['c', l]));
   }
-  // The same bill as printer commands (ESC/POS), for Bluetooth and the RawBT app.
-  function receiptBytes(b, copy) {
-    const W = S.setup.paper === 58 ? 32 : 48;
+  function billRows(b, copy) {
+    const rows = []; const d = dates(b.at); const show = S.setup.show || {};
+    head(rows);
+    if (b.cancelled) rows.push(['b', '*** CANCELLED BILL ***']);
+    rows.push(['rule'], ['two', 'Bill no', b.no], ['two', 'Date', `${d.ad} ${d.time}`]);
+    if (show.miti !== false && d.bs) rows.push(['two', 'Miti', d.bs]);
+    if (b.table) rows.push(['two', 'Table', b.table]);
+    if (b.customer.name) rows.push(['two', 'Customer', b.customer.name]);
+    if (b.customer.pan) rows.push(['two', 'Customer PAN', b.customer.pan]);
+    if (b.customer.phone) rows.push(['two', 'Phone', b.customer.phone]);
+    rows.push(['rule']);
+    b.lines.forEach((l) => { rows.push(['text', l.name + (l.label ? ` (${l.label})` : '')], ['two', `  ${l.qty} x ${l.price}`, money(l.price * l.qty).toFixed(2)]); });
+    rows.push(['rule'], ['two', 'Subtotal', b.subtotal.toFixed(2)]);
+    if (b.discount.amount) rows.push(['two', 'Discount' + (b.discount.kind === 'percent' ? ` ${b.discount.value}%` : ''), '-' + b.discount.amount.toFixed(2)]);
+    if (b.points && b.points.used) rows.push(['two', `Points used (${b.points.used})`, '-' + Number(b.points.value).toFixed(2)]);
+    rows.push(['big', 'TOTAL Rs', b.total.toFixed(2)], ['two', 'Paid by', b.payment]);
+    if (b.received) rows.push(['two', 'Received', b.received.toFixed(2)], ['two', 'Change', b.change.toFixed(2)]);
+    if (b.points && b.points.earned) rows.push(['two', 'Pick Me points earned', String(b.points.earned)]);
+    if (b.note) rows.push(['rule'], ['text', b.note]);
+    rows.push(['rule']);
+    lines(S.setup.footer).forEach((l) => rows.push(['c', l]));
+    if (copy) rows.push(['c', '(Copy)']);
+    return rows;
+  }
+  function orderRows(o) {
+    const rows = []; const d = dates(o.createdAt);
+    head(rows);
+    rows.push(['b', 'ORDER (not a bill)'], ['rule'], ['two', 'Order', o.id], ['two', 'Date', `${d.ad} ${d.time}`], ['two', 'Type', (TYPE[o.type] || o.type) + (o.tableNo ? `, table ${o.tableNo}` : '')]);
+    if (o.name) rows.push(['two', 'Customer', o.name]);
+    if (o.phone) rows.push(['two', 'Phone', o.phone]);
+    if (o.address) rows.push(['text', 'Address: ' + o.address]);
+    rows.push(['rule']);
+    o.lines.forEach((l) => { rows.push(['text', l.name + (l.label ? ` (${l.label})` : '') + (l.extras && l.extras.length ? ` + ${l.extras.join(', ')}` : '')], ['two', `  ${l.qty} x ${l.price}`, money(l.price * l.qty).toFixed(2)]); });
+    rows.push(['rule']);
+    if (o.deliveryFee) rows.push(['two', 'Delivery', Number(o.deliveryFee).toFixed(2)]);
+    if (o.points && Number(o.points.used) > 0) rows.push(['two', 'Points used', '-' + Number(o.points.value || o.points.used).toFixed(2)]);
+    rows.push(['big', 'TOTAL Rs', Number(o.total).toFixed(2)], ['two', 'Payment', o.paid ? 'Paid' : 'Not paid yet']);
+    if (o.cakeMessage) rows.push(['text', 'On the cake: ' + o.cakeMessage]);
+    if (o.notes) rows.push(['text', 'Notes: ' + o.notes]);
+    rows.push(['rule']);
+    return rows;
+  }
+  function reportRows(d) {
+    const s = d.summary; const rows = [];
+    head(rows);
+    rows.push(['b', "DAY'S REPORT"], ['rule'], ['two', 'Day', d.date], ['two', 'Printed', `${dates(new Date().toISOString()).time}`]);
+    if (s.first) rows.push(['two', 'Bills', `${s.first} to ${s.last}`]);
+    rows.push(['two', 'Number of bills', String(s.count)], ['rule']);
+    Object.entries(s.byPayment).forEach(([k, v]) => rows.push(['two', k, Number(v).toFixed(2)]));
+    rows.push(['big', 'TOTAL Rs', Number(s.total).toFixed(2)], ['rule'], ['two', 'Discounts given', Number(s.discount).toFixed(2)]);
+    if (s.pointsUsed) rows.push(['two', 'Points used', String(s.pointsUsed)]);
+    rows.push(['two', 'Cancelled bills', `${s.cancelled} (${Number(s.cancelledTotal || 0).toFixed(2)})`], ['rule'], ['text', 'Cash counted: ____________'], ['text', ''], ['text', 'Signed: ____________'], ['rule']);
+    return rows;
+  }
+  function rowsHtml(rows) {
+    const two = (l, r, cls) => `<div class="two${cls ? ' ' + cls : ''}"><span>${esc(l)}</span><span>${esc(r)}</span></div>`;
+    return `<div class="rc">${rows.map((r) => ({
+      logo: '<img src="/img/print-logo.png" alt="">', title: `<h3>${esc(r[1])}</h3>`, c: `<p class="c">${esc(r[1])}</p>`, b: `<p class="c"><b>${esc(r[1])}</b></p>`,
+      rule: '<hr>', two: two(r[1], r[2]), big: two(r[1], r[2], 'big'), text: `<p>${esc(r[1]) || '&nbsp;'}</p>`,
+    }[r[0]])).join('')}</div>`;
+  }
+  // The logo as printer dots (black and white), made once from the website's black logo.
+  function loadLogo() {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const w = 208; const h = Math.round(img.height * w / img.width);
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+          const px = g.getImageData(0, 0, w, h).data; const wb = w / 8; const bits = new Uint8Array(wb * h);
+          for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { const i = (y * w + x) * 4; if ((px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) < 140) bits[y * wb + (x >> 3)] |= 0x80 >> (x & 7); }
+          S.logo = { wb, h, bits };
+        } catch (e) { S.logo = null; }
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = '/img/print-logo.png';
+    });
+  }
+  // The rows as printer commands (ESC/POS).
+  function rowsBytes(rows) {
+    const full = S.setup.paper === 58 ? 32 : 48;
+    const margin = Math.min(Number(S.setup.margin) || 0, 8);
+    const W = Math.max(24, Math.min(Number(S.setup.cols) || 44, full - margin));
     const out = [];
     const put = (...a) => a.forEach((v) => out.push(v));
-    const text = (s) => { for (const ch of String(s).normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/½/g, '1/2')) { const c = ch.charCodeAt(0); out.push(c >= 32 && c < 127 ? c : 63); } };
-    const line = (s) => { text(s || ''); put(10); };
-    const two = (l, r) => { l = String(l); r = String(r); const gap = W - l.length - r.length; if (gap < 1) { line(l); line(' '.repeat(Math.max(0, W - r.length)) + r); } else line(l + ' '.repeat(gap) + r); };
-    const rule = () => line('-'.repeat(W));
-    const wrap = (s) => { const words = String(s).split(/\s+/); let cur = ''; words.forEach((w) => { if ((cur + ' ' + w).trim().length > W) { line(cur); cur = w; } else cur = (cur + ' ' + w).trim(); }); if (cur) line(cur); };
-    const c = cafe(); const d = dates(b.at);
-    put(27, 64);                      // start fresh
-    put(27, 97, 1);                   // centre
-    put(27, 69, 1, 29, 33, 17); line(c.name); put(29, 33, 0, 27, 69, 0); // big bold name
-    if (c.address) wrap(c.address);
-    if (c.phone) line('Phone ' + c.phone);
-    if (S.setup.header) wrap(S.setup.header);
-    if (b.cancelled) { put(27, 69, 1); line('*** CANCELLED BILL ***'); put(27, 69, 0); }
-    put(27, 97, 0); rule();
-    two('Bill no', b.no); two('Date', `${d.ad} ${d.time}`);
-    if (d.bs) two('Miti', d.bs);
-    if (b.table) two('Table', b.table);
-    if (b.customer.name) two('Customer', b.customer.name);
-    if (b.customer.pan) two('Customer PAN', b.customer.pan);
-    if (b.customer.phone) two('Phone', b.customer.phone);
-    rule();
-    b.lines.forEach((l) => { wrap(l.name + (l.label ? ` (${l.label})` : '')); two(`  ${l.qty} x ${l.price}`, money(l.price * l.qty).toFixed(2)); });
-    rule();
-    two('Subtotal', b.subtotal.toFixed(2));
-    if (b.discount.amount) two('Discount' + (b.discount.kind === 'percent' ? ` ${b.discount.value}%` : ''), '-' + b.discount.amount.toFixed(2));
-    put(27, 69, 1, 29, 33, 1); two('TOTAL Rs', b.total.toFixed(2)); put(29, 33, 0, 27, 69, 0);
-    two('Paid by', b.payment);
-    if (b.received) { two('Received', b.received.toFixed(2)); two('Change', b.change.toFixed(2)); }
-    if (b.note) { rule(); wrap(b.note); }
-    rule(); put(27, 97, 1); wrap(S.setup.footer); if (copy) line('(Copy)');
-    put(27, 97, 0, 10, 10, 10, 10, 29, 86, 66, 0); // feed and cut
+    const text = (s) => { for (const ch of String(s).replace(/½/g, '1/2').normalize('NFKD').replace(/[̀-ͯ]/g, '')) { const c = ch.charCodeAt(0); out.push(c >= 32 && c < 127 ? c : 63); } };
+    const pad = ' '.repeat(margin);
+    const line = (s) => { text(pad + (s || '')); put(10); };
+    const centre = (s, width) => { s = String(s); const w = width || W; const gap = Math.max(0, Math.floor((w - s.length) / 2)); return ' '.repeat(gap) + s; };
+    const wrap = (s, w) => { const res = []; let cur = ''; String(s).split(/\s+/).forEach((word) => { while (word.length > w) { if (cur) { res.push(cur); cur = ''; } res.push(word.slice(0, w)); word = word.slice(w); } if ((cur + ' ' + word).trim().length > w) { res.push(cur); cur = word; } else cur = (cur + ' ' + word).trim(); }); if (cur) res.push(cur); return res.length ? res : ['']; };
+    const two = (l, r, w) => { l = String(l); r = String(r); const gap = w - l.length - r.length; if (gap < 1) { const parts = wrap(l, w); return [...parts, ' '.repeat(Math.max(0, w - r.length)) + r]; } return [l + ' '.repeat(gap) + r]; };
+    put(27, 64, 27, 97, 0);
+    rows.forEach((r) => {
+      if (r[0] === 'logo') {
+        if (!S.logo) return;
+        // Centre the picture by hand (the left margin and the line width are ours, in letters of 12 dots).
+        const shift = Math.max(0, Math.round((margin * 12 + (W * 12 - S.logo.wb * 8) / 2) / 8));
+        const wb = S.logo.wb + shift;
+        put(29, 118, 48, 0, wb & 255, wb >> 8, S.logo.h & 255, S.logo.h >> 8);
+        for (let y = 0; y < S.logo.h; y += 1) { for (let i = 0; i < shift; i += 1) out.push(0); for (let x = 0; x < S.logo.wb; x += 1) out.push(S.logo.bits[y * S.logo.wb + x]); }
+        put(10);
+      } else if (r[0] === 'title') { put(27, 69, 1, 29, 33, 17); wrap(r[1], Math.floor(W / 2)).forEach((l) => { text(' '.repeat(Math.floor(margin / 2)) + centre(l, Math.floor(W / 2))); put(10); }); put(29, 33, 0, 27, 69, 0); }
+      else if (r[0] === 'c') wrap(r[1], W).forEach((l) => line(centre(l)));
+      else if (r[0] === 'b') { put(27, 69, 1); wrap(r[1], W).forEach((l) => line(centre(l))); put(27, 69, 0); }
+      else if (r[0] === 'rule') line('-'.repeat(W));
+      else if (r[0] === 'two') two(r[1], r[2], W).forEach(line);
+      else if (r[0] === 'big') { put(27, 69, 1, 29, 33, 1); two(r[1], r[2], W).forEach(line); put(29, 33, 0, 27, 69, 0); }
+      else wrap(r[1], W).forEach(line);
+    });
+    put(10, 10, 10, 10, 29, 86, 66, 0); // feed and cut
     return new Uint8Array(out);
   }
-  const b64 = (bytes) => { let s = ''; bytes.forEach((v) => { s += String.fromCharCode(v); }); return btoa(s); };
+  const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 1) s += String.fromCharCode(bytes[i]); return btoa(s); };
 
   /* ---------- printing ---------- */
   // Bluetooth printers of this kind (ESC/POS over Bluetooth LE) use one of these services.
@@ -265,96 +435,167 @@
       await new Promise((r) => setTimeout(r, 25));
     }
   }
-  function printWindow(b, copy) {
+  function printWindow(rows) {
     document.body.classList.toggle('paper58', S.setup.paper === 58);
-    $('paper').innerHTML = receiptHtml(b, copy);
+    $('paper').innerHTML = rowsHtml(rows);
     const img = $('paper').querySelector('img');
     const go = () => window.print();
     if (img && !img.complete) { img.onload = go; img.onerror = go; } else go();
   }
-  async function print(b, how, copy) {
+  async function print(rows, how, label) {
     try {
-      if (how === 'app') { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'print', data: b64(receiptBytes(b, copy)), no: b.no })); toast('Sent to the printer.'); }
-      else if (how === 'bt') { await printBluetooth(receiptBytes(b, copy)); toast('Sent to the printer.'); }
-      else if (how === 'rawbt') { window.location.href = 'rawbt:base64,' + b64(receiptBytes(b, copy)); }
-      else printWindow(b, copy);
+      if (how === 'app') { toApp({ type: 'print', data: b64(rowsBytes(rows)), no: label || '' }); }
+      else if (how === 'bt') { await printBluetooth(rowsBytes(rows)); toast('Sent to the printer.'); }
+      else if (how === 'rawbt') { window.location.href = 'rawbt:base64,' + b64(rowsBytes(rows)); }
+      else printWindow(rows);
     } catch (e) {
       if (e && e.name === 'NotFoundError') return; // the printer list was closed
       toast(e.message || 'Could not print. Check that the printer is on and close by.', true);
     }
   }
-  function openBill(b, copy, printNow) {
-    S.open = { b, copy };
+  // Shows a paper on the screen with the ways to print it. printNow sends it straight to the printer when one is known.
+  function openPaper(rows, { label, done, printNow } = {}) {
+    S.open = { rows, label };
     const android = /Android/i.test(navigator.userAgent);
     const hasBt = Boolean(navigator.bluetooth);
-    $('sheet').innerHTML = `<div><div class="slip">${receiptHtml(b, copy)}</div><div class="btns">
+    $('sheet').innerHTML = `<div><div class="slip">${rowsHtml(rows)}</div><div class="btns">
       ${IN_APP ? '<button type="button" class="main" data-print="app">Print</button>' : ''}
       ${!IN_APP && hasBt ? '<button type="button" class="main" data-print="bt">Print by Bluetooth</button>' : ''}
       ${!IN_APP ? `<button type="button"${hasBt ? '' : ' class="main"'} data-print="win">Print with this device's print window</button>` : ''}
       ${!IN_APP && android ? '<button type="button" data-print="rawbt">Print with the RawBT printer app</button>' : ''}
-      <button type="button" data-do="close-sheet">${copy ? 'Close' : 'Done, new bill'}</button></div></div>`;
+      <button type="button" data-do="close-sheet">${done || 'Close'}</button></div></div>`;
     $('sheet').hidden = false;
-    if (printNow) print(b, IN_APP ? 'app' : (hasBt && BT.device ? 'bt' : null), copy);
+    if (printNow && (IN_APP || (hasBt && BT.device))) print(rows, IN_APP ? 'app' : 'bt', label);
+  }
+  // Asks for the owner's password (a discount above the staff limit).
+  function askOwner(message) {
+    return new Promise((resolve) => {
+      $('sheet').innerHTML = `<div><form id="owner-form" class="btns"><h2 style="font-size:1.05rem">Owner's password</h2><p class="soft">${esc(message)}</p><input name="pw" type="password" autocomplete="off" required aria-label="Owner's password"><button class="main" type="submit">Allow this discount</button><button type="button" data-do="owner-no">Cancel</button></form></div>`;
+      $('sheet').hidden = false;
+      S.ownerDone = (v) => { $('sheet').hidden = true; S.ownerDone = null; resolve(v); };
+      setTimeout(() => { const i = document.querySelector('#owner-form input'); if (i) i.focus(); }, 50);
+    });
   }
 
   /* ---------- drawing and events ---------- */
   async function show(tab) {
     S.tab = tab;
+    if (tab !== 'new') { S.cartOpen = false; document.body.classList.remove('cart-open'); }
     document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab));
     const v = $('view');
-    if (tab === 'new') { v.innerHTML = newView(); paintItems(); paintCart(); }
+    if (tab === 'new') { v.innerHTML = newView(); paintItems(); paintCart(); paintDock(); }
     else if (tab === 'orders') { v.innerHTML = ordersView(); }
     else if (tab === 'bills') { v.innerHTML = billsView(); try { await loadBills(S.bills && S.bills.date); if (S.tab === 'bills') v.innerHTML = billsView(); } catch (e) { toast(e.message, true); } }
+    else if (tab === 'stock') { v.innerHTML = stockView(); }
     else if (tab === 'setup') { v.innerHTML = setupView(); }
   }
   async function loadOrders() {
     try { S.orders = await api('GET', '/api/desk/orders'); } catch (e) { return; }
-    const n = unpaid().length;
+    const n = S.orders.filter(toBill).length;
     $('n-orders').textContent = n; $('n-orders').hidden = !n;
-    if (S.tab === 'orders') $('view').innerHTML = ordersView();
+    if (S.tab === 'orders' && $('sheet').hidden) $('view').innerHTML = ordersView();
+  }
+  // Prices, items and stock follow the website: fetched again every minute.
+  async function refresh() {
+    try {
+      const [c, s] = await Promise.all([api('GET', '/api/content'), api('GET', '/api/desk/bill-setup')]);
+      const was = JSON.stringify([S.content.menu, S.setup.items, S.setup.stock]);
+      S.content = c;
+      if (S.tab !== 'setup') S.setup = s;
+      if (S.tab === 'new' && was !== JSON.stringify([c.menu, s.items, s.stock])) paintItems();
+      if (S.tab === 'stock' && !document.activeElement.matches('input, select')) $('view').innerHTML = stockView();
+    } catch (e) { /* next minute */ }
   }
   async function saveBill(andPrint) {
     if (S.busy) return;
     const b = S.bill;
     if (b.pan && !/^\d{9}$/.test(b.pan.trim())) return toast('A PAN number has 9 digits. Check it, or leave it empty.', true);
     S.busy = true;
+    const body = {
+      ref: b.ref, lines: b.lines, discount: { kind: b.dKind, value: Number(b.dValue) || 0, reason: b.dReason },
+      customer: { name: b.name, pan: b.pan.trim(), phone: b.phone }, table: b.table, note: b.note, payment: b.payment, received: Number(b.received) || 0,
+      orderId: b.orderId, tabId: b.tabId, usePoints: Math.floor(Number(b.usePoints) || 0),
+    };
     try {
-      const saved = await api('POST', '/api/desk/bills', {
-        ref: b.ref, lines: b.lines, discount: { kind: b.dKind, value: Number(b.dValue) || 0, reason: b.dReason },
-        customer: { name: b.name, pan: b.pan.trim(), phone: b.phone }, table: b.table, note: b.note, payment: b.payment, received: Number(b.received) || 0, orderId: b.orderId,
-      });
-      S.bill = fresh();
-      paintCart();
+      let saved;
+      for (;;) {
+        try { saved = await api('POST', '/api/desk/bills', body); break; } catch (e) {
+          if (e.code !== 'owner') throw e;
+          const pw = await askOwner(e.message);
+          if (!pw) { S.busy = false; return; }
+          body.ownerPassword = pw;
+        }
+      }
+      clearTimeout(S.tabT);
+      S.bill = fresh(); S.pts = null; S.cartOpen = false;
+      changed();
       toast(`Bill ${saved.no} saved.`);
-      openBill(saved, false, andPrint);
-      loadOrders();
+      openPaper(billRows(saved, false), { label: saved.no, done: 'Done, new bill', printNow: andPrint });
+      loadOrders(); loadTabs(); refresh();
     } catch (e) { toast(e.message, true); }
     S.busy = false;
+  }
+  async function keepTab() {
+    const b = S.bill;
+    let title = (b.table || '').trim();
+    if (!title) { title = (window.prompt('Table number or a name for this tab:') || '').trim(); if (!title) return; }
+    b.tabId = 't_' + rid(); b.tabTitle = /^\d+$/.test(title) ? `Table ${title}` : title; b.table = b.table || title;
+    await saveTab();
+    S.bill = fresh(); S.pts = null; S.cartOpen = false; changed();
+    toast('Tab kept open. Tap it at the top to add more or to take the payment.');
   }
 
   document.addEventListener('click', async (e) => {
     const t = e.target.closest('button, a');
     if (!t) return;
+    buzz();
     const d = t.dataset;
     if (d.tab) return show(d.tab);
     if (d.cat) { S.cat = d.cat; S.q = ''; $('q').value = ''; document.querySelectorAll('#chips button').forEach((x) => x.classList.toggle('on', x.dataset.cat === S.cat)); return paintItems(); }
-    if (d.add) { const it = catalogue().find((i) => i.key === d.add); const p = it && it.prices[Number(d.n)]; if (p) addLine(it.name, p.label, p.price); return; }
-    if (d.qty) { const l = S.bill.lines[Number(d.i)]; if (l) { l.qty += Number(d.qty); if (l.qty < 1) S.bill.lines.splice(Number(d.i), 1); paintCart(); } return; }
-    if (d.del) { S.bill.lines.splice(Number(d.del), 1); return paintCart(); }
+    if (d.add) {
+      const it = catalogue().find((i) => i.id === d.add); const p = it && it.prices[Number(d.n)];
+      if (!p) return;
+      const have = left(p.key);
+      if (have !== null && onBill(p.key) >= have) return toast(have === 0 ? `${it.name} is sold out.` : `Only ${have} left of ${it.name}.`, true);
+      return addLine(p.key, it.name, p.label, p.price);
+    }
+    if (d.qty) {
+      const l = S.bill.lines[Number(d.i)]; if (!l) return;
+      const have = l.key ? left(l.key) : null;
+      if (Number(d.qty) > 0 && have !== null && onBill(l.key) >= have) return toast(`Only ${have} left of ${l.name}.`, true);
+      l.qty += Number(d.qty); if (l.qty < 1) S.bill.lines.splice(Number(d.i), 1);
+      return changed();
+    }
+    if (d.del) { S.bill.lines.splice(Number(d.del), 1); return changed(); }
     if (d.pay) { S.bill.payment = d.pay; return paintCart(); }
+    if (d.tabOpen) return openTab(d.tabOpen);
     if (d.billOrder) return billOrder(d.billOrder);
-    if (d.print) return print(S.open.b, d.print, S.open.copy);
-    if (d.open) { try { openBill(await api('GET', `/api/desk/bills/${d.open}`), true); } catch (err) { toast(err.message, true); } return; }
+    if (d.printOrder) { const o = S.orders.find((v) => v.id === d.printOrder); if (o) openPaper(orderRows(o), { label: o.id, printNow: true }); return; }
+    if (d.print) return print(S.open.rows, d.print, S.open.label);
+    if (d.open) { try { const b = await api('GET', `/api/desk/bills/${d.open}`); openPaper(billRows(b, true), { label: b.no }); } catch (err) { toast(err.message, true); } return; }
     if (d.cancel) {
       const reason = window.prompt('Why is this bill cancelled? It stays in the list, marked cancelled.');
       if (!reason) return;
       try { await api('POST', `/api/admin/bills/${d.cancel}/cancel`, { reason }); await show('bills'); toast('Bill cancelled.'); } catch (err) { toast(err.message, true); }
       return;
     }
+    if (d.unstock) { try { S.setup.stock = (await api('POST', '/api/desk/stock', { key: d.unstock, left: null })).stock; show('stock'); } catch (err) { toast(err.message, true); } return; }
     if (d.do === 'save-print') return saveBill(true);
     if (d.do === 'save') return saveBill(false);
-    if (d.do === 'clear') { if (!S.bill.lines.length || window.confirm('Clear this bill?')) { S.bill = fresh(); paintCart(); } return; }
+    if (d.do === 'clear') { if (!S.bill.lines.length || window.confirm('Clear this bill?')) { S.bill = fresh(); S.pts = null; changed(); } return; }
+    if (d.do === 'keep-tab') return keepTab();
+    if (d.do === 'leave-tab') { clearTimeout(S.tabT); await saveTab(); S.bill = fresh(); S.pts = null; S.cartOpen = false; return changed(); }
+    if (d.do === 'drop-tab') { if (!window.confirm(`Delete the tab "${S.bill.tabTitle}" and everything on it?`)) return; clearTimeout(S.tabT); try { await api('DELETE', `/api/desk/tabs/${S.bill.tabId}`); } catch (err) { return toast(err.message, true); } S.bill = fresh(); S.cartOpen = false; await loadTabs(); return changed(); }
+    if (d.do === 'open-cart') { S.cartOpen = true; paintDock(); window.scrollTo(0, 0); return; }
+    if (d.do === 'close-cart') { S.cartOpen = false; paintDock(); return; }
     if (d.do === 'close-sheet') { $('sheet').hidden = true; return; }
+    if (d.do === 'owner-no') { if (S.ownerDone) S.ownerDone(''); return; }
+    if (d.do === 'day-report') { if (S.bills) openPaper(reportRows(S.bills), { label: 'report' }); return; }
+    if (d.do === 'test-print') {
+      const now = new Date().toISOString();
+      return openPaper(billRows({ no: 'TEST', at: now, table: '4', customer: { name: 'Test customer', pan: '123456789', phone: '' }, lines: [{ name: 'Coconut Snow White Cheese Cake', label: 'Slice', price: 290, qty: 1 }, { name: 'Cappuccino', label: 'Large', price: 220, qty: 2 }], subtotal: 730, discount: { kind: 'percent', value: 10, amount: 73 }, total: 657, payment: 'Cash', received: 1000, change: 343, note: 'This is a test. Save the set-up first to try new settings.' }, false), { label: 'TEST' });
+    }
+    if (d.do === 'vibe') { try { localStorage.setItem('pm_vibe', vibeOn() ? 'off' : 'on'); } catch (err) { /* private mode */ } paintVibe(); buzz(); return; }
     if (d.do === 'add-row') { document.querySelector('#extra tbody').insertAdjacentHTML('beforeend', rowHtml({})); return; }
     if (d.do === 'del-row') { t.closest('tr').remove(); return; }
   });
@@ -362,15 +603,19 @@
     const t = e.target;
     if (t.id === 'q') { S.q = t.value; return paintItems(); }
     if (t.dataset.f) {
-      S.bill[t.dataset.f] = t.value;
-      // Only the totals depend on these; redraw without losing the cursor.
-      if (['dValue', 'received'].includes(t.dataset.f)) { clearTimeout(S.rt); S.rt = setTimeout(() => { const f = t.dataset.f; const pos = document.activeElement === t; paintCart(); if (pos) { const n = document.querySelector(`[data-f="${f}"]`); if (n) { n.focus(); } } }, 600); }
+      const f = t.dataset.f;
+      S.bill[f] = t.value;
+      if (S.bill.tabId) { clearTimeout(S.tabT); S.tabT = setTimeout(saveTab, 1200); }
+      if (f === 'phone') { clearTimeout(S.pt); S.pt = setTimeout(lookPoints, 500); }
+      // The totals depend on these; redraw after a pause and put the cursor back.
+      if (['dValue', 'received', 'usePoints'].includes(f)) { clearTimeout(S.rt); S.rt = setTimeout(() => { const had = document.activeElement === t; paintCart(); paintDock(); if (had) { const n = document.querySelector(`[data-f="${f}"]`); if (n) n.focus(); } }, 700); }
     }
   });
   document.addEventListener('change', async (e) => {
     const t = e.target;
-    if (t.dataset.f === 'dKind') { S.bill.dKind = t.value; paintCart(); }
+    if (t.dataset.f === 'dKind') { S.bill.dKind = t.value; paintCart(); paintDock(); }
     if (t.id === 'day' && t.value) { try { await loadBills(t.value); $('view').innerHTML = billsView(); } catch (err) { toast(err.message, true); } }
+    if (t.dataset.stock) { try { S.setup.stock = (await api('POST', '/api/desk/stock', { key: t.dataset.stock, left: t.value })).stock; toast('Saved.'); } catch (err) { toast(err.message, true); } }
   });
   document.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -378,7 +623,11 @@
     if (f.id === 'typed') {
       const price = Number(f.price.value);
       if (!f.name.value.trim() || !(price >= 0)) return;
-      addLine(f.name.value.trim(), '', money(price)); f.reset();
+      addLine('', f.name.value.trim(), '', money(price)); f.reset();
+    } else if (f.id === 'owner-form') {
+      if (S.ownerDone) S.ownerDone(f.pw.value);
+    } else if (f.id === 'stock-form') {
+      try { S.setup.stock = (await api('POST', '/api/desk/stock', { key: f.key.value, left: f.left.value })).stock; show('stock'); } catch (err) { toast(err.message, true); }
     } else if (f.id === 'gate-form') {
       try {
         await api('POST', '/api/auth/login', { username: f.username.value.trim(), password: f.password.value, remember: f.remember.checked });
@@ -387,7 +636,7 @@
     } else if (f.id === 'setup-form') {
       const items = [...document.querySelectorAll('#extra tbody tr')].map((tr) => { const g = (c) => tr.querySelector(`[data-c="${c}"]`).value; return { id: g('id'), name: g('name').trim(), group: g('group').trim(), price: Number(g('price')) }; }).filter((it) => it.name);
       try {
-        S.setup = await api('PUT', '/api/admin/bill-setup', { header: f.header.value, footer: f.footer.value, paper: Number(f.paper.value), payments: f.payments.value.split(','), items });
+        S.setup = await api('PUT', '/api/admin/bill-setup', { header: f.header.value, footer: f.footer.value, paper: Number(f.paper.value), cols: Number(f.cols.value), margin: Number(f.margin.value), maxDiscount: Number(f.maxDiscount.value), show: { address: f.address.checked, phone: f.phone.checked, miti: f.miti.checked }, payments: f.payments.value.split(','), items });
         toast('Set-up saved.'); show('setup');
       } catch (err) { toast(err.message, true); }
     } else if (f.id === 'csv-form') {
@@ -395,6 +644,7 @@
     }
   });
   $('logout').addEventListener('click', async () => { await api('POST', '/api/auth/logout').catch(() => {}); gate(''); });
+  function paintVibe() { const b = $('vibe'); if (b) b.textContent = vibeOn() ? 'Vibration: on' : 'Vibration: off'; }
 
   async function start() {
     let me;
@@ -405,11 +655,23 @@
     $('who').textContent = me.name ? `· ${me.name}` : '';
     $('to-admin').hidden = me.role !== 'admin' || IN_APP;
     $('tab-setup').hidden = me.role !== 'admin';
+    $('vibe').hidden = IN_APP || !navigator.vibrate; // the app has its own vibration setting
+    paintVibe();
     if (IN_APP) { $('to-counter').hidden = true; $('logout').hidden = true; }
     try { [S.content, S.setup] = await Promise.all([api('GET', '/api/content'), api('GET', '/api/desk/bill-setup')]); } catch (e) { return toast(e.message, true); }
-    show('new');
-    loadOrders();
-    clearInterval(S.poll); S.poll = setInterval(loadOrders, 20000);
+    loadLogo();
+    await loadOrders();
+    const m = /^#order=(.+)$/.exec(window.location.hash);
+    if (m) {
+      const id = decodeURIComponent(m[1]);
+      window.history.replaceState(null, '', window.location.pathname);
+      const o = S.orders.find((v) => v.id === id);
+      if (o && toBill(o)) billOrder(id); else { await show('orders'); if (o) openPaper(orderRows(o), { label: o.id }); }
+    } else show('new');
+    loadTabs();
+    clearInterval(S.poll); S.poll = setInterval(() => { loadOrders(); loadTabs(); }, 20000);
+    clearInterval(S.poll2); S.poll2 = setInterval(refresh, 60000);
   }
+  window.PM_BILL = { rowsBytes, billRows, loadLogo, state: S }; // for tests
   start();
 })();

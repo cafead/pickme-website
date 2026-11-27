@@ -38,7 +38,8 @@ module.exports = function delivery(x) {
       }
     } catch (e) { console.error('Push failed:', e.message); }
   }
-  const staffTokens = () => tokens.get().filter((t) => t.kind === 'staff');
+  // A staff phone gets order alerts only while its "Working at the cafe" switch is on.
+  const staffTokens = () => tokens.get().filter((t) => t.kind === 'staff' && !t.off);
   const driverTokens = (id) => tokens.get().filter((t) => t.kind === 'driver' && t.staffId === id);
   const customerTokens = (o) => tokens.get().filter((t) => t.kind === 'customer' && ((o.device && t.device === o.device) || (o.customerId && t.customerId === o.customerId)));
 
@@ -49,9 +50,18 @@ module.exports = function delivery(x) {
     const s = readSession(req);
     const c = x.readCust(req);
     const kind = s && s.role === 'driver' ? 'driver' : s ? 'staff' : 'customer';
-    const row = { token, kind, staffId: s && s.staff ? s.staff.id : (s ? 'owner' : ''), customerId: c ? c.id : '', device: /^[a-f0-9]{16,64}$/.test(req.body.device || '') ? req.body.device : '', platform: str(req.body.platform, 10), at: new Date().toISOString() };
+    const row = { token, kind, staffId: s && s.staff ? s.staff.id : (s ? 'owner' : ''), customerId: c ? c.id : '', device: /^[a-f0-9]{16,64}$/.test(req.body.device || '') ? req.body.device : '', platform: str(req.body.platform, 10), off: req.body.off === true, at: new Date().toISOString() };
     await tokens.set([row, ...tokens.get().filter((t) => !(t.token === token && t.kind === kind))].slice(0, 2000));
     res.json({ ok: true, kind });
+  });
+  app.post('/api/push/working', json, async (req, res) => {
+    const s = readSession(req);
+    if (!s) return res.sendStatus(401);
+    const token = str(req.body.token, 200);
+    const list = tokens.get();
+    const row = list.find((t) => t.token === token && t.kind !== 'customer');
+    if (row) { row.off = !req.body.on; await tokens.set(list); }
+    res.json({ ok: true, on: Boolean(req.body.on) });
   });
   app.post('/api/push/unregister', json, async (req, res) => {
     const token = str(req.body.token, 200);
