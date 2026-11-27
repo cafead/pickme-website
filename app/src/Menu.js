@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TextInput, StyleSheet, RefreshControl } from 'react-native';
+import { Pressable } from './press';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import { menuGroups, hoursOf, servedNow, hoursText, extrasFor, rs } from './logic';

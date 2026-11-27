@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { Pressable } from './press';
 import { C, SERIF, shadow } from './theme';
 import { useApp } from './store';
 import { wholeCakes, cakeOptions, cakePhoto, pounds, rs } from './logic';

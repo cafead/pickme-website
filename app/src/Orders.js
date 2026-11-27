@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Linking, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Linking, RefreshControl } from 'react-native';
+import { Pressable } from './press';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import { STATUS, BOOKING_STATUS, rs, t12, finished } from './logic';

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, BackHandler, Animated, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, BackHandler, Animated, ActivityIndicator, Image } from 'react-native';
+import { Pressable } from './src/press';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from './src/store';
@@ -61,6 +62,9 @@ function Shell() {
   const fade = useRef(new Animated.Value(0)).current;
 
   const go = useCallback((t, id) => { setTab(t); if (t === 'cake' && id) setCakeId(id); }, [setTab]);
+  // Logging in as staff opens the staff tab (also when the app starts); logging out leaves it.
+  const staffToken = staff && staff.token;
+  useEffect(() => { if (staffToken) setTab('staff'); else setTabState((cur) => (cur === 'staff' ? 'me' : cur)); }, [staffToken, setTab]);
   const say = useCallback((text) => {
     setToast(text);
     Animated.sequence([Animated.timing(fade, { toValue: 1, duration: 180, useNativeDriver: true }), Animated.delay(1600), Animated.timing(fade, { toValue: 0, duration: 250, useNativeDriver: true })]).start();
@@ -96,14 +100,10 @@ function Shell() {
     );
   }
 
-  // Cafe staff and the delivery driver get their own screens after they log in (in the Me tab).
-  if (staff && staff.token) {
-    return (
-      <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: inset.top }}>
-        {staff.role === 'driver' ? <Driver inset={inset.bottom} /> : <Staff inset={inset.bottom} />}
-      </View>
-    );
-  }
+  // Cafe staff and the delivery driver get one more tab after they log in (in the Me tab). The rest of the app
+  // stays as it is, and the staff screen keeps checking for new orders while another tab is open.
+  const isStaff = Boolean(staff && staff.token);
+  const tabList = isStaff ? [{ id: 'staff', label: staff.role === 'driver' ? 'Deliveries' : 'Counter', icon: '🔔' }, ...TABS] : TABS;
 
   const count = cart.reduce((s, l) => s + l.qty, 0);
   const total = cart.reduce((s, l) => s + l.qty * l.price, 0);
@@ -119,9 +119,10 @@ function Shell() {
         {tab === 'book' ? <Book openOrder={(id) => { setTab('orders'); setOrderId(id); }} /> : null}
         {tab === 'orders' ? <Orders go={go} openOrder={setOrderId} /> : null}
         {tab === 'me' ? <Account go={go} /> : null}
+        {isStaff ? <View style={{ flex: 1, display: tab === 'staff' ? 'flex' : 'none' }}>{staff.role === 'driver' ? <Driver inset={0} /> : <Staff inset={0} />}</View> : null}
       </View>
 
-      {count ? (
+      {count && tab !== 'staff' ? (
         <Pressable onPress={() => { setCartStep('cart'); setCartOpen(true); }} style={[st.cartBar, { bottom: 72 + Math.max(inset.bottom, 8) }]} accessibilityRole="button" accessibilityLabel={`Your order, ${count} items, ${rs(total)}`}>
           <View style={st.cartCount}><Text style={{ color: C.gold, fontWeight: '700' }}>{count}</Text></View>
           <Text style={st.cartText}>View your order</Text>
@@ -130,7 +131,7 @@ function Shell() {
       ) : null}
 
       <View style={[st.tabs, { paddingBottom: Math.max(inset.bottom, 8) }]}>
-        {TABS.map((t) => (
+        {tabList.map((t) => (
           <Pressable key={t.id} onPress={() => setTab(t.id)} style={st.tab} accessibilityRole="tab" accessibilityState={{ selected: tab === t.id }} accessibilityLabel={t.label}>
             <Text style={[st.tabIcon, tab === t.id && { opacity: 1 }]}>{t.icon}</Text>
             <Text style={[st.tabText, tab === t.id && { color: C.goldDark, fontWeight: '700' }]}>{t.label}</Text>

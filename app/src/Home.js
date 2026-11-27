@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Image, Linking, RefreshControl, useWindowDimensions, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Image, Linking, RefreshControl, useWindowDimensions, StyleSheet } from 'react-native';
+import { Pressable } from './press';
 import { C, SERIF, shadow } from './theme';
 import { useApp } from './store';
 import { eventSlides, openState, menuGroups, rs } from './logic';

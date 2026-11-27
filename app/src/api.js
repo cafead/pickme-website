@@ -90,7 +90,9 @@ export async function sendDriverLocation(token, p) {
   });
 }
 
-export const registerPush = (token, device, platform) => post('/api/push/register', { token, device, platform });
+export const registerPush = (token, device, platform, off) => post('/api/push/register', { token, device, platform, off: Boolean(off) });
+// "Working at the cafe" switch: off = this phone gets no order alerts.
+export const pushWorking = (token, on) => post('/api/push/working', { token, on: Boolean(on) });
 
 // A photo from the phone (a cake picture to copy, or a payment screenshot). Returns the stored file name.
 export async function uploadPhoto(uri, mime) {

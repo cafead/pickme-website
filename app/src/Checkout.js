@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, Image, ScrollView, useWindowDimensions } from 'react-native';
+import { Pressable } from './press';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import { placeOrder, uploadPhoto, lookup } from './api';

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Modal, ScrollView, TextInput, StyleSheet, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { Pressable } from './press';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, SERIF, shadow } from './theme';
 import { imageUrl } from './api';

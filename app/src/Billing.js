@@ -1,17 +1,19 @@
 // Billing in staff mode (version 1.0.3): the website's billing page (/bill) inside the app, with the staff login
 // handed over, and bills printed by Bluetooth on the cafe's receipt printer.
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Modal, Pressable, Platform, ActivityIndicator, Linking, StyleSheet } from 'react-native';
+import { View, Text, Modal, Platform, ActivityIndicator, Linking, StyleSheet } from 'react-native';
+import { Pressable } from './press';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BASE } from './api';
 import { C } from './theme';
 import { Button, Small, Note, Sheet } from './ui';
 import * as printer from './printer';
+import { tap } from './press';
 
 let WebView = null;
 if (Platform.OS !== 'web') WebView = require('react-native-webview').WebView; // eslint-disable-line global-require
 
-export default function Billing({ open, onClose, token }) {
+export default function Billing({ open, onClose, token, order }) {
   const inset = useSafeAreaInsets();
   const [msg, setMsg] = useState(null); // { kind, text }
   const [choose, setChoose] = useState(false);
@@ -22,7 +24,7 @@ export default function Billing({ open, onClose, token }) {
 
   useEffect(() => { if (open) printer.savedPrinter().then(setSaved); }, [open]);
   // On the web preview there is no Bluetooth: the billing page opens in the browser instead.
-  useEffect(() => { if (open && Platform.OS === 'web') { Linking.openURL(`${BASE}/bill`); onClose(); } }, [open, onClose]);
+  useEffect(() => { if (open && Platform.OS === 'web') { Linking.openURL(`${BASE}/bill${order ? `#order=${encodeURIComponent(order)}` : ''}`); onClose(); } }, [open, onClose, order]);
 
   const look = async () => {
     setFound([]); setLooking(true); setMsg(null);
@@ -47,7 +49,7 @@ export default function Billing({ open, onClose, token }) {
     setSaved(d); setChoose(false);
     if (waiting.current) send(waiting.current);
   };
-  const onMessage = (raw) => { try { const m = JSON.parse(raw); if (m.type === 'print' && typeof m.data === 'string') send(m.data); } catch (e) { /* not ours */ } };
+  const onMessage = (raw) => { try { const m = JSON.parse(raw); if (m.type === 'print' && typeof m.data === 'string') send(m.data); else if (m.type === 'tap') tap(); } catch (e) { /* not ours */ } };
 
   if (Platform.OS === 'web' || !WebView) return null;
   return (
@@ -62,7 +64,7 @@ export default function Billing({ open, onClose, token }) {
         </View>
         {msg ? <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}><Note kind={msg.kind}>{msg.text}</Note></View> : null}
         <WebView
-          source={{ uri: `${BASE}/bill` }}
+          source={{ uri: `${BASE}/bill${order ? `#order=${encodeURIComponent(order)}` : ''}` }}
           injectedJavaScriptBeforeContentLoaded={`window.PM_TOKEN = ${JSON.stringify(token || '')}; true;`}
           onMessage={(e) => onMessage(e.nativeEvent.data)}
           style={{ flex: 1, backgroundColor: C.bg }}

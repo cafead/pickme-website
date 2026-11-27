@@ -1,13 +1,13 @@
 // Staff mode: the counter screen in the app. New orders and table calls ring the phone; staff acknowledge,
 // move orders along, confirm online payments, approve points and give deliveries to the driver.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Linking, Vibration, RefreshControl, AppState, Platform, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Linking, Vibration, RefreshControl, AppState, Platform, Alert, Switch } from 'react-native';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import * as api from './api';
 import { rs, t12 } from './logic';
 import { Body, Small, Button, Chip, Card, Note } from './ui';
-import { notify } from './notify';
+import { notify, isWorking, setWorking } from './notify';
 import Billing from './Billing';
 
 const TYPE = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
@@ -23,7 +23,11 @@ const ask = (title, text, yes) => {
 export default function Staff({ inset }) {
   const { staff, setStaff } = useApp();
   const [orders, setOrders] = useState([]);
-  const [billing, setBilling] = useState(false);
+  const [billing, setBilling] = useState(null); // null = closed, '' = billing, an order id = that order's bill or slip
+  const [working, setWork] = useState(true);
+  const workRef = useRef(true);
+  useEffect(() => { isWorking().then((v) => { setWork(v); workRef.current = v; }); }, []);
+  const flipWork = (v) => { setWork(v); workRef.current = v; setWorking(v); };
   const [bookings, setBookings] = useState([]);
   const [calls, setCalls] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -40,7 +44,7 @@ export default function Staff({ inset }) {
       const ids = new Set([...o.filter((x) => x.status === 'pending').map((x) => x.id), ...c.map((x) => x.id), ...b.filter((x) => x.status === 'pending').map((x) => x.id)]);
       if (seen.current) {
         const fresh = [...ids].filter((id) => !seen.current.has(id));
-        if (fresh.length) {
+        if (fresh.length && workRef.current) {
           Vibration.vibrate([0, 500, 250, 500]);
           const call = c.find((x) => fresh.includes(x.id));
           const ord = o.find((x) => fresh.includes(x.id));
@@ -79,10 +83,17 @@ export default function Staff({ inset }) {
           <Text style={s.title}>Counter</Text>
           <Small>{staff.name || 'Staff'} · checks every 8 seconds</Small>
         </View>
-        {staff.role !== 'driver' ? <Button title="Billing" onPress={() => setBilling(true)} /> : null}
+        {staff.role !== 'driver' ? <Button title="Billing" onPress={() => setBilling('')} /> : null}
         <Button kind="line" title="Log out" onPress={logout} />
       </View>
-      <Billing open={billing} onClose={() => setBilling(false)} token={staff.token} />
+      <View style={s.work}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: '700', color: C.brown }}>Working at the cafe</Text>
+          <Small>{working ? 'On: this phone rings for new orders, also when the app is closed.' : 'Off: no order alerts on this phone.'}</Small>
+        </View>
+        <Switch value={working} onValueChange={flipWork} trackColor={{ true: C.gold }} />
+      </View>
+      <Billing open={billing !== null} order={billing || ''} onClose={() => setBilling(null)} token={staff.token} />
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40 + (inset || 0) }}
         refreshControl={<RefreshControl refreshing={busy} onRefresh={async () => { setBusy(true); await load(); setBusy(false); }} colors={[C.gold]} />}>
         {err ? <View style={{ marginBottom: 10 }}><Note kind="bad">{err}</Note></View> : null}
@@ -109,14 +120,14 @@ export default function Staff({ inset }) {
           <Chip text="Done today" on={view === 'done'} onPress={() => setView('done')} />
         </View>
         {!shown.length ? <Body style={{ textAlign: 'center', paddingVertical: 30 }}>{view === 'open' ? 'No open orders. New ones ring this phone.' : 'Nothing finished yet today.'}</Body> : null}
-        {shown.map((o) => <OrderCard key={o.id} o={o} drivers={drivers} act={act} />)}
+        {shown.map((o) => <OrderCard key={o.id} o={o} drivers={drivers} act={act} onBill={setBilling} />)}
         <Small style={{ marginTop: 12, textAlign: 'center' }}>The full counter (sold out, points look-up, slips) is on pickmecafe.com.np/counter.</Small>
       </ScrollView>
     </View>
   );
 }
 
-function OrderCard({ o, drivers, act }) {
+function OrderCard({ o, drivers, act, onBill }) {
   const online = ['esewa', 'fonepay'].includes(o.payment && o.payment.method);
   const toCheck = online && !o.paid && !['done', 'cancelled'].includes(o.status);
   const next = NEXT[o.status];
@@ -159,6 +170,7 @@ function OrderCard({ o, drivers, act }) {
       ) : null}
 
       <View style={s.row}>
+        <Button kind="line" title={o.paid ? 'Print' : 'Bill and print'} onPress={() => onBill(o.id)} />
         {o.phone ? <Button kind="soft" title="Call" onPress={() => Linking.openURL(`tel:${o.phone}`)} /> : null}
         {toCheck ? <Button title="Payment confirmed" onPress={() => act(() => api.patchOrder(o.id, o.status === 'pending' ? { paid: true, status: 'acknowledged' } : { paid: true }))} />
           : next ? <Button title={next[1]} onPress={() => act(() => api.patchOrder(o.id, { status: next[0] }))} /> : null}
@@ -170,6 +182,7 @@ function OrderCard({ o, drivers, act }) {
 }
 
 const s = StyleSheet.create({
+  work: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.card },
   top: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.card },
   title: { fontFamily: SERIF, fontSize: 24, color: C.brown },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },

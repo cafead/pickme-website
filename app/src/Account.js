@@ -1,7 +1,8 @@
 // The "Me" tab: an optional customer account (orders on every phone, points, settings, delete account), points
 // by phone number for guests, and the login for cafe staff and the delivery driver.
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Platform, Alert, Linking, BackHandler } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform, Alert, Linking, BackHandler, Switch } from 'react-native';
+import { Pressable, vibeOn, setVibe } from './press';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
@@ -25,6 +26,7 @@ export default function Account({ go }) {
       <Title style={{ marginBottom: 12 }}>{account && account.me ? `Hello${account.me.name ? `, ${account.me.name.split(' ')[0]}` : ''}` : 'Me'}</Title>
       {on ? (account && account.me ? <SignedIn refresh={refreshAccount} go={go} /> : <SignedOut />) : null}
       {!(account && account.me) && cfg && cfg.points ? <GuestPoints /> : null}
+      <VibeRow />
       <StaffLogin />
       <Text style={[s.link, { marginTop: 18, textAlign: 'center', fontWeight: '400' }]} onPress={() => Linking.openURL(`${api.BASE}/privacy`)}>Privacy policy</Text>
     </ScrollView>
@@ -279,8 +281,20 @@ function GuestPoints() {
 }
 
 // Staff and the delivery driver log in with the ID and password the owner gives them in the website admin.
+// Vibration on every tap, for the whole app (kept on this phone).
+function VibeRow() {
+  const [on, setOn] = useState(vibeOn());
+  if (Platform.OS === 'web') return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 22 }}>
+      <View style={{ flex: 1 }}><Body style={{ fontWeight: '700' }}>Vibrate on every tap</Body><Small>A short buzz so you feel that a tap was taken.</Small></View>
+      <Switch value={on} onValueChange={(v) => { setOn(v); setVibe(v); }} trackColor={{ true: C.gold }} />
+    </View>
+  );
+}
+
 function StaffLogin() {
-  const { setStaff } = useApp();
+  const { setStaff, staff } = useApp();
   const [open, setOpen] = useState(false);
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
@@ -296,6 +310,13 @@ function StaffLogin() {
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
+  if (staff && staff.token) {
+    return (
+      <View style={{ marginTop: 22 }}>
+        <Small>Logged in as cafe {staff.role === 'driver' ? 'driver' : 'staff'}{staff.name ? `: ${staff.name}` : ''}. Your {staff.role === 'driver' ? 'deliveries are' : 'counter is'} in the first tab below. You stay logged in until you log out there.</Small>
+      </View>
+    );
+  }
   if (!open) return <Pressable onPress={() => setOpen(true)} style={{ marginTop: 22 }}><Text style={[s.link, { textAlign: 'center' }]}>Cafe staff or delivery driver? Log in</Text></Pressable>;
   return (
     <Card style={{ marginTop: 18 }}>

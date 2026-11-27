@@ -5,7 +5,16 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import { registerPush } from './api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { registerPush, pushWorking } from './api';
+
+// Staff: "Working at the cafe" (kept on this phone). Off = no order alerts on this phone.
+let pushToken = '';
+export const isWorking = async () => (await AsyncStorage.getItem('pm.working').catch(() => null)) !== 'off';
+export async function setWorking(on) {
+  await AsyncStorage.setItem('pm.working', on ? 'on' : 'off').catch(() => {});
+  if (pushToken) await pushWorking(pushToken, on).catch(() => {});
+}
 
 let ready = false;
 
@@ -59,6 +68,6 @@ export async function registerForPush(device) {
     if (!perm.granted) return;
     const projectId = (Constants.expoConfig && Constants.expoConfig.extra && Constants.expoConfig.extra.eas && Constants.expoConfig.extra.eas.projectId) || (Constants.easConfig && Constants.easConfig.projectId);
     const t = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
-    if (t && t.data) await registerPush(t.data, device, Platform.OS);
+    if (t && t.data) { pushToken = t.data; await registerPush(t.data, device, Platform.OS, !(await isWorking())); }
   } catch (e) { /* push not set up yet (Apple key / Firebase), or offline */ }
 }
