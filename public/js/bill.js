@@ -463,7 +463,7 @@
       let service;
       try { service = await server.getPrimaryService(id); } catch (e) { continue; }
       const chars = await service.getCharacteristics();
-      const ch = chars.find((c) => c.properties.write) || chars.find((c) => c.properties.writeWithoutResponse);
+      const ch = chars.find((c) => c.properties.writeWithoutResponse) || chars.find((c) => c.properties.write);
       if (ch) { BT.ch = ch; return ch; }
     }
     BT.device = null;
@@ -471,11 +471,23 @@
   }
   async function printBluetooth(bytes) {
     const ch = await btChannel();
-    // Writes that the printer confirms are safest; without them, go slowly so nothing is dropped.
-    const sure = ch.properties.write;
+    // Small pieces with pauses, so the printer drops nothing; a piece that fails is tried again.
+    let fast = ch.properties.writeWithoutResponse;
+    let sent = 0;
     for (let i = 0; i < bytes.length; i += 100) {
       const part = bytes.slice(i, i + 100);
-      if (sure) await ch.writeValueWithResponse(part); else { await ch.writeValueWithoutResponse(part); await new Promise((r) => setTimeout(r, 40)); }
+      let ok = false; let last = null;
+      for (let attempt = 0; attempt < 6 && !ok; attempt += 1) {
+        try { if (fast) await ch.writeValueWithoutResponse(part); else await ch.writeValueWithResponse(part); ok = true; } catch (e) {
+          last = e;
+          if (attempt === 3 && ch.properties.write && ch.properties.writeWithoutResponse) fast = !fast;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+      if (!ok) { BT.ch = null; throw new Error(`The printer stopped part way. Switch it off and on, then print again. (${String((last && last.message) || '').slice(0, 100)})`); }
+      sent += 100;
+      await new Promise((r) => setTimeout(r, fast ? 35 : 5));
+      if (sent >= 1000) { sent = 0; await new Promise((r) => setTimeout(r, 150)); }
     }
   }
   function printWindow(rows) {

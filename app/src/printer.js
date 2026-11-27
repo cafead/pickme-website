@@ -59,39 +59,75 @@ export const stopScan = () => { try { if (manager) manager.stopDeviceScan(); } c
 const bytesOf = (b64) => { const s = global.atob(b64); const out = new Array(s.length); for (let i = 0; i < s.length; i += 1) out[i] = s.charCodeAt(i); return out; };
 const toB64 = (arr) => global.btoa(String.fromCharCode(...arr));
 
-// Sends a bill (base64 printer commands) to the remembered printer.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const why = (e) => String((e && (e.reason || e.message)) || 'unknown').slice(0, 120);
+
+// Connects afresh. A connection left over from the last print (or one that is still closing) makes the next
+// connect fail, so it is closed first; then up to three tries.
+async function connect(m, id) {
+  try { if (await m.isDeviceConnected(id)) { await m.cancelDeviceConnection(id); await sleep(400); } } catch (e) { /* was not connected */ }
+  let last = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const d = await m.connectToDevice(id, attempt === 0 ? { requestMTU: 185, timeout: 8000 } : { timeout: 8000 });
+      await d.discoverAllServicesAndCharacteristics();
+      return d;
+    } catch (e) {
+      last = e;
+      try { await m.cancelDeviceConnection(id); } catch (err) { /* nothing to close */ }
+      await sleep(700);
+    }
+  }
+  throw last || new Error('no connection');
+}
+
+let printing = false;
+// Sends a bill (base64 printer commands) to the remembered printer. One print at a time: a second tap while
+// the first is still going would break both.
 export async function print(b64) {
   const p = await savedPrinter();
   if (!p) { const e = new Error('Choose the printer first.'); e.choose = true; throw e; }
-  const m = await ready();
-  let d;
+  if (printing) throw new Error('Still printing. Wait for the paper to finish, then print again.');
+  printing = true;
   try {
-    d = await m.connectToDevice(p.id, { requestMTU: 185, timeout: 10000 });
-    await d.discoverAllServicesAndCharacteristics();
-  } catch (e) {
-    throw new Error(`Could not reach ${p.name}. Check that the printer is on and close to this phone.`);
-  }
-  try {
-    let ch = null;
-    for (const sv of await d.services()) {
-      const cs = await sv.characteristics();
-      ch = cs.find((c) => c.isWritableWithResponse) || cs.find((c) => c.isWritableWithoutResponse);
-      // Skip the phone-standard services (device name and so on); printers use their own.
-      if (ch && !/^0000180[01a]-/.test(sv.uuid)) break;
-      ch = null;
+    const m = await ready();
+    let d;
+    try { d = await connect(m, p.id); } catch (e) {
+      throw new Error(`Could not reach ${p.name}. Check that the printer is on and close to this phone, and that no other phone is printing. (${why(e)})`);
     }
-    if (!ch) { const e = new Error(`${p.name} is not a receipt printer. Choose the printer again.`); e.choose = true; throw e; }
-    // Writes that the printer confirms are safest. Without them, go slowly in small pieces: sent too fast, the
-    // printer drops bytes and prints rubbish in place of the logo (seen on 27 Nov 2026).
-    const sure = ch.isWritableWithResponse;
-    const size = Math.max(20, Math.min(sure ? 180 : 100, (d.mtu || 23) - 3));
-    const all = bytesOf(b64);
-    for (let i = 0; i < all.length; i += size) {
-      const part = toB64(all.slice(i, i + size));
-      if (sure) await ch.writeWithResponse(part); else { await ch.writeWithoutResponse(part); await new Promise((r) => setTimeout(r, 45)); }
+    try {
+      let ch = null;
+      for (const sv of await d.services()) {
+        if (/^0000180[01a]-/.test(sv.uuid)) continue; // the phone-standard services (device name and so on)
+        const cs = await sv.characteristics();
+        ch = cs.find((c) => c.isWritableWithoutResponse) || cs.find((c) => c.isWritableWithResponse);
+        if (ch) break;
+      }
+      if (!ch) { const e = new Error(`${p.name} is not a receipt printer. Choose the printer again.`); e.choose = true; throw e; }
+      // Small pieces with pauses: sent faster, the printer drops bytes (the logo printed as rubbish on 27 Nov 2026).
+      // A piece that fails is tried again; it is not a reason to stop the bill.
+      const size = Math.max(20, Math.min(100, (d.mtu || 23) - 3));
+      const all = bytesOf(b64);
+      let fast = ch.isWritableWithoutResponse;
+      let sent = 0;
+      for (let i = 0; i < all.length; i += size) {
+        const part = toB64(all.slice(i, i + size));
+        let ok = false; let last = null;
+        for (let attempt = 0; attempt < 6 && !ok; attempt += 1) {
+          try { if (fast) await ch.writeWithoutResponse(part); else await ch.writeWithResponse(part); ok = true; } catch (e) {
+            last = e;
+            if (attempt === 3 && ch.isWritableWithResponse && ch.isWritableWithoutResponse) fast = !fast; // try the other way of writing
+            await sleep(200);
+          }
+        }
+        if (!ok) throw new Error(`The printer stopped part way. Switch the printer off and on, then print again. (${why(last)})`);
+        sent += size;
+        await sleep(fast ? 35 : 5);
+        if (sent >= 1000) { sent = 0; await sleep(150); } // let the printer print what it has
+      }
+      await sleep(800);
+    } finally {
+      try { await m.cancelDeviceConnection(p.id); } catch (e) { /* already closed */ }
     }
-    await new Promise((r) => setTimeout(r, 400));
-  } finally {
-    m.cancelDeviceConnection(p.id).catch(() => {});
-  }
+  } finally { printing = false; }
 }
