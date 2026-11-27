@@ -5,6 +5,18 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY = 'pm.printer';
+
+// Android prints over classic Bluetooth (the same way as Loyverse and RawBT): this printer drops parts of the
+// logo over Bluetooth Low Energy. The small native module is in app/modules/classic-printer. iPhones can only use
+// Bluetooth Low Energy, so they keep the slow, careful sending further down.
+let Classic = null;
+if (Platform.OS === 'android') { try { Classic = require('expo').requireNativeModule('PmClassicPrinter'); } catch (e) { Classic = null; } } // eslint-disable-line global-require
+export const usesPairedList = () => Boolean(Classic);
+async function allowClassic() {
+  if (Platform.Version < 31) return;
+  const p = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
+  if ((await PermissionsAndroid.request(p)) !== PermissionsAndroid.RESULTS.GRANTED) throw new Error('Allow "Nearby devices" (Bluetooth) for Pick Me Cafe in the phone settings, then print again.');
+}
 let manager = null;
 function ble() {
   if (Platform.OS === 'web') throw new Error('Printing by Bluetooth works in the phone app, not in the web preview.');
@@ -39,10 +51,17 @@ async function ready() {
 
 export const savedPrinter = async () => { try { return JSON.parse(await AsyncStorage.getItem(KEY)); } catch (e) { return null; } };
 export const forgetPrinter = () => AsyncStorage.removeItem(KEY).catch(() => {});
-export const choosePrinter = (p) => AsyncStorage.setItem(KEY, JSON.stringify({ id: p.id, name: p.name })).catch(() => {});
+export const choosePrinter = (p) => AsyncStorage.setItem(KEY, JSON.stringify({ id: p.id, name: p.name, kind: Classic ? 'classic' : 'ble' })).catch(() => {});
 
 // Looks for Bluetooth devices close by for a few seconds. onFound gets each named device once.
 export async function scan(onFound, ms = 8000) {
+  if (Classic) { // Android: the printers paired in the phone's Bluetooth settings
+    await allowClassic();
+    let list;
+    try { list = await Classic.paired(); } catch (e) { throw new Error(e.message || 'Could not read the paired Bluetooth devices.'); }
+    list.forEach((d) => onFound({ id: d.id, name: d.name }));
+    return;
+  }
   const m = await ready();
   const seen = new Set();
   return new Promise((resolve, reject) => {
@@ -88,8 +107,17 @@ export async function print(b64) {
   const p = await savedPrinter();
   if (!p) { const e = new Error('Choose the printer first.'); e.choose = true; throw e; }
   if (printing) throw new Error('Still printing. Wait for the paper to finish, then print again.');
+  if (Classic && p.kind !== 'classic') { const e = new Error('Choose the printer again.'); e.choose = true; throw e; }
   printing = true;
   try {
+    if (Classic) {
+      await allowClassic();
+      try { await Classic.print(p.id, b64); } catch (e) {
+        if (/Nearby devices|Bluetooth on/.test(e.message || '')) throw new Error(e.message);
+        throw new Error(`Could not reach ${p.name}. Check that the printer is on, close to this phone, and not printing for another phone. (${why(e)})`);
+      }
+      return;
+    }
     const m = await ready();
     let d;
     try { d = await connect(m, p.id); } catch (e) {

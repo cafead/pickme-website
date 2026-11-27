@@ -268,8 +268,9 @@
       </form>
       <div class="box"><h2>Connecting the printer</h2>
         <ul class="help">
-          <li><b>Phone app (Android, iPhone):</b> staff log in, open Billing, and the app prints by Bluetooth.</li>
-          <li><b>Android phone or tablet, or a computer with Bluetooth:</b> open this page in Chrome, make a bill, and choose "Print by Bluetooth". The first time, pick the printer from the list.</li>
+          <li><b>Phone app (Android, iPhone):</b> staff log in, open Billing, and the app prints by Bluetooth. On Android, pair the printer in the phone's Bluetooth settings first.</li>
+          <li><b>Android phone or tablet in Chrome:</b> install the free "RawBT print service" app, choose the printer in it once, then use "Print (with the RawBT printer app)" here. It prints the logo reliably. "Print by Bluetooth" also works but can break on the logo.</li>
+          <li><b>Computer with Bluetooth:</b> open this page in Chrome and choose "Print by Bluetooth".</li>
           <li><b>Computer with the USB cable:</b> choose "Print with this device's print window" and pick the receipt printer.</li>
           <li><b>iPhone in Safari:</b> Safari cannot use Bluetooth printers. Use the phone app instead.</li>
         </ul>
@@ -515,9 +516,9 @@
     const hasBt = Boolean(navigator.bluetooth);
     $('sheet').innerHTML = `<div><div class="slip">${rowsHtml(rows)}</div><div class="btns">
       ${IN_APP ? '<button type="button" class="main" data-print="app">Print</button>' : ''}
-      ${!IN_APP && hasBt ? '<button type="button" class="main" data-print="bt">Print by Bluetooth</button>' : ''}
-      ${!IN_APP ? `<button type="button"${hasBt ? '' : ' class="main"'} data-print="win">Print with this device's print window</button>` : ''}
-      ${!IN_APP && android ? '<button type="button" data-print="rawbt">Print with the RawBT printer app</button>' : ''}
+      ${!IN_APP && android ? '<button type="button" class="main" data-print="rawbt">Print (with the RawBT printer app)</button>' : ''}
+      ${!IN_APP && hasBt ? `<button type="button"${android ? '' : ' class="main"'} data-print="bt">Print by Bluetooth${android ? ' (the logo can fail)' : ''}</button>` : ''}
+      ${!IN_APP ? `<button type="button"${hasBt || android ? '' : ' class="main"'} data-print="win">Print with this device's print window</button>` : ''}
       <button type="button" data-do="close-sheet">${done || 'Close'}</button></div></div>`;
     $('sheet').hidden = false;
     if (printNow && (IN_APP || (hasBt && BT.device))) print(rows, IN_APP ? 'app' : 'bt', label);

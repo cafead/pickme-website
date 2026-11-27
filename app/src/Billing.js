@@ -76,11 +76,11 @@ export default function Billing({ open, onClose, token, order }) {
         <View style={{ height: inset.bottom }} />
       </View>
       <Sheet open={choose} onClose={() => { printer.stopScan(); setChoose(false); }} title="Choose the printer">
-        <Small>Switch the printer on and stand close to it. It usually shows as a name like "Printer", "BlueTooth Printer" or "AT-402".</Small>
+        <Small>{printer.usesPairedList() ? 'These are the devices paired with this phone. If the printer is not here, switch it on, pair it in the phone\'s Bluetooth settings (Settings > Bluetooth), then tap "Look again".' : 'Switch the printer on and stand close to it. It usually shows as a name like "Printer", "BlueTooth Printer" or "AT-402".'}</Small>
         <View style={{ height: 10 }} />
         {found.map((d) => <View key={d.id} style={{ marginBottom: 8 }}><Button kind="line" title={d.name} onPress={() => pick(d)} /></View>)}
         {looking ? <ActivityIndicator color={C.gold} style={{ marginVertical: 12 }} /> : <Button title={found.length ? 'Look again' : 'Look for printers'} onPress={look} />}
-        {!looking && !found.length ? <View style={{ marginTop: 10 }}><Small>No Bluetooth device found yet. Check that Bluetooth is on and the printer is not connected to another phone.</Small></View> : null}
+        {!looking && !found.length ? <View style={{ marginTop: 10 }}><Small>{printer.usesPairedList() ? 'No paired Bluetooth device yet. Pair the printer in the phone\'s Bluetooth settings first.' : 'No Bluetooth device found yet. Check that Bluetooth is on and the printer is not connected to another phone.'}</Small></View> : null}
         {msg && msg.kind === 'bad' ? <View style={{ marginTop: 10 }}><Note kind="bad">{msg.text}</Note></View> : null}
       </Sheet>
     </Modal>
