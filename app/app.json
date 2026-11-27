@@ -24,7 +24,8 @@
               "com.googleusercontent.apps.869345460609-8hf0t5vcv1ijshkqf8juo06tal6pfi83"
             ]
           }
-        ]
+        ],
+        "NSBluetoothAlwaysUsageDescription": "Pick Me Cafe staff print bills on the cafe's Bluetooth receipt printer."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -95,7 +96,15 @@
       ],
       "expo-apple-authentication",
       "expo-web-browser",
-      "expo-updates"
+      "expo-updates",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Pick Me Cafe staff print bills on the cafe's Bluetooth receipt printer."
+        }
+      ]
     ],
     "owner": "pick-me-cafe",
     "extra": {

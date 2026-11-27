@@ -1,7 +1,7 @@
 // Store builds (EAS) are version 1.0.2; their build numbers are counted by EAS ("appVersionSource": "remote").
 // The test APKs built on GitHub get 1.0.<build>, so a new APK installs over the old one.
 // Over-the-air updates (EAS Update) go to phones with the same version (runtimeVersion "appVersion").
-const STORE_VERSION = '1.0.2';
+const STORE_VERSION = '1.0.3';
 const fs = require('fs');
 const path = require('path');
 // Android push (Firebase project pick-me-cafe): app/google-services.json. Its API key is not a secret (it is inside

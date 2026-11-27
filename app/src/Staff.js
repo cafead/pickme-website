@@ -8,6 +8,7 @@ import * as api from './api';
 import { rs, t12 } from './logic';
 import { Body, Small, Button, Chip, Card, Note } from './ui';
 import { notify } from './notify';
+import Billing from './Billing';
 
 const TYPE = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
 const NEXT = { pending: ['acknowledged', 'Acknowledge'], acknowledged: ['preparing', 'Preparing'], preparing: ['ready', 'Ready'], ready: ['done', 'Done'] };
@@ -22,6 +23,7 @@ const ask = (title, text, yes) => {
 export default function Staff({ inset }) {
   const { staff, setStaff } = useApp();
   const [orders, setOrders] = useState([]);
+  const [billing, setBilling] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [calls, setCalls] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -77,8 +79,10 @@ export default function Staff({ inset }) {
           <Text style={s.title}>Counter</Text>
           <Small>{staff.name || 'Staff'} · checks every 8 seconds</Small>
         </View>
+        {staff.role !== 'driver' ? <Button title="Billing" onPress={() => setBilling(true)} /> : null}
         <Button kind="line" title="Log out" onPress={logout} />
       </View>
+      <Billing open={billing} onClose={() => setBilling(false)} token={staff.token} />
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40 + (inset || 0) }}
         refreshControl={<RefreshControl refreshing={busy} onRefresh={async () => { setBusy(true); await load(); setBusy(false); }} colors={[C.gold]} />}>
         {err ? <View style={{ marginBottom: 10 }}><Note kind="bad">{err}</Note></View> : null}
