@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Billing | Pick Me Cafe</title>
+<link rel="icon" href="/img/logo.png">
+<link rel="stylesheet" href="/css/bill.css">
+</head>
+<body>
+<div id="gate" hidden>
+  <form id="gate-form">
+    <h2>Billing</h2>
+    <p class="soft">Log in with your staff login. The owner leaves the login ID empty.</p>
+    <label>Login ID<input name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40"></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <label class="check"><input type="checkbox" name="remember" checked> Keep me logged in on this device</label>
+    <p id="gate-msg" role="alert"></p>
+    <button class="main" type="submit">Log in</button>
+  </form>
+</div>
+
+<header class="bar">
+  <h1>Billing <small id="who"></small></h1>
+  <span class="right">
+    <a class="btn" id="to-admin" href="/admin" hidden>Dashboard</a>
+    <a class="btn" id="to-counter" href="/counter">Orders</a>
+    <button type="button" id="logout">Log out</button>
+  </span>
+</header>
+
+<main class="wrap">
+  <nav class="tabs" id="tabs" aria-label="Billing sections">
+    <button type="button" data-tab="new" class="on">New bill</button>
+    <button type="button" data-tab="orders">Unpaid orders <span class="count" id="n-orders" hidden>0</span></button>
+    <button type="button" data-tab="bills">Bills</button>
+    <button type="button" data-tab="setup" id="tab-setup" hidden>Set-up</button>
+  </nav>
+  <section id="view"></section>
+</main>
+
+<div id="sheet" class="sheet" hidden></div>
+<div id="toast" class="toast" role="status"></div>
+<div id="paper" aria-hidden="true"></div>
+
+<script src="/js/bs.js"></script>
+<script src="/js/bill.js"></script>
+</body>
+</html>

@@ -1175,8 +1175,8 @@
     A.orders = o; A.bookings = b; A.reviews = r; A.messages = m;
     const count = { orders: o.filter((x) => x.status === 'pending').length, bookings: b.filter((x) => x.status === 'pending').length, reviews: r.filter((x) => !x.approved).length, messages: m.filter((x) => !x.read).length };
     for (const [k, n] of Object.entries(count)) {
-      const el = document.querySelector(`[data-count="${k}"]`);
-      if (el) { el.textContent = n; el.hidden = !n; }
+      A.counts = count;
+      document.querySelectorAll(`[data-count="${k}"]`).forEach((el) => { el.textContent = n; el.hidden = !n; });
     }
   }
   async function loadDay() {
@@ -1197,10 +1197,49 @@
   async function loadHistory() {
     [A.history, A.bin, A.log, A.auto] = await Promise.all([api('GET', '/api/admin/history'), api('GET', '/api/admin/bin'), api('GET', '/api/admin/audit'), api('GET', '/api/admin/auto-backups').catch(() => null)]);
   }
+  /* The dashboard (version 13): the admin opens on tiles; each tile opens one function on its own. */
+  const TILES = [
+    ['orders', '🧾', 'Orders', 'New and past orders, payments to check'],
+    ['/bill', '🖨️', 'Billing', 'Make a bill, discount, customer PAN, print'],
+    ['/counter', '🔔', 'Counter screen', 'The staff screen: live orders with sound'],
+    ['bookings', '📅', 'Bookings', 'Table bookings: confirm, seat, decline'],
+    ['edit', '🌐', 'Edit website', 'Menu and prices, photos, events, texts'],
+    ['/admin/print-menu', '📄', 'Print menu', 'The paper menu, one A4 page'],
+    ['customers', '⭐', 'Customers and points', 'Accounts, Pick Me points'],
+    ['sales', '📊', 'Sales', 'Totals, best sellers, busiest hours'],
+    ['reviews', '💬', 'Reviews', 'Approve or hide guest reviews'],
+    ['messages', '✉️', 'Messages', 'Messages sent from the website'],
+    ['tables', '🔳', 'Table QR codes', 'Print a QR code for every table'],
+  ];
+  const OWNER_TILES = [
+    ['security', '👥', 'Staff and security', 'Staff logins, drivers, your password'],
+    ['history', '🗂️', 'History and backup', 'Older versions, backups, activity log'],
+  ];
+  const TITLE = Object.fromEntries(TILES.concat(OWNER_TILES).map((t) => [t[0], t[2]]));
+  function homeView() {
+    const hour = Number(new Date().toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kathmandu' }));
+    const tile = ([view, icon, title, text]) => {
+      const inner = [h('span', { class: 'pk-tile-icon', 'aria-hidden': 'true' }, icon), h('strong', {}, title, !view.startsWith('/') && A.counts && A.counts[view] !== undefined && h('span', { class: 'pk-count', 'data-count': view, hidden: !A.counts[view] }, String(A.counts[view] || 0))), h('span', { class: 'pk-tile-text' }, text)];
+      return view.startsWith('/') ? h('a', { class: 'pk-tile', href: view }, ...inner) : h('button', { type: 'button', class: 'pk-tile', onclick: () => { const b = document.querySelector(`.pk-tabs [data-view="${view}"]`); if (b) b.click(); } }, ...inner);
+    };
+    return h('div', { class: 'pk-home' },
+      h('h1', {}, hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'),
+      h('p', { class: 'pk-home-date' }, `${BS.label(BS.todayAD())} · You see everything. Staff see only orders and billing.`),
+      h('div', { class: 'pk-tiles' }, ...TILES.map(tile)),
+      h('h2', { class: 'pk-home-sub' }, 'Owner only'),
+      h('div', { class: 'pk-tiles' }, ...OWNER_TILES.map(tile)));
+  }
   function show(view, force) {
     A.view = view;
     document.querySelectorAll('.pk-tabs button').forEach((b) => b.classList.toggle('is-on', b.dataset.view === view));
     const body = document.getElementById('pk-body');
+    const top = document.querySelector('.pk-top');
+    if (top) {
+      top.dataset.at = view === 'home' ? 'home' : view === 'edit' ? 'edit' : 'page';
+      const t = document.getElementById('pk-where');
+      if (t) t.textContent = view === 'home' ? 'Pick Me Cafe admin' : (TITLE[view] || '');
+    }
+    if (view === 'home') { body.replaceChildren(homeView()); window.scrollTo(0, 0); return; }
     if (view === 'edit') { if (!body.querySelector('.pk-split')) body.replaceChildren(editView()); return; }
     const busy = !force && body.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
     if (!busy || !body.querySelector('.pk-page')) body.replaceChildren(listView(view));
@@ -1223,13 +1262,18 @@
     } }, label, !/edit|security|history|tables|customers|sales/.test(view) && h('span', { class: 'pk-count', 'data-count': view, hidden: true }, '0'));
     root.replaceChildren(
       h('header', { class: 'pk-top' },
-        h('strong', { class: 'pk-name' }, 'Pick Me Cafe admin'),
-        h('nav', { class: 'pk-tabs', 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('customers', 'Customers and points'), tab('sales', 'Sales'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
+        h('button', { type: 'button', class: 'pk-btn pk-btn--quiet pk-back', onclick: () => {
+          if (A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) return;
+          if (A.view === 'edit' && status()) { A.content = JSON.parse(A.saved); A.note = ''; status(); }
+          show('home');
+        } }, '‹ Dashboard'),
+        h('strong', { class: 'pk-name', id: 'pk-where' }, 'Pick Me Cafe admin'),
+        h('nav', { class: 'pk-tabs', hidden: true, 'aria-label': 'Admin sections' }, tab('edit', 'Edit website'), tab('orders', 'Orders'), tab('bookings', 'Bookings'), tab('reviews', 'Reviews'), tab('messages', 'Messages'), tab('customers', 'Customers and points'), tab('sales', 'Sales'), tab('tables', 'Table QR'), tab('history', 'History and backup'), tab('security', 'Security'),
           h('a', { class: 'pk-tablink', href: '/admin/print-menu', onclick: (e) => { if (A.view === 'edit' && status() && !window.confirm('You have unsaved changes to the website. Leave the editor anyway? They are lost if you leave.')) e.preventDefault(); } }, 'Print menu')),
         h('span', { class: 'pk-right' },
-          h('span', { id: 'pk-status', class: 'pk-status' }, 'All changes saved'),
-          h('button', { type: 'button', id: 'pk-save', class: 'pk-btn pk-btn--main', disabled: true, onclick: save }, 'Save'),
-          h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: discard }, 'Undo changes'),
+          h('span', { id: 'pk-status', class: 'pk-status pk-only-edit' }, 'All changes saved'),
+          h('button', { type: 'button', id: 'pk-save', class: 'pk-btn pk-btn--main pk-only-edit', disabled: true, onclick: save }, 'Save'),
+          h('button', { type: 'button', class: 'pk-btn pk-btn--quiet pk-only-edit', onclick: discard }, 'Undo changes'),
           h('a', { class: 'pk-btn pk-btn--quiet', href: '/', target: '_blank', rel: 'noopener' }, 'Open site'),
           h('button', { type: 'button', class: 'pk-btn pk-btn--quiet', onclick: async () => { await api('POST', '/api/auth/logout'); login(); } }, 'Log out'))),
       h('div', { id: 'pk-remind', class: 'pk-reminders' }),
@@ -1430,13 +1474,13 @@
     A.content = await fetch('/api/content').then((r) => r.json());
     A.saved = JSON.stringify(A.content);
     shell();
-    show('edit');
+    show(location.hash === '#edit' ? 'edit' : 'home');
     drawReminders();
     loadLists().catch(() => {});
     api('GET', '/api/admin/seed').then((r) => { if (r.file) { A.seed = r; drawReminders(); } }).catch(() => {});
     clearInterval(A.poll);
     A.poll = setInterval(async () => {
-      try { await loadLists(); if (A.view === 'orders') await loadDay(); if (!/edit|security|history|tables/.test(A.view)) show(A.view); } catch (e) { /* shown at next action */ }
+      try { await loadLists(); if (A.view === 'orders') await loadDay(); if (!/home|edit|security|history|tables/.test(A.view)) show(A.view); } catch (e) { /* shown at next action */ }
     }, 30000);
   }
   boot();

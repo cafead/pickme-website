@@ -566,6 +566,9 @@ const COUNTER_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'counter.ht
 app.get(['/counter', '/counter/', '/counter.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(COUNTER_PAGE); });
 // The delivery driver's page (version 12): his deliveries, steps, and live location while the page is open.
 const DRIVER_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'driver.html'), 'utf8'));
+// Billing at the counter (version 13): make, print and look up bills.
+const BILL_PAGE = stamp(fs.readFileSync(path.join(ROOT, 'public', 'bill.html'), 'utf8'));
+app.get(['/bill', '/bill/', '/bill.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.set('X-Robots-Tag', 'noindex, nofollow'); res.type('html').send(BILL_PAGE); });
 app.get(['/driver', '/driver/', '/driver.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.set('X-Robots-Tag', 'noindex, nofollow'); res.type('html').send(DRIVER_PAGE); });
 // Map pages shown inside the phone app (version 12): choose the delivery spot, and follow the driver.
 const MAP_PAGES = { pick: stamp(fs.readFileSync(path.join(ROOT, 'public', 'm-pick.html'), 'utf8')), track: stamp(fs.readFileSync(path.join(ROOT, 'public', 'm-track.html'), 'utf8')) };
@@ -751,7 +754,7 @@ for (const [key, pg] of Object.entries(PAGES)) {
   });
 }
 app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /counter\nDisallow: /driver\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /counter\nDisallow: /driver\nDisallow: /bill\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
 });
 app.get('/sitemap.xml', (req, res) => {
   const base = siteBase(req);
@@ -1414,6 +1417,8 @@ DELIV = require('./delivery')({
   readCust: (req) => CUST.readCust(req),
   onStatusChange: (o, before, by) => CUST.onStatus(o, before, by),
 });
+// Version 13: bills made at the counter (server/billing.js).
+const BILLS = require('./billing')({ app, Store, json, str, bad, content, orders, audit, desk, admin, who, NP_OFFSET });
 function makeBackup(full) {
   const zip = new AdmZip();
   zip.addFile('manifest.json', Buffer.from(JSON.stringify({ kind: BACKUP_KIND, format: 1, createdAt: new Date().toISOString(), full: Boolean(full), cafe: content.get().brand.name }, null, 1)));
@@ -1423,6 +1428,7 @@ function makeBackup(full) {
     for (const [name, store] of Object.entries({ orders, bookings, reviews, messages })) zip.addFile(`${name}.json`, Buffer.from(JSON.stringify(store.get(), null, 1)));
     for (const f of fs.readdirSync(PROOFS)) if (PROOF_NAME.test(f)) zip.addLocalFile(path.join(PROOFS, f), 'proofs/');
     CUST.addToBackup(zip);
+    BILLS.addToBackup(zip);
   }
   return zip.toBuffer();
 }
@@ -1459,6 +1465,7 @@ async function restoreBackup(buf, by) {
     }
   }
   Object.assign(out, await CUST.restoreFromBackup((n) => { try { return read(n); } catch { return null; } }));
+  Object.assign(out, await BILLS.restoreFromBackup((n) => { try { return read(n); } catch { return null; } }));
   const saved = read('content.json');
   if (saved && saved.brand && saved.menu) {
     delete saved.soldOut;
