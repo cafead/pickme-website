@@ -349,6 +349,14 @@ module.exports = {
     googleButton: 'Review us on Google',
     rating: '',
     count: '',
+    // Google reviews shown as cards (27 Nov 2026), copied word for word from the cafe's Google page.
+    // Blocks separated by an empty line: first line = name, then the review.
+    googleQuotes: [
+      'Bishwash Khatri\nWhile traveling to Chitwan, I stopped in Hetauda to take a little rest. I heard about this cafe and decided to give it a visit. Honestly, I’m so glad I did! The cheesecake and the drink were absolutely amazing. Loved the experience! ❤️',
+      'Pushpa Thing\nReally beautiful cafe with a lovely atmosphere! The place looks clean, cozy, and welcoming. The staff are friendly, and the overall experience is wonderful. A perfect place to enjoy coffee, cake, and spend some quality time. Highly recommended! ❤️',
+      'Ramesh Bohora\nmy friend suggested me this cafe and im so glad i visited, the place is so aesthetic and the food were so delicious',
+      'Kristan Dharel\nVery good customer service, food was also good, highly recommended',
+    ].join('\n\n'),
     thanks: 'Thank you. Your review will appear here after we read it.',
   },
   visit: {

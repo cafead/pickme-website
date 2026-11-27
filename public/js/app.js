@@ -786,9 +786,22 @@
 
   const stars = (n) => `<span class="stars" role="img" aria-label="${n} out of 5 stars">${ICON.star.repeat(n)}</span>`;
   const monthYear = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); };
+  // Google reviews chosen by the owner (Admin > Reviews): blocks separated by an empty line, the first line of
+  // a block is the guest's name, the rest is the review, word for word.
+  function googleQuotes() {
+    return String((S.c.reviews || {}).googleQuotes || '').replace(/\r/g, '').split(/\n\s*\n/).map((b) => {
+      const lines = b.trim().split('\n');
+      return { name: (lines.shift() || '').trim(), text: lines.join(' ').trim() };
+    }).filter((q) => q.name && q.text).slice(0, 12);
+  }
   function reviewList() {
-    if (!S.reviews.length) return '<p class="muted center">Be the first to leave a review.</p>';
-    return `<div class="revs">${S.reviews.map((r) => `<figure class="rev">
+    const g = googleQuotes();
+    if (!S.reviews.length && !g.length) return '<p class="muted center">Be the first to leave a review.</p>';
+    return `<div class="revs">${g.map((q) => `<figure class="rev rev--google">
+      <div class="rev-top">${stars(5)}<small>${ICON.google}Google review</small></div>
+      <blockquote>${esc(q.text)}</blockquote>
+      <figcaption>${esc(q.name)}</figcaption>
+    </figure>`).join('')}${S.reviews.map((r) => `<figure class="rev">
       <div class="rev-top">${stars(r.rating)}<small>${r.source === 'google' ? 'Google review' : 'Cafe guest'}</small></div>
       <blockquote>${esc(r.text)}</blockquote>
       ${r.favorite ? `<p class="rev-fav">Tried: ${esc(r.favorite)}</p>` : ''}
@@ -803,7 +816,7 @@
       <div id="review-list" class="rv">${reviewList()}</div>
       <div class="row row--center rv">
         ${googleReviewUrl() ? `<a class="btn btn--ghost btn--google" href="${esc(googleReviewUrl())}" target="_blank" rel="noopener">${ICON.google}<span${ed('reviews.googleButton')}>${esc(r.googleButton || 'Review us on Google')}</span></a>` : ''}
-        ${safeUrl(c.visit.mapLink) ? `<a class="btn btn--ghost" href="${esc(safeUrl(c.visit.mapLink))}" target="_blank" rel="noopener"><span>See us on Google Maps</span>${ICON.arrow}</a>` : ''}
+        ${safeUrl(c.visit.mapLink) ? `<a class="btn btn--ghost" href="${esc(safeUrl(c.visit.mapLink))}" target="_blank" rel="noopener"><span>${googleQuotes().length ? 'See all our reviews on Google' : 'See us on Google Maps'}</span>${ICON.arrow}</a>` : ''}
       </div>
       <details class="review-box rv">
         <summary class="btn"><span${ed('reviews.formTitle')}>${esc(r.formTitle || 'Leave a review')}</span></summary>

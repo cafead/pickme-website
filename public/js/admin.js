@@ -203,7 +203,7 @@
     { title: 'Guest moments (photo albums)', scroll: 'moments', custom: momentsPanel, note: 'Photos of guests: daily photos, or a photographer\'s photos from an event. Each album shows for the number of days you choose, then hides itself. Up to 30 photos per album. Tick "Let guests download" to offer the full-quality photos.' },
     { title: 'Reviews section', scroll: 'reviews', note: 'Choose which reviews show in the Reviews tab above. Fill in your real Google rating and review count to show them; leave them empty to hide.', fields: [
       f('reviews.script', 'Handwritten line'), f('reviews.title', 'Title'), f('reviews.rating', 'Your Google rating, for example 4.8'), f('reviews.count', 'Number of Google reviews, for example 120'),
-      f('reviews.formTitle', 'Button text'), f('reviews.thanks', 'Thank-you message', 'area'),
+      f('reviews.googleQuotes', 'Google reviews to show as cards. Leave an empty line between reviews; first line = the guest\'s name, then the review, word for word', 'area'), f('reviews.formTitle', 'Button text'), f('reviews.thanks', 'Thank-you message', 'area'),
       f('reviews.googleLink', 'Google review link (in your Google Business Profile, choose "Ask for reviews" and copy the link)'),
       f('reviews.googleButton', 'Google review button text'), f('reviews.googleAsk', 'Message asking for a Google review (shown to customers a while after they order)', 'area'),
     ] },

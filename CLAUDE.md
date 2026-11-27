@@ -26,6 +26,7 @@ The website of Pick Me Cafe, Sigreni, Hetauda-12, Makawanpur, Nepal (open 7 AM t
 - Every whole cheesecake is 1½ Pound (`cheesecakePounds()` renamed old "1 Pound" cheesecake sizes once, flag `content.fixes.cheese15`). `pounds()` reads ½.
 - Photo crops: zoom 30% to 400%. Below 100% or "show the whole photo", `.pic[data-fill]` fills the frame with a blurred copy of the photo. Admin sliders move the photo the way you pull (x slider flipped; up/down slider stands upright).
 - Menu tabs on phones: the chosen tab scrolls to the middle (`centreTab()`); the app's group chips do the same.
+- Reviews section: `reviews.googleQuotes` (text; blocks separated by an empty line, first line = name) shows chosen Google reviews as cards, word for word, with a "See all our reviews on Google" button. No live Google feed and no count/average until there are many reviews (advice given 27 Nov 2026).
 - Privacy policy at `/privacy` (for the App Store).
 - A faint lock in the footer, tapped twice, asks "Staff / counter" or "Admin". Admin shows only a password box and opens `/admin`; staff enter login ID and password and go to `/counter`.
 
