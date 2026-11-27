@@ -75,18 +75,20 @@ export async function print(b64) {
     let ch = null;
     for (const sv of await d.services()) {
       const cs = await sv.characteristics();
-      ch = cs.find((c) => c.isWritableWithoutResponse) || cs.find((c) => c.isWritableWithResponse);
+      ch = cs.find((c) => c.isWritableWithResponse) || cs.find((c) => c.isWritableWithoutResponse);
       // Skip the phone-standard services (device name and so on); printers use their own.
       if (ch && !/^0000180[01a]-/.test(sv.uuid)) break;
       ch = null;
     }
     if (!ch) { const e = new Error(`${p.name} is not a receipt printer. Choose the printer again.`); e.choose = true; throw e; }
-    const size = Math.max(20, Math.min(180, (d.mtu || 23) - 3));
+    // Writes that the printer confirms are safest. Without them, go slowly in small pieces: sent too fast, the
+    // printer drops bytes and prints rubbish in place of the logo (seen on 27 Nov 2026).
+    const sure = ch.isWritableWithResponse;
+    const size = Math.max(20, Math.min(sure ? 180 : 100, (d.mtu || 23) - 3));
     const all = bytesOf(b64);
     for (let i = 0; i < all.length; i += size) {
       const part = toB64(all.slice(i, i + size));
-      if (ch.isWritableWithoutResponse) await ch.writeWithoutResponse(part); else await ch.writeWithResponse(part);
-      await new Promise((r) => setTimeout(r, 20));
+      if (sure) await ch.writeWithResponse(part); else { await ch.writeWithoutResponse(part); await new Promise((r) => setTimeout(r, 45)); }
     }
     await new Promise((r) => setTimeout(r, 400));
   } finally {

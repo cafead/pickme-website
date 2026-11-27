@@ -24,7 +24,12 @@ module.exports = function billing(x) {
     paper: 80,
     cols: 44,          // letters per line on the paper (48 fills an 80 mm roll edge to edge)
     margin: 2,         // empty letters on the left, so nothing sits on the paper's edge
-    show: { address: true, phone: true, miti: true },
+    show: { miti: true, ad: false },   // which dates are printed: Nepali (Miti) and/or English (AD)
+    logo: '',          // an uploaded logo (/uploads/...); empty = the cafe's own round mark
+    logoText: 'PICK ME CAFE', // words drawn under the logo, as part of the picture
+    logoWidth: 320,    // dots (8 dots = 1 mm)
+    name: '',          // an extra big text line under the logo; empty = none
+    // address and phone: not set = taken from the website (address without the country); '' = not printed
     maxDiscount: 10,   // staff may give up to this many percent; more needs the owner
     stock: {},         // "<item id>|<size>" -> how many are left (only counted items are listed)
   }, setup.get());
@@ -61,7 +66,13 @@ module.exports = function billing(x) {
     if ([58, 80].includes(Number(b.paper))) next.paper = Number(b.paper);
     if (b.cols !== undefined) { const n = Math.round(Number(b.cols)); if (!(n >= 24 && n <= 48)) return bad(res, 'Letters per line must be between 24 and 48.'); next.cols = n; }
     if (b.margin !== undefined) { const n = Math.round(Number(b.margin)); if (!(n >= 0 && n <= 8)) return bad(res, 'The left margin must be between 0 and 8.'); next.margin = n; }
-    if (b.show && typeof b.show === 'object') next.show = { address: b.show.address !== false, phone: b.show.phone !== false, miti: b.show.miti !== false };
+    if (b.show && typeof b.show === 'object') next.show = { miti: b.show.miti !== false, ad: b.show.ad === true };
+    if (b.logo !== undefined) { const u = str(b.logo, 120); if (u && !/^\/uploads\/[a-f0-9]{20}\.(png|jpg|jpeg|webp|gif)$/.test(u)) return bad(res, 'Upload the logo as a PNG or JPG picture.'); next.logo = u; }
+    if (b.logoText !== undefined) next.logoText = str(b.logoText, 30);
+    if (b.logoWidth !== undefined) { const n = Math.round(Number(b.logoWidth) / 8) * 8; if (!(n >= 120 && n <= 480)) return bad(res, 'The logo width must be between 15 and 60 mm.'); next.logoWidth = n; }
+    if (b.name !== undefined) next.name = str(b.name, 40);
+    if (b.address !== undefined) next.address = str(b.address, 120);
+    if (b.phone !== undefined) next.phone = str(b.phone, 60);
     if (b.maxDiscount !== undefined) { const n = Number(b.maxDiscount); if (!(n >= 0 && n <= 100)) return bad(res, 'The staff discount limit must be between 0 and 100.'); next.maxDiscount = n; }
     if (b.stock && typeof b.stock === 'object') {
       const st = {};

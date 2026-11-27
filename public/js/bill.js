@@ -234,14 +234,22 @@
     const show = s.show || {};
     return `<div class="setup">
       <form class="box" id="setup-form"><h2>What is printed on every bill</h2>
-        <p class="help">The logo and the cafe's name are always printed. The name, address and phone come from the website (Edit website &gt; Cafe details).</p>
+        <p class="help">Everything on the paper is set here. The logo is always printed. After a change, press "Save the set-up", then "Print a test bill".</p>
+        <div class="logo-set"><div class="slip logo-now">${S.logo ? `<img src="${S.logo.url}" alt="The logo as it prints">` : 'No logo'}</div>
+          <div><label class="btn">Upload a logo<input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden></label>
+          ${s.logo ? '<button type="button" data-do="logo-own">Use the cafe\'s round mark again</button>' : ''}
+          <p class="help">A black picture on white works best. It is printed in black and white.</p></div></div>
+        <input type="hidden" name="logo" value="${esc(s.logo || '')}">
         <div class="fields">
-          <label class="wide">Top lines, under the cafe's name (one per line, for example your PAN number)<textarea name="header" rows="3" maxlength="400">${esc(s.header)}</textarea></label>
+          <label>Words under the logo (part of the logo; empty = none)<input name="logoText" maxlength="30" value="${esc(s.logoText || '')}"></label>
+          <label>Logo width in mm (15 to 60)<input name="logoWidth" type="number" min="15" max="60" step="1" value="${Math.round((Number(s.logoWidth) || 320) / 8)}"></label>
+          <label class="wide">Extra big line under the logo (empty = none)<input name="name" maxlength="40" value="${esc(s.name || '')}"></label>
+          <label class="wide">Address line (empty = not printed)<input name="address" maxlength="120" value="${esc(paperAddress())}"></label>
+          <label class="wide">Phone (empty = not printed)<input name="phone" maxlength="60" value="${esc(paperPhone())}"></label>
+          <label class="wide">More top lines (one per line, for example your PAN number)<textarea name="header" rows="3" maxlength="400">${esc(s.header)}</textarea></label>
           <label class="wide">Bottom lines (one per line)<textarea name="footer" rows="3" maxlength="400">${esc(s.footer)}</textarea></label>
-          <label class="check"><input type="checkbox" name="address"${show.address !== false ? ' checked' : ''}> Print the address</label>
-          <label class="check"><input type="checkbox" name="phone"${show.phone !== false ? ' checked' : ''}> Print the phone number</label>
-          <label class="check"><input type="checkbox" name="miti"${show.miti !== false ? ' checked' : ''}> Print the Nepali date (Miti)</label>
-          <span></span>
+          <label class="check"><input type="checkbox" name="miti"${show.miti !== false ? ' checked' : ''}> Print the Nepali date</label>
+          <label class="check"><input type="checkbox" name="ad"${show.ad === true ? ' checked' : ''}> Also print the English date</label>
           <label>Paper width<select name="paper"><option value="80"${s.paper === 80 ? ' selected' : ''}>80 mm (your ATPOS AT 402)</option><option value="58"${s.paper === 58 ? ' selected' : ''}>58 mm</option></select></label>
           <label>Letters per line (fewer = wider right edge)<input name="cols" type="number" min="24" max="48" step="1" value="${esc(s.cols)}"></label>
           <label>Empty space on the left (letters)<input name="margin" type="number" min="0" max="8" step="1" value="${esc(s.margin)}"></label>
@@ -285,19 +293,29 @@
     try { const v = BS.toBS(ad); if (v) bs = `${v.y}-${String(v.m).padStart(2, '0')}-${String(v.d).padStart(2, '0')} BS`; } catch (e) { /* no BS date */ }
     return { ad, bs, time: timeOf(iso) };
   }
+  // The address and phone on the paper: what the owner typed in Set-up, else the website's (without the country).
+  const paperAddress = () => (S.setup.address !== undefined ? S.setup.address : cafe().address.replace(/,?\s*Nepal\.?$/i, ''));
+  const paperPhone = () => (S.setup.phone !== undefined ? S.setup.phone : cafe().phone);
   function head(rows) {
-    const c = cafe(); const show = S.setup.show || {};
-    rows.push(['logo'], ['title', c.name]);
-    if (show.address !== false && c.address) rows.push(['c', c.address]);
-    if (show.phone !== false && c.phone) rows.push(['c', 'Phone ' + c.phone]);
+    rows.push(['logo']);
+    if (S.setup.name) rows.push(['title', S.setup.name]);
+    if (paperAddress()) rows.push(['c', paperAddress()]);
+    if (paperPhone()) rows.push(['c', 'Phone ' + paperPhone()]);
     lines(S.setup.header).forEach((l) => rows.push(['c', l]));
   }
+  // The date rows: Nepali date (Miti) by default; the English date only if switched on in Set-up.
+  function dateRows(rows, iso) {
+    const d = dates(iso); const show = S.setup.show || {};
+    const ad = show.ad === true || show.miti === false || !d.bs;
+    if (show.miti !== false && d.bs) rows.push(['two', 'Date', `${d.bs.replace(' BS', '')} ${d.time}`]);
+    if (ad) rows.push(['two', show.miti !== false && d.bs ? 'Date (AD)' : 'Date', `${d.ad} ${d.time}`]);
+  }
   function billRows(b, copy) {
-    const rows = []; const d = dates(b.at); const show = S.setup.show || {};
+    const rows = [];
     head(rows);
     if (b.cancelled) rows.push(['b', '*** CANCELLED BILL ***']);
-    rows.push(['rule'], ['two', 'Bill no', b.no], ['two', 'Date', `${d.ad} ${d.time}`]);
-    if (show.miti !== false && d.bs) rows.push(['two', 'Miti', d.bs]);
+    rows.push(['rule'], ['two', 'Bill no', b.no]);
+    dateRows(rows, b.at);
     if (b.table) rows.push(['two', 'Table', b.table]);
     if (b.customer.name) rows.push(['two', 'Customer', b.customer.name]);
     if (b.customer.pan) rows.push(['two', 'Customer PAN', b.customer.pan]);
@@ -317,9 +335,11 @@
     return rows;
   }
   function orderRows(o) {
-    const rows = []; const d = dates(o.createdAt);
+    const rows = [];
     head(rows);
-    rows.push(['b', 'ORDER (not a bill)'], ['rule'], ['two', 'Order', o.id], ['two', 'Date', `${d.ad} ${d.time}`], ['two', 'Type', (TYPE[o.type] || o.type) + (o.tableNo ? `, table ${o.tableNo}` : '')]);
+    rows.push(['b', 'ORDER (not a bill)'], ['rule'], ['two', 'Order', o.id]);
+    dateRows(rows, o.createdAt);
+    rows.push(['two', 'Type', (TYPE[o.type] || o.type) + (o.tableNo ? `, table ${o.tableNo}` : '')]);
     if (o.name) rows.push(['two', 'Customer', o.name]);
     if (o.phone) rows.push(['two', 'Phone', o.phone]);
     if (o.address) rows.push(['text', 'Address: ' + o.address]);
@@ -337,7 +357,8 @@
   function reportRows(d) {
     const s = d.summary; const rows = [];
     head(rows);
-    rows.push(['b', "DAY'S REPORT"], ['rule'], ['two', 'Day', d.date], ['two', 'Printed', `${dates(new Date().toISOString()).time}`]);
+    const day = dates(d.date + 'T12:00:00+05:45');
+    rows.push(['b', "DAY'S REPORT"], ['rule'], ['two', 'Day', (S.setup.show || {}).miti !== false && day.bs ? day.bs.replace(' BS', '') : d.date], ['two', 'Printed', `${dates(new Date().toISOString()).time}`]);
     if (s.first) rows.push(['two', 'Bills', `${s.first} to ${s.last}`]);
     rows.push(['two', 'Number of bills', String(s.count)], ['rule']);
     Object.entries(s.byPayment).forEach(([k, v]) => rows.push(['two', k, Number(v).toFixed(2)]));
@@ -349,27 +370,45 @@
   function rowsHtml(rows) {
     const two = (l, r, cls) => `<div class="two${cls ? ' ' + cls : ''}"><span>${esc(l)}</span><span>${esc(r)}</span></div>`;
     return `<div class="rc">${rows.map((r) => ({
-      logo: '<img src="/img/print-logo.png" alt="">', title: `<h3>${esc(r[1])}</h3>`, c: `<p class="c">${esc(r[1])}</p>`, b: `<p class="c"><b>${esc(r[1])}</b></p>`,
+      logo: S.logo ? `<img src="${S.logo.url}" alt="Logo" style="width:${Math.round(S.logo.wb * 8 / 576 * 72)}mm;max-width:100%">` : '', title: `<h3>${esc(r[1])}</h3>`, c: `<p class="c">${esc(r[1])}</p>`, b: `<p class="c"><b>${esc(r[1])}</b></p>`,
       rule: '<hr>', two: two(r[1], r[2]), big: two(r[1], r[2], 'big'), text: `<p>${esc(r[1]) || '&nbsp;'}</p>`,
     }[r[0]])).join('')}</div>`;
   }
-  // The logo as printer dots (black and white), made once from the website's black logo.
+  // The logo as printer dots (black and white). By default the cafe's round mark with the words from Set-up drawn
+  // under it; an uploaded logo is used whole, with the words under it if any are set.
+  const MARK_PART = 690 / 1048; // the round mark is the top part of /img/print-logo.png (the rest is the old wordmark)
   function loadLogo() {
     return new Promise((resolve) => {
+      const own = !S.setup.logo;
       const img = new Image();
       img.onload = () => {
         try {
-          const w = 208; const h = Math.round(img.height * w / img.width);
-          const c = document.createElement('canvas'); c.width = w; c.height = h;
-          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+          const w = Math.max(120, Math.min(480, Math.round((Number(S.setup.logoWidth) || 320) / 8) * 8));
+          const words = String(S.setup.logoText || '').trim();
+          const srcH = own ? Math.round(img.height * MARK_PART) : img.height;
+          const pw = own ? Math.round(w * 0.6) : w;               // the round mark is narrower than the words
+          const ph = Math.round(srcH * pw / img.width);
+          const c = document.createElement('canvas');
+          const g = c.getContext('2d');
+          let size = 0;
+          if (words) { // letters spread out, fitted to the width
+            g.font = '600 100px Georgia, "Times New Roman", serif';
+            const spaced = words.split('').join('\u200A');
+            size = Math.min(64, Math.floor(100 * (w - 4) / g.measureText(spaced).width));
+          }
+          const h = ph + (words ? Math.round(size * 1.5) : 0);
+          c.width = w; c.height = h;
+          g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+          g.drawImage(img, 0, 0, img.width, srcH, Math.round((w - pw) / 2), 0, pw, ph);
+          if (words) { g.fillStyle = '#000'; g.font = `600 ${size}px Georgia, "Times New Roman", serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(words.split('').join('\u200A'), w / 2, ph + Math.round(size * 0.8)); }
           const px = g.getImageData(0, 0, w, h).data; const wb = w / 8; const bits = new Uint8Array(wb * h);
-          for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { const i = (y * w + x) * 4; if ((px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) < 140) bits[y * wb + (x >> 3)] |= 0x80 >> (x & 7); }
-          S.logo = { wb, h, bits };
+          for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { const i = (y * w + x) * 4; if (px[i + 3] > 80 && (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) < 150) bits[y * wb + (x >> 3)] |= 0x80 >> (x & 7); }
+          S.logo = { wb, h, bits, url: c.toDataURL('image/png') };
         } catch (e) { S.logo = null; }
         resolve();
       };
-      img.onerror = () => resolve();
-      img.src = '/img/print-logo.png';
+      img.onerror = () => { S.logo = null; resolve(); };
+      img.src = S.setup.logo || '/img/print-logo.png';
     });
   }
   // The rows as printer commands (ESC/POS).
@@ -389,12 +428,16 @@
     rows.forEach((r) => {
       if (r[0] === 'logo') {
         if (!S.logo) return;
-        // Centre the picture by hand (the left margin and the line width are ours, in letters of 12 dots).
-        const shift = Math.max(0, Math.round((margin * 12 + (W * 12 - S.logo.wb * 8) / 2) / 8));
-        const wb = S.logo.wb + shift;
-        put(29, 118, 48, 0, wb & 255, wb >> 8, S.logo.h & 255, S.logo.h >> 8);
-        for (let y = 0; y < S.logo.h; y += 1) { for (let i = 0; i < shift; i += 1) out.push(0); for (let x = 0; x < S.logo.wb; x += 1) out.push(S.logo.bits[y * S.logo.wb + x]); }
-        put(10);
+        // The picture goes in short strips, centred by the printer. Short strips let the printer print while the
+        // rest is still arriving, so a slow Bluetooth link cannot overflow it (that printed rubbish on 27 Nov 2026).
+        const wb = S.logo.wb;
+        put(27, 97, 1);
+        for (let y0 = 0; y0 < S.logo.h; y0 += 24) {
+          const n = Math.min(24, S.logo.h - y0);
+          put(29, 118, 48, 0, wb & 255, wb >> 8, n & 255, n >> 8);
+          for (let i = y0 * wb; i < (y0 + n) * wb; i += 1) out.push(S.logo.bits[i]);
+        }
+        put(27, 97, 0, 10);
       } else if (r[0] === 'title') { put(27, 69, 1, 29, 33, 17); wrap(r[1], Math.floor(W / 2)).forEach((l) => { text(' '.repeat(Math.floor(margin / 2)) + centre(l, Math.floor(W / 2))); put(10); }); put(29, 33, 0, 27, 69, 0); }
       else if (r[0] === 'c') wrap(r[1], W).forEach((l) => line(centre(l)));
       else if (r[0] === 'b') { put(27, 69, 1); wrap(r[1], W).forEach((l) => line(centre(l))); put(27, 69, 0); }
@@ -420,7 +463,7 @@
       let service;
       try { service = await server.getPrimaryService(id); } catch (e) { continue; }
       const chars = await service.getCharacteristics();
-      const ch = chars.find((c) => c.properties.writeWithoutResponse) || chars.find((c) => c.properties.write);
+      const ch = chars.find((c) => c.properties.write) || chars.find((c) => c.properties.writeWithoutResponse);
       if (ch) { BT.ch = ch; return ch; }
     }
     BT.device = null;
@@ -428,11 +471,11 @@
   }
   async function printBluetooth(bytes) {
     const ch = await btChannel();
-    const fast = ch.properties.writeWithoutResponse;
+    // Writes that the printer confirms are safest; without them, go slowly so nothing is dropped.
+    const sure = ch.properties.write;
     for (let i = 0; i < bytes.length; i += 100) {
       const part = bytes.slice(i, i + 100);
-      if (fast) await ch.writeValueWithoutResponse(part); else await ch.writeValue(part);
-      await new Promise((r) => setTimeout(r, 25));
+      if (sure) await ch.writeValueWithResponse(part); else { await ch.writeValueWithoutResponse(part); await new Promise((r) => setTimeout(r, 40)); }
     }
   }
   function printWindow(rows) {
@@ -501,7 +544,7 @@
       const [c, s] = await Promise.all([api('GET', '/api/content'), api('GET', '/api/desk/bill-setup')]);
       const was = JSON.stringify([S.content.menu, S.setup.items, S.setup.stock]);
       S.content = c;
-      if (S.tab !== 'setup') S.setup = s;
+      if (S.tab !== 'setup') { const logoWas = JSON.stringify([S.setup.logo, S.setup.logoText, S.setup.logoWidth]); S.setup = s; if (logoWas !== JSON.stringify([s.logo, s.logoText, s.logoWidth])) loadLogo(); }
       if (S.tab === 'new' && was !== JSON.stringify([c.menu, s.items, s.stock])) paintItems();
       if (S.tab === 'stock' && !document.activeElement.matches('input, select')) $('view').innerHTML = stockView();
     } catch (e) { /* next minute */ }
@@ -596,6 +639,7 @@
       return openPaper(billRows({ no: 'TEST', at: now, table: '4', customer: { name: 'Test customer', pan: '123456789', phone: '' }, lines: [{ name: 'Coconut Snow White Cheese Cake', label: 'Slice', price: 290, qty: 1 }, { name: 'Cappuccino', label: 'Large', price: 220, qty: 2 }], subtotal: 730, discount: { kind: 'percent', value: 10, amount: 73 }, total: 657, payment: 'Cash', received: 1000, change: 343, note: 'This is a test. Save the set-up first to try new settings.' }, false), { label: 'TEST' });
     }
     if (d.do === 'vibe') { try { localStorage.setItem('pm_vibe', vibeOn() ? 'off' : 'on'); } catch (err) { /* private mode */ } paintVibe(); buzz(); return; }
+    if (d.do === 'logo-own') { document.querySelector('#setup-form [name=logo]').value = ''; S.setup.logo = ''; await loadLogo(); document.querySelector('.logo-now').innerHTML = S.logo ? `<img src="${S.logo.url}" alt="">` : ''; toast('Press "Save the set-up" to keep it.'); return; }
     if (d.do === 'add-row') { document.querySelector('#extra tbody').insertAdjacentHTML('beforeend', rowHtml({})); return; }
     if (d.do === 'del-row') { t.closest('tr').remove(); return; }
   });
@@ -615,6 +659,21 @@
     const t = e.target;
     if (t.dataset.f === 'dKind') { S.bill.dKind = t.value; paintCart(); paintDock(); }
     if (t.id === 'day' && t.value) { try { await loadBills(t.value); $('view').innerHTML = billsView(); } catch (err) { toast(err.message, true); } }
+    if (t.id === 'logo-file' && t.files && t.files[0]) {
+      const file = t.files[0];
+      if (file.size > 8 * 1024 * 1024) return toast('That picture is too big. Use one under 8 MB.', true);
+      try {
+        const up = await fetch('/api/admin/upload', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+        const data = await up.json().catch(() => ({}));
+        if (!up.ok) throw new Error(data.error || 'Could not upload the picture.');
+        if (/\.svg$/.test(data.url)) throw new Error('Upload the logo as a PNG or JPG picture.');
+        document.querySelector('#setup-form [name=logo]').value = data.url;
+        S.setup.logo = data.url; await loadLogo();
+        document.querySelector('.logo-now').innerHTML = S.logo ? `<img src="${S.logo.url}" alt="">` : '';
+        toast('Logo uploaded. Press "Save the set-up" to keep it.');
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (t.dataset.stock) { try { S.setup.stock = (await api('POST', '/api/desk/stock', { key: t.dataset.stock, left: t.value })).stock; toast('Saved.'); } catch (err) { toast(err.message, true); } }
   });
   document.addEventListener('submit', async (e) => {
@@ -636,7 +695,8 @@
     } else if (f.id === 'setup-form') {
       const items = [...document.querySelectorAll('#extra tbody tr')].map((tr) => { const g = (c) => tr.querySelector(`[data-c="${c}"]`).value; return { id: g('id'), name: g('name').trim(), group: g('group').trim(), price: Number(g('price')) }; }).filter((it) => it.name);
       try {
-        S.setup = await api('PUT', '/api/admin/bill-setup', { header: f.header.value, footer: f.footer.value, paper: Number(f.paper.value), cols: Number(f.cols.value), margin: Number(f.margin.value), maxDiscount: Number(f.maxDiscount.value), show: { address: f.address.checked, phone: f.phone.checked, miti: f.miti.checked }, payments: f.payments.value.split(','), items });
+        S.setup = await api('PUT', '/api/admin/bill-setup', { header: f.header.value, footer: f.footer.value, paper: Number(f.paper.value), cols: Number(f.cols.value), margin: Number(f.margin.value), maxDiscount: Number(f.maxDiscount.value), show: { miti: f.miti.checked, ad: f.ad.checked }, logo: f.logo.value, logoText: f.logoText.value, logoWidth: Number(f.logoWidth.value) * 8, name: f.name.value, address: f.address.value, phone: f.phone.value, payments: f.payments.value.split(','), items });
+        await loadLogo();
         toast('Set-up saved.'); show('setup');
       } catch (err) { toast(err.message, true); }
     } else if (f.id === 'csv-form') {
@@ -659,7 +719,7 @@
     paintVibe();
     if (IN_APP) { $('to-counter').hidden = true; $('logout').hidden = true; }
     try { [S.content, S.setup] = await Promise.all([api('GET', '/api/content'), api('GET', '/api/desk/bill-setup')]); } catch (e) { return toast(e.message, true); }
-    loadLogo();
+    await loadLogo();
     await loadOrders();
     const m = /^#order=(.+)$/.exec(window.location.hash);
     if (m) {

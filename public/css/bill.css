@@ -164,3 +164,7 @@ textarea { min-height: 76px; resize: vertical; }
   .cart-x { display: inline-flex; }
   .items { max-height: none; }
 }
+.logo-set { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 12px; }
+.logo-now { width: 170px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; text-align: center; background: #fff; }
+.logo-now img { max-width: 100%; display: block; margin: 0 auto; }
+.rc img { width: auto; }
