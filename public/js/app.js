@@ -289,13 +289,22 @@
   const servedNow = (hrs) => { if (!hrs) return true; const t = nepalTime(); return !((hrs.from && t < hrs.from) || (hrs.to && t > hrs.to)); };
   const hoursText = (hrs) => (hrs.from && hrs.to ? `${t12(hrs.from)} to ${t12(hrs.to)}` : hrs.from ? `after ${t12(hrs.from)}` : `until ${t12(hrs.to)}`);
   // Choices a customer can add (less sugar, extra shot), from the extras sets that cover the item's menu group.
-  function extrasOf(groupId) {
+  function ruleHit(list, name, label) {
+    const low = (x) => String(x || '').trim().toLowerCase();
+    return String(list || '').split(',').some((e) => { const [n, z] = e.split('|'); return low(n) && low(n) === low(name) && (z === undefined || !low(z) || low(z) === low(label)); });
+  }
+  function extrasOf(groupId, itemName, label) {
     const x = S.c.extras || {};
     if (x.show === false) return [];
     const out = [];
     for (const g of x.groups || []) {
       if (g.show === false || !(g.categories || []).includes(groupId)) continue;
-      for (const o of g.options || []) if (o.show !== false && o.id && o.name && !out.some((y) => y.id === o.id)) out.push(o);
+      for (const o of g.options || []) {
+        if (o.show === false || !o.id || !o.name || out.some((y) => y.id === o.id)) continue;
+        if (o.only && String(o.only).trim() && !ruleHit(o.only, itemName, label)) continue;
+        if (o.skip && ruleHit(o.skip, itemName, label)) continue;
+        out.push(o);
+      }
     }
     return out;
   }
@@ -314,7 +323,7 @@
       const f = findPrice(l.itemId, l.label);
       if (!f || f.item.available === false || !(Number(f.price.price) > 0)) return null;
       const whole = Boolean(f.price.whole);
-      const allowed = whole ? cakeOpts() : extrasOf(f.group);
+      const allowed = whole ? cakeOpts() : extrasOf(f.group, f.item.name, f.price.label || '');
       const picked = (l.extras || []).map((id) => allowed.find((o) => o.id === id)).filter(Boolean);
       if (picked.length !== (l.extras || []).length) return null;
       const add = picked.reduce((sum, o) => sum + optCost(o, f.price.label), 0);
@@ -502,7 +511,7 @@
       ? `<span class="pchip pchip--off">${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b></span>`
       : `<button type="button" class="pchip" data-act="${p.whole ? 'cake' : 'add'}" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}"
         aria-label="${p.whole ? 'Pre-order' : 'Add'} ${esc(it.name)} ${esc(p.label || '')}, ${rs(p.price)}">
-        ${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b>${p.whole ? `<i class="pre" aria-hidden="true">${ICON.cartSmall}Pre-order</i>` : '<i aria-hidden="true">+</i>'}
+        ${p.label ? `<span>${esc(p.label)}${p.note ? ` <em class="pnote">${esc(p.note)}</em>` : ''}</span>` : ''}<b>${rs(p.price)}</b>${p.whole ? `<i class="pre" aria-hidden="true">${ICON.cartSmall}Pre-order</i>` : '<i aria-hidden="true">+</i>'}
       </button>`)).join('');
     const when = hrs ? `<p class="mi-time">${later ? 'Served' : 'Today'} ${hoursText(hrs)}</p>` : '';
     const badge = it.badge ? `<span class="badge"${ed(base + '.badge')}>${esc(it.badge)}</span>` : '';
@@ -1248,7 +1257,7 @@
     return `<section class="upsell" aria-label="${esc(u.title)}"><h3>${esc(u.title || 'Goes well with your order')}</h3><div class="up-row">${picks.map((it) => {
       const p = it.prices.find((x) => !x.whole && Number(x.price) > 0);
       return `<article class="up">${pic(it.image, it.name, 'up-pic')}<strong>${esc(it.name)}</strong>
-        <button type="button" class="pchip" data-act="add" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}" aria-label="Add ${esc(it.name)}, ${rs(p.price)}">${p.label ? `<span>${esc(p.label)}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">+</i></button></article>`;
+        <button type="button" class="pchip" data-act="add" data-item="${esc(it.id)}" data-label="${esc(p.label || '')}" aria-label="Add ${esc(it.name)}, ${rs(p.price)}">${p.label ? `<span>${esc(p.label)}${p.note ? ` <em class="pnote">${esc(p.note)}</em>` : ''}</span>` : ''}<b>${rs(p.price)}</b><i aria-hidden="true">+</i></button></article>`;
     }).join('')}</div></section>`;
   }
   function cartHtml() {
@@ -1274,13 +1283,13 @@
   function openExtras(itemId, label, back) {
     const f = findPrice(itemId, label);
     if (!f) return;
-    const opts = extrasOf(f.group);
+    const opts = extrasOf(f.group, f.item.name, label);
     const base = Number(f.price.price);
     openLayer(`<div class="shade" data-act="close"></div>
       <div class="modal modal--sheet" role="dialog" aria-label="${esc(f.item.name)}">
         <header><h2>${esc(f.item.name)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>
         <form class="xform" data-form="extras" data-item="${esc(itemId)}" data-label="${esc(label)}" data-back="${back ? 'cart' : ''}" novalidate>
-          <p class="muted">${label ? esc(label) + ' · ' : ''}${rs(base)}</p>
+          <p class="muted">${label ? esc(label) + (f.price.note ? ' (' + esc(f.price.note) + ')' : '') + ' · ' : ''}${rs(base)}</p>
           <fieldset class="xopts"><legend>${esc((S.c.extras || {}).title || 'Make it yours')} <small>(optional)</small></legend>
             ${opts.map((o) => `<label class="copt"><input type="checkbox" name="x" value="${esc(o.id)}" data-price="${Number(o.price) || 0}"><span><strong>${esc(o.name)}</strong></span><b>${Number(o.price) > 0 ? '+' + rs(o.price) : ''}</b></label>`).join('')}
           </fieldset>
@@ -1643,7 +1652,7 @@
       const f = findPrice(el.dataset.item, el.dataset.label);
       if (!f) return;
       const inCart = Boolean(el.closest('.drawer'));
-      if (extrasOf(f.group).length) return openExtras(el.dataset.item, el.dataset.label, inCart);
+      if (extrasOf(f.group, f.item.name, el.dataset.label).length) return openExtras(el.dataset.item, el.dataset.label, inCart);
       addToCart(el.dataset.item, el.dataset.label, 1);
       if (inCart) openLayer(cartHtml(), { same: true });
       toast(`${f.item.name} added to your order`);

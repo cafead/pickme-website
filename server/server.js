@@ -239,6 +239,36 @@ function googleReviewLink(data) {
   return true;
 }
 if (googleReviewLink(content.data)) content.set(content.data);
+// 28 Nov 2026: sense checks on drink extras, set once (the owner can change them later in admin).
+// No whipped cream on coffee (only Iced Mocha), no extra shot where the drink is already a double, no ice choices on hot drinks,
+// no sugar choices on water. A large cappuccino is a double shot, so its size says so.
+function extraRules(data) {
+  data.fixes = data.fixes && typeof data.fixes === 'object' && !Array.isArray(data.fixes) ? data.fixes : {};
+  if (data.fixes.extraRules28) return false;
+  const rules = {
+    'extra-shot': { skip: 'Cappuccino | Large, Espresso | Double, Doppio, Pick Me Double Shot on Ice' },
+    'whipped-cream': { only: 'Iced Mocha' },
+    'less-ice': { skip: 'Hot Chocolate, Hot Milk' },
+    'no-ice': { skip: 'Hot Chocolate, Hot Milk' },
+  };
+  for (const g of (data.extras && data.extras.groups) || []) {
+    for (const o of g.options || []) {
+      const r = rules[o.id] || (g.id === 'tea' && /^(less|no)-sugar$/.test(o.id) ? { skip: 'Water' } : null);
+      if (!r) continue;
+      if (r.only && !o.only) o.only = r.only;
+      if (r.skip && !o.skip) o.skip = r.skip;
+    }
+  }
+  for (const grp of (data.menu && data.menu.categories) || []) {
+    for (const it of grp.items || []) {
+      if (String(it.name || '').trim().toLowerCase() !== 'cappuccino') continue;
+      for (const p of it.prices || []) if (p && /^large$/i.test(String(p.label || '').trim()) && !p.note) p.note = 'double shot';
+    }
+  }
+  data.fixes.extraRules28 = true;
+  return true;
+}
+if (extraRules(content.data)) { content.data._rev = (content.data._rev || 1) + 1; content.set(content.data); }
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -831,13 +861,27 @@ function findPrice(itemId, label) {
   return null;
 }
 // Choices a customer can add to an item (less sugar, extra shot), from the extras sets that cover its menu group.
-function extrasFor(groupId) {
+// Each extra can also say "only for" or "not for" some items (names, comma between; "Cappuccino | Large" = that size only),
+// so a whipped cream or an extra shot is never offered where it makes no sense.
+function ruleHit(list, name, label) {
+  const low = (x) => String(x || '').trim().toLowerCase();
+  return String(list || '').split(',').some((e) => {
+    const [n, s] = e.split('|');
+    return low(n) && low(n) === low(name) && (s === undefined || !low(s) || low(s) === low(label));
+  });
+}
+function extraAllowed(o, name, label) {
+  if (o.only && String(o.only).trim() && !ruleHit(o.only, name, label)) return false;
+  if (o.skip && ruleHit(o.skip, name, label)) return false;
+  return true;
+}
+function extrasFor(groupId, itemName, label) {
   const x = content.get().extras || {};
   if (x.show === false) return [];
   const out = [];
   for (const g of x.groups || []) {
     if (g.show === false || !(g.categories || []).includes(groupId)) continue;
-    for (const o of g.options || []) if (o.show !== false && o.id && o.name && !out.some((y) => y.id === o.id)) out.push(o);
+    for (const o of g.options || []) if (o.show !== false && o.id && o.name && extraAllowed(o, itemName, label) && !out.some((y) => y.id === o.id)) out.push(o);
   }
   return out;
 }
@@ -928,12 +972,15 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
     if (whole) hasWhole = true;
     // Extras and cake choices are priced here, never by the browser.
     const asked = Array.isArray(l.extras) ? [...new Set(l.extras.map((x) => str(x, 60)).filter(Boolean))].slice(0, 12) : [];
-    const allowed = whole ? cakeOptions() : extrasFor(found.group);
+    const allowed = whole ? cakeOptions() : extrasFor(found.group, found.item.name, found.price.label || '');
     const picked = [];
     let add = 0;
     for (const id of asked) {
       const o = allowed.find((x) => x.id === id);
-      if (!o) return bad(res, changedMsg);
+      if (!o) {
+        const any = !whole && (content.get().extras || {}).groups && ((content.get().extras.groups || []).flatMap((g) => g.options || [])).find((x) => x.id === id);
+        return bad(res, any ? `${any.name} is not available with ${found.item.name}${found.price.label ? ` (${found.price.label})` : ''}. Please remove it and try again.` : changedMsg);
+      }
       const cost = Math.max(0, Number(o.price) || 0) * (whole && o.perPound ? pounds(found.price.label) : 1);
       add += Math.round(cost);
       picked.push(o.name);
@@ -1487,6 +1534,7 @@ async function restoreBackup(buf, by) {
     tidyEvents(next);
     ensurePrintMenu(next);
     cheesecakePounds(next);
+    extraRules(next);
     deliveryCentre(next);
     googleReviewLink(next);
     next._rev = (current._rev || 1) + 1;

@@ -255,6 +255,8 @@ button { cursor: pointer; touch-action: manipulation; }
 .mi--off h4 { color: var(--muted); }
 .pchip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 4px 0 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: .78rem; white-space: nowrap; transition: border-color .25s, transform .25s var(--ease); }
 .pchip span { color: var(--muted); }
+.pchip .pnote { font-style: normal; font-size: .9em; opacity: .85; }
+.pchip .pnote::before { content: '· '; }
 .pchip b { font-weight: 500; font-variant-numeric: tabular-nums; }
 .pchip i { font-style: normal; display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 14px; background: var(--btn, var(--accent)); color: #fff; font-size: .74rem; line-height: 1; }
 .pchip:active { transform: scale(.96); }

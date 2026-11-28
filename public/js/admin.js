@@ -75,7 +75,7 @@
     f('timeFrom', 'Served from (optional, for example a morning combo)', 'time'), f('timeTo', 'Served until (optional)', 'time'),
     f('image', 'Photo (optional)', 'image', { max: 900 }),
     f('prices', 'Prices', 'list', { title: (p) => `${p.label || 'Price'}: Rs. ${p.price}${p.whole ? ' (whole cake)' : ''}`, add: 'Add size or price', blank: () => ({ label: '', price: 0 }), fields: [
-      f('label', 'Size name (leave empty if there is one price)'), f('price', 'Price in NPR', 'number'), f('whole', 'Whole cake: pre-order only', 'toggle', { def: false }),
+      f('label', 'Size name (leave empty if there is one price)'), f('note', 'Small note beside the size (for example double shot)'), f('price', 'Price in NPR', 'number'), f('whole', 'Whole cake: pre-order only', 'toggle', { def: false }),
     ] }),
   ];
   const itemTitle = (i) => `${i.name}${i.hidden ? ' (hidden)' : i.available === false ? ' (not available)' : ''}: ${priceLine(i)}`;
@@ -165,6 +165,7 @@
         f('categories', 'Menu groups that get these extras', 'checks', { options: catOptions }),
         f('options', 'Extras', 'list', { title: (o) => `${o.name}: ${Number(o.price) ? 'Rs. ' + o.price : 'free'}${o.show === false ? ' (hidden)' : ''}`, add: 'Add extra', blank: () => ({ id: uid('x'), name: 'New extra', price: 0, show: true }), fields: [
           f('name', 'Name'), f('price', 'Extra price in NPR (0 for free)', 'number'), f('show', 'Show', 'toggle'),
+          f('only', 'Only for these items (empty = every item in the groups). Names with a comma between; one size: Cappuccino | Large'), f('skip', 'Never for these items (same way to write them), for example Cappuccino | Large'),
         ] }),
       ] }),
     ] },
