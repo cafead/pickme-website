@@ -240,14 +240,13 @@ function googleReviewLink(data) {
 }
 if (googleReviewLink(content.data)) content.set(content.data);
 // 28 Nov 2026: sense checks on drink extras, set once (the owner can change them later in admin).
-// No whipped cream on coffee (only Iced Mocha), no extra shot where the drink is already a double, no ice choices on hot drinks,
+// No whipped cream on hot coffee, no extra shot where the drink is already a double, no ice choices on hot drinks,
 // no sugar choices on water. A large cappuccino is a double shot, so its size says so.
 function extraRules(data) {
   data.fixes = data.fixes && typeof data.fixes === 'object' && !Array.isArray(data.fixes) ? data.fixes : {};
   if (data.fixes.extraRules28) return false;
   const rules = {
     'extra-shot': { skip: 'Cappuccino | Large, Espresso | Double, Doppio, Pick Me Double Shot on Ice' },
-    'whipped-cream': { only: 'Iced Mocha' },
     'less-ice': { skip: 'Hot Chocolate, Hot Milk' },
     'no-ice': { skip: 'Hot Chocolate, Hot Milk' },
   };
@@ -269,6 +268,26 @@ function extraRules(data) {
   return true;
 }
 if (extraRules(content.data)) { content.data._rev = (content.data._rev || 1) + 1; content.set(content.data); }
+// 28 Nov 2026 (second part): whipped cream belongs to cold coffee, never hot coffee. It moves into a set of its own
+// that covers the Iced Coffee group only, so every app and website version agrees without per-item rules.
+function creamCold(data) {
+  data.fixes = data.fixes && typeof data.fixes === 'object' && !Array.isArray(data.fixes) ? data.fixes : {};
+  if (data.fixes.creamCold28) return false;
+  const x = data.extras;
+  if (x && Array.isArray(x.groups)) {
+    for (const g of x.groups) {
+      const i = (g.options || []).findIndex((o) => o && o.id === 'whipped-cream');
+      if (i < 0 || g.id === 'cream') continue;
+      const [o] = g.options.splice(i, 1);
+      if (o.only === 'Iced Mocha') delete o.only;
+      x.groups.push({ id: 'cream', name: 'Whipped cream (cold coffee only)', categories: ['iced-coffee'], show: g.show !== false, options: [o] });
+      break;
+    }
+  }
+  data.fixes.creamCold28 = true;
+  return true;
+}
+if (creamCold(content.data)) { content.data._rev = (content.data._rev || 1) + 1; content.set(content.data); }
 const orders = new Store('orders.json', []);
 const bookings = new Store('bookings.json', []);
 // Order steps: pending -> acknowledged -> preparing -> ready -> done (or cancelled). "Paid" is ticked separately.
@@ -1535,6 +1554,7 @@ async function restoreBackup(buf, by) {
     ensurePrintMenu(next);
     cheesecakePounds(next);
     extraRules(next);
+    creamCold(next);
     deliveryCentre(next);
     googleReviewLink(next);
     next._rev = (current._rev || 1) + 1;
