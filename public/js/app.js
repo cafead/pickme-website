@@ -1384,14 +1384,16 @@
     const hasWhole = lines.some((l) => l.whole);
     const pre = S.preset || {};
     // Every order starts as: at the cafe, now, pay later (a cake pre-order keeps its own choices).
-    const type = TABLE ? 'dinein' : (pre.type || 'dinein');
+    // 28 Nov 2026: "At the cafe" is preselected only for table-QR guests and for guests whose phone says they are at the cafe.
+    // Anyone else (or when the location is not known) chooses At the cafe, Pickup or Delivery themselves.
+    const type = TABLE ? 'dinein' : (pre.type || (S.near === true ? 'dinein' : ''));
     const later = hasWhole || (!TABLE && pre.when === 'later') || !isOpen(c);
     const notice = Math.max(Number(c.cake.noticeHours) || 0, ...lines.map((l) => l.notice || 0));
     const wantsPhoto = lines.some((l) => l.photo);
     const slot = pre.date ? { date: pre.date, time: pre.time } : nextSlot(c, hasWhole ? notice : 0.5);
     // A pay-now choice shows only when it is switched on AND its QR picture is uploaded (27 Nov 2026).
     const methods = ['esewa', 'fonepay'].filter((m) => c.payment[m] && c.payment[m].enabled !== false && safeUrl(c.payment[m].qr));
-    const phoneNeeded = type !== 'dinein';
+    const phoneNeeded = type === 'pickup' || type === 'delivery';
     return `<div class="shade" data-act="close"></div>
       <div class="modal" role="dialog" aria-label="Your order">
         <header><h2>Your order</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></header>
@@ -1440,6 +1442,22 @@
         </form>
       </div>`;
   }
+  const CAFE_NEAR_M = 400;
+  function metresBetween(a, b, c, d) {
+    const r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r;
+    const h = Math.sin(x / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(y / 2) ** 2;
+    return 12742000 * Math.asin(Math.sqrt(h));
+  }
+  // Is this phone at the cafe? Asked once per visit; no answer (denied, no GPS) means "not known".
+  function locateGuest() {
+    const seo = S.c.seo || {};
+    if (!(Number(seo.lat) && Number(seo.lng)) || !navigator.geolocation) return Promise.resolve(null);
+    return new Promise((done) => {
+      try {
+        navigator.geolocation.getCurrentPosition((p) => done(metresBetween(p.coords.latitude, p.coords.longitude, Number(seo.lat), Number(seo.lng))), () => done(null), { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 });
+      } catch (e) { done(null); }
+    });
+  }
   function openCheckout() {
     if (!cartLines().length) return toast('Your cart is empty.');
     const fromCart = Boolean($('.drawer', layer()));
@@ -1452,6 +1470,16 @@
     paintPin();
     paintPay($('form[data-form=checkout]'));
     saveDraft(true);
+    if (!TABLE && !pre.type && S.near === undefined && !PREVIEW) {
+      S.near = null;
+      locateGuest().then((m) => {
+        S.near = m != null && m <= CAFE_NEAR_M;
+        const form = $('form[data-form=checkout]');
+        if (!S.near || !form || $('input[name=type]:checked', form)) return;
+        const r = $('#co-dinein');
+        if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }
+      });
+    }
   }
   // Cancel your own order in the first minute; after that, call the cafe and staff cancel it (28 Nov 2026).
   const callLine = () => `<a href="tel:${esc(digits((S.c.brand || {}).phone))}">call the cafe</a>`;
@@ -1543,6 +1571,7 @@
     async checkout(d, form) {
       const payNow = d.method && !['later', 'cod'].includes(d.method);
       const file = payNow ? form.elements.proof.files[0] : null;
+      if (!d.type) throw new Error('Please choose how you would like it: At the cafe, Pickup or Delivery.');
       if (d.type !== 'dinein' && !String(d.phone || '').trim()) throw new Error('Please enter your phone number so we can reach you.');
       if (payNow && !String(d.phone || '').trim()) { const ph = $('#co-phone'); if (ph) ph.focus(); throw new Error('Please enter your phone number: we call you to confirm the payment.'); }
       if (d.when === 'later' && (!d.date || !d.time)) throw new Error('Please choose a date and time.');
@@ -1633,7 +1662,7 @@
     const t = ($('input[name=type]:checked', form) || {}).value;
     const m = ($('input[name=method]:checked', form) || {}).value;
     const payNow = m && !['later', 'cod'].includes(m);
-    const need = t !== 'dinein' || payNow;
+    const need = t === 'pickup' || t === 'delivery' || payNow;
     $('#co-phone').required = need;
     $('#co-phone-label').textContent = need ? (payNow ? 'Phone (we call to confirm the payment)' : 'Phone') : 'Phone (optional)';
   }
