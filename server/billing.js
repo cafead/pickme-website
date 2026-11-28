@@ -53,6 +53,14 @@ module.exports = function billing(x) {
     (list || []).forEach((l) => { const k = stockKey(l.key); if (k && Number.isFinite(st[k])) { st[k] = Math.max(0, st[k] - (Number(l.qty) || 0)); changed = true; } });
     if (changed) await setup.set(Object.assign({}, cur, { stock: st }));
   }
+  // Puts counted things back (a customer cancelled their own order a moment after placing it).
+  async function returnStock(list) {
+    const cur = setup.get();
+    const st = Object.assign({}, SETUP().stock);
+    let changed = false;
+    (list || []).forEach((l) => { const k = stockKey(l.key); if (k && Number.isFinite(st[k])) { st[k] = st[k] + (Number(l.qty) || 0); changed = true; } });
+    if (changed) await setup.set(Object.assign({}, cur, { stock: st }));
+  }
   const day = (iso) => new Date(Date.parse(iso) + NP_OFFSET).toISOString().slice(0, 10);
   const money = (n) => Math.round(Number(n) * 100) / 100;
   const billNo = (n) => 'PM-' + String(n).padStart(5, '0');
@@ -272,5 +280,5 @@ module.exports = function billing(x) {
     if (s && typeof s === 'object' && !Object.keys(setup.get()).length) await setup.set(s);
     return out;
   }
-  return { addToBackup, restoreFromBackup, stockZero, stockOutIds, takeStock };
+  return { addToBackup, restoreFromBackup, stockZero, stockOutIds, takeStock, returnStock };
 };

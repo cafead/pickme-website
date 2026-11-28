@@ -73,6 +73,9 @@ module.exports = function delivery(x) {
   function onNewOrder(o) {
     push(staffTokens(), `New order ${o.id}`, `${o.type === 'delivery' ? 'Delivery' : o.type === 'pickup' ? 'Pickup' : 'At the cafe'}${o.tableNo ? `, table ${o.tableNo}` : ''} · Rs. ${o.total}`, { kind: 'order', id: o.id, channel: 'orders' });
   }
+  function onCustomerCancel(o) {
+    push(staffTokens(), `Order ${o.id} CANCELLED`, 'The customer cancelled it. Do not make it.', { kind: 'order', id: o.id, channel: 'orders' });
+  }
   function onTableCall(c) {
     push(staffTokens(), `Table ${c.table}: ${c.label}`, 'Tap Done on the counter screen when it is sorted.', { kind: 'call', id: c.id, channel: 'orders' });
   }
@@ -186,5 +189,5 @@ module.exports = function delivery(x) {
     return out;
   }
 
-  return { push, onNewOrder, onTableCall, onStatus, trackFor, drivers };
+  return { push, onNewOrder, onCustomerCancel, onTableCall, onStatus, trackFor, drivers };
 };

@@ -1453,11 +1453,29 @@
     paintPay($('form[data-form=checkout]'));
     saveDraft(true);
   }
-  function doneHtml(title, lines, text) {
+  // Cancel your own order in the first minute; after that, call the cafe and staff cancel it (28 Nov 2026).
+  const callLine = () => `<a href="tel:${esc(digits((S.c.brand || {}).phone))}">call the cafe</a>`;
+  function cancelBoxHtml(id, key, left) {
+    const until = Date.now() + Math.max(0, left) * 1000;
+    return `<div class="cancelbox" data-cancel-until="${until}" data-id="${esc(id)}" data-key="${esc(key)}">
+      <button type="button" class="btn btn--ghost btn--small" data-act="cancelorder" data-id="${esc(id)}" data-key="${esc(key)}"><span>Cancel this order (<b class="cl">${Math.max(0, Math.ceil(left))}</b>s)</span></button>
+      <small class="hint">You can cancel by yourself for 1 minute. After that, please ${callLine()} and our staff will help.</small></div>`;
+  }
+  const lateHtml = () => `<p class="hint cancelbox cancelbox--late">To cancel this order, please ${callLine()} and our staff will help.</p>`;
+  function tickCancel() {
+    $$('[data-cancel-until]').forEach((el) => {
+      const left = Math.ceil((Number(el.dataset.cancelUntil) - Date.now()) / 1000);
+      if (left > 0) { const b = $('.cl', el); if (b) b.textContent = left; return; }
+      el.outerHTML = lateHtml();
+    });
+  }
+  setInterval(tickCancel, 1000);
+  function doneHtml(title, lines, text, cancel) {
     return `<div class="shade" data-act="close"></div>
       <div class="modal modal--done" role="dialog" aria-label="${esc(title)}">
         <p class="script">Thank you</p><h2>${esc(title)}</h2>
         ${lines.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('')}
+        ${cancel ? cancelBoxHtml(cancel.id, cancel.key, 60) : ''}
         ${myOrders().length && FEATURE('liveStatus') && !PREVIEW ? `<button type="button" class="btn" data-act="account" data-id="orders"><span>Follow my order</span>${ICON.arrow}</button>` : ''}
         ${text ? `<a class="btn" href="${esc(waLink(S.c, text))}" target="_blank" rel="noopener">${ICON.whatsapp}<span>Also send it to us on WhatsApp</span></a>` : ''}
         <button type="button" class="btn btn--ghost" data-act="close"><span>Close</span></button>
@@ -1560,7 +1578,7 @@
         res.points && res.points.asked && !res.points.used ? `Staff will take your ${res.points.asked} points off at the counter.` : '',
         earn > 0 ? `You get ${earn} points when it is done.` : '',
         payNow ? `We will call you on ${d.phone} to confirm your payment, then ${atCafe ? 'bring your order to you' : 'start your order'}.` : (atCafe ? 'We are preparing it and will bring it to you.' : 'We will call you if anything is unclear. You can pay later.'),
-      ], atCafe ? '' : res.text), { reset: true });
+      ], atCafe ? '' : res.text, payNow && (proof || d.txn) ? null : { id: res.id, key: res.key }), { reset: true });
     },
   };
   document.addEventListener('submit', async (e) => {
@@ -2062,6 +2080,12 @@
   }
   const dateText = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kathmandu', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
   const TYPE_TEXT = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
+  function cancelCardHtml(o) {
+    if (finished(o.status)) return o.status === 'cancelled' && o.cancelledBy === 'customer' ? '<p class="hint">You cancelled this order.</p>' : '';
+    if (!o.key) return lateHtml();
+    const left = (Number(o.cancelLeft) || 0) - (Date.now() - (o.seen || Date.now())) / 1000;
+    return left > 0 ? cancelBoxHtml(o.id, o.key, left) : lateHtml();
+  }
   function orderCardHtml(o) {
     const i = FLOW.indexOf(o.status);
     const again = FEATURE('orderAgain') && (o.lines || []).some((l) => l.itemId && !l.whole);
@@ -2073,6 +2097,7 @@
       ${trackHtml(o)}
       <ul class="ocard-lines">${(o.lines || []).map((l) => `<li>${l.qty} × ${esc(l.name)}${l.label ? ` <small>(${esc(l.label)})</small>` : ''}${l.extras && l.extras.length ? ` <small>+ ${esc(l.extras.join(', '))}</small>` : ''}</li>`).join('')}</ul>
       ${pts}${o.pointsEarned ? `<p class="hint ocard-earned">${ICON.gift}<span>${o.pointsEarned} points earned</span></p>` : ''}
+      ${cancelCardHtml(o)}
       <div class="row">
         ${again ? `<button type="button" class="btn btn--small" data-act="again" data-id="${esc(o.id)}"><span>Order again</span></button>` : ''}
         ${o.status === 'done' && googleReviewUrl() ? `<a class="btn btn--small btn--ghost" href="${esc(googleReviewUrl())}" target="_blank" rel="noopener">${ICON.google}<span>Review us</span></a>` : ''}
@@ -2314,6 +2339,22 @@
     async deleteacct() {
       if (!window.confirm('Delete your account? Your login, details and points are removed. This cannot be undone.')) return;
       try { await call('DELETE', '/api/account/me'); A.me = null; paintAccountBtn(); A.view = 'orders'; paintAccount(); toast('Your account is deleted.'); } catch (e) { toast(e.message); }
+    },
+    async cancelorder(el) {
+      if (!window.confirm('Cancel this order?')) return;
+      el.disabled = true;
+      try {
+        await post(`/api/orders/${encodeURIComponent(el.dataset.id)}/cancel`, { key: el.dataset.key });
+        toast('Your order is cancelled.');
+        const live = A.live[el.dataset.id];
+        if (live) { live.status = 'cancelled'; live.cancelledBy = 'customer'; live.cancelLeft = 0; }
+        closeLayer();
+        refreshLive();
+      } catch (e) {
+        el.disabled = false;
+        toast(e.message);
+        refreshLive();
+      }
     },
     forgetphone() { store.set('pm_phone', null); A.look = null; paintAccount(); },
     forgetorders() { if (!window.confirm('Clear your orders from this device?')) return; store.set('pm_orders', null); A.live = {}; A.look = null; paintLivePill(); paintAccount(); },

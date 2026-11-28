@@ -1085,12 +1085,47 @@ app.post('/api/orders', limit('order', 80, 15 * 60e3), json, async (req, res) =>
 /* public: order and booking status, for the phone app (needs the private key given when it was placed) */
 const sameKey = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && a.length > 0
   && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+// A guest can cancel their own order in the first minute, while the counter has not touched it yet. After that the guest
+// calls the cafe and staff cancel it at the counter (28 Nov 2026).
+const CANCEL_SECONDS = 60;
+function cancelLeft(o) {
+  if (!o || o.status !== 'pending' || o.billNo || o.paid) return 0;
+  const pay = o.payment || {};
+  if ((pay.method === 'esewa' || pay.method === 'fonepay') && (pay.proof || pay.txn)) return 0;
+  const left = CANCEL_SECONDS - Math.floor((Date.now() - Date.parse(o.createdAt)) / 1000);
+  return left > 0 ? left : 0;
+}
+app.post('/api/orders/:id/cancel', limit('cancel', 60, 15 * 60e3), json, async (req, res) => {
+  const list = orders.get();
+  const o = list.find((x) => x.id === req.params.id);
+  if (!o || !sameKey(o.key, str((req.body || {}).key || req.query.key, 40))) return res.status(404).json({ error: 'We could not find that order.' });
+  if (o.status === 'cancelled') return res.json({ ok: true, status: 'cancelled' });
+  // 3 seconds of grace for a slow phone connection.
+  if (!cancelLeft(Object.assign({}, o, { createdAt: new Date(Date.parse(o.createdAt) + 3000).toISOString() }))) {
+    const started = o.status !== 'pending' && o.status !== 'cancelled';
+    return res.status(409).json({ code: 'late', error: started ? 'The cafe has already started your order. Please call us and our staff will help.' : 'The 1 minute to cancel by yourself is over. Please call the cafe and our staff will cancel it.' });
+  }
+  const before = o.status;
+  o.status = 'cancelled';
+  o.cancelledBy = 'customer';
+  o.updatedAt = new Date().toISOString();
+  o.updatedBy = 'customer';
+  o.log = Array.isArray(o.log) ? o.log : [];
+  o.log.push({ at: o.updatedAt, by: 'customer', what: 'Cancelled by customer (within 1 minute)' });
+  await CUST.onStatus(o, before, 'customer');
+  await orders.set(list);
+  if (BILLS) await BILLS.returnStock((o.lines || []).map((l) => ({ key: `${l.itemId}|${l.label || ''}`, qty: l.qty }))).catch(() => {});
+  DELIV.onCustomerCancel(o);
+  audit('public', 'order-cancelled-by-customer', o.id);
+  notify(`Order ${o.id} CANCELLED by the customer`, `Order ${o.id} (Rs. ${o.total}) was cancelled by the customer within a minute. Do not make it.`);
+  res.json({ ok: true, status: 'cancelled' });
+});
 app.get('/api/orders/:id/status', limit('status', 600, 15 * 60e3), (req, res) => {
   const o = orders.get().find((x) => x.id === req.params.id);
   if (!o || !sameKey(o.key, str(req.query.key, 40))) return res.status(404).json({ error: 'We could not find that order.' });
   const last = (o.log || [])[(o.log || []).length - 1];
   res.json({
-    id: o.id, status: o.status, paid: Boolean(o.paid), type: o.type, total: o.total, createdAt: o.createdAt,
+    id: o.id, status: o.status, paid: Boolean(o.paid), type: o.type, total: o.total, createdAt: o.createdAt, cancelLeft: cancelLeft(o), cancelledBy: o.cancelledBy || '',
     updatedAt: last ? last.at : o.createdAt, schedule: o.schedule, hasWhole: Boolean(o.hasWhole), tableNo: o.tableNo || '',
     points: o.points ? { used: o.points.used || 0, asked: o.points.asked || 0, approved: o.points.approved } : null, pointsEarned: o.pointsEarned || 0,
     payment: { method: o.payment.method, change: o.payment.change || 0 }, delivery: DELIV.trackFor(o),

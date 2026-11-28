@@ -251,7 +251,7 @@
   }
   function orderCard(o) {
     return `<article class="card ${esc(o.status)}${toCheck(o) ? ' to-check' : ''}${askPts(o) ? ' pts-ask' : ''}">
-      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="step step--${esc(o.status)}">${NAMES[o.status] || esc(o.status)}</span><span class="step ${o.paid ? 'step--done' : ''}">${o.paid ? 'Paid' : 'Not paid'}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
+      <header><strong>${esc(o.id)}</strong><span class="tag">${TYPE[o.type]}${o.tableNo ? ` · table ${esc(o.tableNo)}` : ''}</span><span class="step step--${esc(o.status)}">${NAMES[o.status] || esc(o.status)}${o.cancelledBy === 'customer' ? ' by guest' : ''}</span><span class="step ${o.paid ? 'step--done' : ''}">${o.paid ? 'Paid' : 'Not paid'}</span><small>${when(o.createdAt)}</small><b>${rs(o.total)}</b></header>
       ${checkBox(o)}${ptsBox(o)}
       <p>${contact(o)}</p>
       <p><b>For:</b> ${forWhen(o)}</p>
@@ -346,7 +346,11 @@
         if (fresh.length) toast(`New: ${fresh.map((x) => x.id).join(', ')}`, 8000);
         if (freshCalls.length) toast(freshCalls.map((c) => `Table ${c.table}: ${c.label}`).join(' · '), 9000);
         if (fresh.length || freshCalls.length) alertNew(fresh.length ? `New order ${fresh[0].id}` : `Table ${freshCalls[0].table}: ${freshCalls[0].label}`);
+        // A guest cancelled their own order in the first minute: tell the counter loudly so it is not made.
+        const gone = o.filter((x) => x.cancelledBy === 'customer' && S.states && S.states.get(x.id) && S.states.get(x.id) !== 'cancelled');
+        if (gone.length) { toast(`CANCELLED by the guest: ${gone.map((x) => x.id).join(', ')}. Do not make it.`, 12000); alertNew(`Order ${gone[0].id} CANCELLED by the guest`); }
       }
+      S.states = new Map(o.map((x) => [x.id, x.status]));
       // A soft reminder every 30 seconds while an order waits over a minute to be acknowledged, or a table call is open.
       const waiting = o.some((x) => x.status === 'pending' && Date.now() - Date.parse(x.createdAt) > 60e3) || calls.some((c) => Date.now() - Date.parse(c.at) > 45e3);
       if (waiting && Date.now() - (S.nag || 0) > 30e3) { S.nag = Date.now(); ring(true); }
