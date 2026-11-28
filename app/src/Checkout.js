@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { View, Text, StyleSheet, Modal, Image, ScrollView, useWindowDimensions } from 'react-native';
 import { Pressable } from './press';
 import { C, SERIF } from './theme';
@@ -17,7 +18,9 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
   const on = (k) => ((c.features || {})[k] !== false);
   const [step, setStep] = useState(startAt || 'cart');
   // Every order starts as: at the cafe, now, pay later.
-  const [type, setType] = useState('dinein');
+  // 28 Nov 2026: "At the cafe" is preselected only when this phone is at the cafe; otherwise the guest chooses.
+  const [type, setType] = useState('');
+  const nearRef = useRef(undefined);
   const [when, setWhen] = useState('now');
   const [day, setDay] = useState(null);
   const [time, setTime] = useState('');
@@ -100,10 +103,29 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
     setRefBusy(false);
   };
 
+  useEffect(() => {
+    if (!open || nearRef.current !== undefined || type) return;
+    nearRef.current = null;
+    (async () => {
+      try {
+        const seo = c.seo || {};
+        if (!(Number(seo.lat) && Number(seo.lng))) return;
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== 'granted') return;
+        const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const r = Math.PI / 180, a = Number(seo.lat), b = Number(seo.lng), x = (p.coords.latitude - a) * r, y = (p.coords.longitude - b) * r;
+        const h = Math.sin(x / 2) ** 2 + Math.cos(a * r) * Math.cos(p.coords.latitude * r) * Math.sin(y / 2) ** 2;
+        nearRef.current = 12742000 * Math.asin(Math.sqrt(h)) <= 400;
+        if (nearRef.current) setType((t) => t || 'dinein');
+      } catch (e) { nearRef.current = null; }
+    })();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const close = () => { setErr(''); onClose(); setTimeout(() => setStep('cart'), 300); };
 
   const send = async () => {
     setErr('');
+    if (!type) return setErr('Please choose how you would like it: At the cafe, Pickup or Delivery.');
     if (type !== 'dinein' && !/^\+?\d[\d\s-]{6,17}$/.test(phone.trim())) return setErr('Please enter your phone number so we can reach you.');
     if (!['later', 'cod'].includes(method) && !/^\+?\d[\d\s-]{6,17}$/.test(phone.trim())) return setErr('Please enter your phone number: we call you to confirm the payment.');
     if (type === 'delivery' && address.trim().length < 5) return setErr('Please enter the delivery address.');
@@ -131,7 +153,7 @@ export default function Checkout({ open, onClose, onPlaced, startAt }) {
       });
       clearCart();
       askPermission();
-      setStep('cart'); setNotes(''); setCakeMessage(''); setOccasion(''); setTxn(''); setDay(null); setTime(''); setWhen('now'); setMethod('later'); setType('dinein');
+      setStep('cart'); setNotes(''); setCakeMessage(''); setOccasion(''); setTxn(''); setDay(null); setTime(''); setWhen('now'); setMethod('later'); setType(nearRef.current ? 'dinein' : '');
       setLoc(null); setChange(0); setUsePts(false); setRef(null);
       refreshAccount();
       onPlaced(r.id);

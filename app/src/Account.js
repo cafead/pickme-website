@@ -35,7 +35,7 @@ export default function Account({ go }) {
 
 /* ---------- not signed in ---------- */
 function SignedOut() {
-  const { cfg, signedIn } = useApp();
+  const { cfg, signedIn, setStaff } = useApp();
   const [mode, setMode] = useState('in'); // in | new | reset
   const [step, setStep] = useState(1);
   const [id, setId] = useState('');
@@ -64,7 +64,16 @@ function SignedOut() {
   const run = async (fn) => { setErr(''); setMsg(''); setBusy(true); try { await fn(); } catch (e) { setErr(e.message); } setBusy(false); };
   const done = async (r) => { await askPermission(); await signedIn(r); };
 
-  const signIn = () => run(async () => { if (!id.trim() || !pw) throw new Error('Please enter your login ID and password.'); await done(await api.signIn(id.trim(), pw)); });
+  // One ordinary sign-in box. A cafe staff or driver login typed here signs in as staff or driver (no staff wording for customers).
+  const signIn = () => run(async () => {
+    if (!id.trim() || !pw) throw new Error('Please enter your login ID and password.');
+    try { await done(await api.signIn(id.trim(), pw)); } catch (e) {
+      let r = null;
+      try { r = await api.staffLogin(id.trim(), pw); } catch (e2) { r = null; }
+      if (r && r.token) { await askPermission(); setStaff({ token: r.token, role: r.role, name: r.name }); return; }
+      throw e;
+    }
+  });
   const sendCode = (purpose) => run(async () => { if (!to.trim()) throw new Error(`Please enter your ${toLabel.toLowerCase()}.`); const r = await api.sendCode(to.trim(), purpose); setMsg(`We sent a 6-digit code to ${r.to}.`); setStep(2); });
   const check = (purpose) => run(async () => { const r = await api.verifyCode(to.trim(), code.trim(), purpose); setTicket(r.ticket); setMsg(''); setStep(3); });
   const create = () => run(async () => { if (!pw) throw new Error('Please choose a password.'); await done(await api.register({ ticket, username: user.trim(), password: pw, name: name.trim(), phone: phone.trim() })); });
@@ -293,39 +302,15 @@ function VibeRow() {
   );
 }
 
+// Shown only to a logged-in staff member or driver. There is no staff or driver login button for customers (28 Nov 2026):
+// they sign in through the ordinary sign-in box above.
 function StaffLogin() {
-  const { setStaff, staff } = useApp();
-  const [open, setOpen] = useState(false);
-  const [id, setId] = useState('');
-  const [pw, setPw] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const go = async () => {
-    setErr(''); setBusy(true);
-    try {
-      if (!id.trim() || !pw) throw new Error('Please enter your staff login ID and password.');
-      const r = await api.staffLogin(id.trim(), pw);
-      await askPermission();
-      setStaff({ token: r.token, role: r.role, name: r.name });
-    } catch (e) { setErr(e.message); }
-    setBusy(false);
-  };
-  if (staff && staff.token) {
-    return (
-      <View style={{ marginTop: 22 }}>
-        <Small>Logged in as cafe {staff.role === 'driver' ? 'driver' : 'staff'}{staff.name ? `: ${staff.name}` : ''}. Your {staff.role === 'driver' ? 'deliveries are' : 'counter is'} in the first tab below. You stay logged in until you log out there.</Small>
-      </View>
-    );
-  }
-  if (!open) return <Pressable onPress={() => setOpen(true)} style={{ marginTop: 22 }}><Text style={[s.link, { textAlign: 'center' }]}>Cafe staff or delivery driver? Log in</Text></Pressable>;
+  const { staff } = useApp();
+  if (!(staff && staff.token)) return null;
   return (
-    <Card style={{ marginTop: 18 }}>
-      <Text style={s.h}>Staff and driver login</Text>
-      <Field label="Login ID" value={id} onChangeText={setId} autoCapitalize="none" autoComplete="username" maxLength={40} />
-      <Field label="Password" value={pw} onChangeText={setPw} secure autoComplete="password" maxLength={200} />
-      {err ? <View style={{ marginBottom: 10 }}><Note kind="bad">{err}</Note></View> : null}
-      <Button title={busy ? 'Logging in…' : 'Log in'} onPress={go} disabled={busy} />
-    </Card>
+    <View style={{ marginTop: 22 }}>
+      <Small>Logged in as cafe {staff.role === 'driver' ? 'driver' : 'staff'}{staff.name ? `: ${staff.name}` : ''}. Your {staff.role === 'driver' ? 'deliveries are' : 'counter is'} in the first tab below. You stay logged in until you log out there.</Small>
+    </View>
   );
 }
 

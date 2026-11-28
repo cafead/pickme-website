@@ -52,6 +52,9 @@ export default function Staff({ inset }) {
           else if (ord) notify(`New order ${ord.id}`, `${TYPE[ord.type] || ''}${ord.tableNo ? `, table ${ord.tableNo}` : ''} · ${rs(ord.total)}`);
           else notify('New table booking', 'Open the app to confirm it.');
         }
+        // A guest cancelled their own order in the first minute: tell the counter so it is not made.
+        const gone = o.filter((x) => x.cancelledBy === 'customer' && seen.current.has(x.id));
+        if (gone.length && workRef.current) { Vibration.vibrate([0, 800, 300, 800]); notify(`Order ${gone[0].id} CANCELLED`, 'The guest cancelled it. Do not make it.'); }
       }
       seen.current = ids;
     } catch (e) {
@@ -137,7 +140,7 @@ function OrderCard({ o, drivers, act, onBill }) {
     <Card style={{ marginBottom: 10, borderLeftWidth: 5, borderLeftColor: color }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
         <Text style={s.id}>{o.id} · {o.hasWhole ? 'Cake' : TYPE[o.type]}{o.tableNo ? ` · Table ${o.tableNo}` : ''}</Text>
-        <Text style={[s.state, { color }]}>{NAMES[o.status] || o.status}</Text>
+        <Text style={[s.state, { color }]}>{NAMES[o.status] || o.status}{o.cancelledBy === 'customer' ? ' by guest' : ''}</Text>
       </View>
       <Small>{new Date(o.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}{o.source === 'app' ? ' · app' : ''}{o.schedule ? ` · for ${o.schedule.bs || o.schedule.date} ${t12(o.schedule.time)}` : ''}</Small>
       <View style={{ marginVertical: 8 }}>

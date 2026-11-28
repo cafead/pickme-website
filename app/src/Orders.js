@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Linking, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Linking, RefreshControl, Alert, Platform } from 'react-native';
 import { Pressable } from './press';
 import { C, SERIF } from './theme';
 import { useApp } from './store';
 import { STATUS, BOOKING_STATUS, rs, t12, finished } from './logic';
 import { Script, Title, Body, Small, Sheet, Button, Card, Note } from './ui';
 import { TrackMap } from './MapView';
-import { tableCall } from './api';
+import { tableCall, cancelOrder } from './api';
 
 const TYPE = { dinein: 'At the cafe', pickup: 'Pickup', delivery: 'Delivery' };
 const statusOf = (o) => {
@@ -88,6 +88,7 @@ export function OrderSheet({ id, onClose }) {
           {d.driver && d.driver.phone ? <Button kind="soft" title={`Call ${d.driver.name}`} style={{ marginTop: 10 }} onPress={() => Linking.openURL(`tel:${d.driver.phone}`)} /> : null}
         </Card>
       ) : null}
+      {o.kind !== 'booking' ? <CancelBox o={o} /> : null}
       {tableOn ? <TableButtons table={o.tableNo} /> : null}
       {o.kind === 'booking' ? (
         <Card style={{ marginTop: 14 }}>
@@ -104,6 +105,35 @@ export function OrderSheet({ id, onClose }) {
       )}
       <Small style={{ marginTop: 12 }}>This page updates by itself. You also get a notification when the status changes while the app is open or was used recently.</Small>
     </Sheet>
+  );
+}
+
+// Cancel your own order in the first minute. After that, call the cafe and staff cancel it (28 Nov 2026).
+function CancelBox({ o }) {
+  const { checkOrders } = useApp();
+  const [, tick] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  if (o.status === 'cancelled') return o.cancelledBy === 'customer' ? <View style={{ marginTop: 12 }}><Small>You cancelled this order.</Small></View> : null;
+  if (finished(o)) return null;
+  const left = o.checkedAt && o.cancelLeft !== undefined ? o.cancelLeft - (Date.now() - o.checkedAt) / 1000 : 60 - (Date.now() - Date.parse(o.createdAt)) / 1000;
+  if (o.status !== 'pending' || !(left > 0) || !o.key) return <View style={{ marginTop: 12 }}><Small>To cancel this order, please call the cafe and our staff will help.</Small></View>;
+  const run = async () => {
+    setBusy(true); setErr('');
+    try { await cancelOrder(o.id, o.key); await checkOrders(); } catch (e) { setErr(e.message); checkOrders(); }
+    setBusy(false);
+  };
+  const ask = () => {
+    if (Platform.OS === 'web') { if (window.confirm('Cancel this order?')) run(); return; } // eslint-disable-line no-alert
+    Alert.alert('Cancel this order?', 'It will not be made.', [{ text: 'No', style: 'cancel' }, { text: 'Cancel order', style: 'destructive', onPress: run }]);
+  };
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Button kind="line" title={busy ? 'Cancelling…' : `Cancel this order (${Math.ceil(left)}s)`} onPress={ask} disabled={busy} />
+      <Small style={{ marginTop: 6, textAlign: 'center' }}>You can cancel by yourself for 1 minute. After that, please call the cafe and our staff will help.</Small>
+      {err ? <View style={{ marginTop: 8 }}><Note kind="bad">{err}</Note></View> : null}
+    </View>
   );
 }
 

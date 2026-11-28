@@ -58,14 +58,25 @@ export const servedNow = (h) => {
 };
 export const hoursText = (h) => (h.from && h.to ? `Served ${t12(h.from)} to ${t12(h.to)}` : h.from ? `Served after ${t12(h.from)}` : `Served until ${t12(h.to)}`);
 
-// Extras (less sugar, extra shot) that apply to a menu group.
-export function extrasFor(c, groupId) {
+// Extras (less sugar, extra shot) that apply to a menu group. An extra can also say "only for" / "never for" some items
+// (names with commas; "Cappuccino | Large" = that size only), so a whipped cream or an extra shot is never offered where it makes no sense.
+const ruleHit = (list, name, label) => String(list || '').split(',').some((e) => {
+  const [n, z] = e.split('|');
+  const low = (x) => String(x || '').trim().toLowerCase();
+  return low(n) && low(n) === low(name) && (z === undefined || !low(z) || low(z) === low(label));
+});
+export function extrasFor(c, groupId, itemName, label) {
   const x = c.extras || {};
   if (x.show === false) return [];
   const out = [];
   for (const g of x.groups || []) {
     if (g.show === false || !(g.categories || []).includes(groupId)) continue;
-    for (const o of g.options || []) if (o.show !== false && o.id && o.name && !out.some((y) => y.id === o.id)) out.push(o);
+    for (const o of g.options || []) {
+      if (o.show === false || !o.id || !o.name || out.some((y) => y.id === o.id)) continue;
+      if (o.only && String(o.only).trim() && !ruleHit(o.only, itemName, label)) continue;
+      if (o.skip && ruleHit(o.skip, itemName, label)) continue;
+      out.push(o);
+    }
   }
   return out;
 }

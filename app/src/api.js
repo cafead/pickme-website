@@ -45,6 +45,7 @@ const post = (path, body) => request(path, { method: 'POST', body: JSON.stringif
 export const getContent = () => request('/api/content');
 export const placeOrder = (body) => post('/api/orders', { ...body, source: 'app' });
 export const placeBooking = (body) => post('/api/bookings', { ...body, source: 'app' });
+export const cancelOrder = (id, key) => post(`/api/orders/${encodeURIComponent(id)}/cancel`, { key });
 export const orderStatus = (id, key) => request(`/api/orders/${encodeURIComponent(id)}/status?key=${encodeURIComponent(key)}`);
 export const bookingStatus = (id, key) => request(`/api/bookings/${encodeURIComponent(id)}/status?key=${encodeURIComponent(key)}`);
 

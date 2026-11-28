@@ -118,11 +118,12 @@ export function ItemSheet({ pick, onClose, onAdded }) {
   const it = pick.item;
   const prices = (it.prices || []).filter((p) => Number(p.price) > 0 && !p.whole);
   const price = prices.find((p) => (p.label || '') === (label === null ? (prices[0] || {}).label || '' : label)) || prices[0];
-  const opts = extrasFor(c, pick.groupId);
-  const extraCost = opts.filter((o) => extras.includes(o.id)).reduce((s, o) => s + (Number(o.price) || 0), 0);
+  const opts = extrasFor(c, pick.groupId, it.name, price ? price.label || '' : '');
+  const chosen = extras.filter((id) => opts.some((o) => o.id === id)); // a size change can drop an extra that no longer fits
+  const extraCost = opts.filter((o) => chosen.includes(o.id)).reduce((s, o) => s + (Number(o.price) || 0), 0);
   const unit = (price ? Number(price.price) : 0) + extraCost;
   const add = () => {
-    addToCart({ itemId: it.id, label: price.label || '', name: it.name, image: it.image, price: unit, extras, extraNames: opts.filter((o) => extras.includes(o.id)).map((o) => o.name), qty, whole: false });
+    addToCart({ itemId: it.id, label: price.label || '', name: it.name, image: it.image, price: unit, extras: chosen, extraNames: opts.filter((o) => chosen.includes(o.id)).map((o) => o.name), qty, whole: false });
     onAdded(`${qty} × ${it.name} added`);
   };
   return (
@@ -133,7 +134,7 @@ export function ItemSheet({ pick, onClose, onAdded }) {
       {prices.length > 1 ? (
         <>
           <Text style={st.h}>Size</Text>
-          <View style={st.wrap}>{prices.map((p) => <Chip key={p.label} text={p.label || 'Regular'} sub={rs(p.price)} on={price === p} onPress={() => setLabel(p.label || '')} />)}</View>
+          <View style={st.wrap}>{prices.map((p) => <Chip key={p.label} text={p.label || 'Regular'} sub={`${p.note ? p.note + ' · ' : ''}${rs(p.price)}`} on={price === p} onPress={() => setLabel(p.label || '')} />)}</View>
         </>
       ) : null}
       {opts.length ? (
@@ -141,8 +142,8 @@ export function ItemSheet({ pick, onClose, onAdded }) {
           <Text style={st.h}>{(c.extras || {}).title || 'Make it yours'}</Text>
           <View style={st.wrap}>
             {opts.map((o) => {
-              const on = extras.includes(o.id);
-              return <Chip key={o.id} text={o.name} sub={Number(o.price) > 0 ? `+ ${rs(o.price)}` : null} on={on} onPress={() => setExtras((x) => (on ? x.filter((y) => y !== o.id) : [...x, o.id]))} />;
+              const on = chosen.includes(o.id);
+              return <Chip key={o.id} text={o.name} sub={Number(o.price) > 0 ? `+ ${rs(o.price)}` : null} on={on} onPress={() => setExtras((x) => (on ? x.filter((y) => y !== o.id) : [...chosen, o.id]))} />;
             })}
           </View>
         </>
